@@ -38,6 +38,22 @@ npm run tauri dev      # запуск в режиме разработки
 npm run tauri build    # продакшен-сборка
 ```
 
+## Версионирование и релизы
+
+Версия синхронизируется командой `npm run bump <version>`: обновляются
+`package.json`, `src-tauri/Cargo.toml`/`Cargo.lock` и `src-tauri/tauri.conf.json`,
+а подмодуль `cinny` переключается на последний тег. Версия меняется только по
+явной команде.
+
+Скрипт `scripts/update-version.mjs` дополнительно выводит числовую версию
+`bundle.windows.wix.version` для MSI-инсталлятора: WiX не принимает
+человекочитаемый pre-release, поэтому номер сборки переносится в четвёртое поле
+(`4.12.6-harrier.6-beta` → `4.12.6.6`). macOS и Linux собираются из полной
+semver-версии.
+
+Релизы публикуются как GitHub Release (workflow `tauri.yml`): Windows (MSI),
+Linux (deb/AppImage), macOS (DMG).
+
 ## Поддержка
 
 Автор форка занимается проектом в свободное время и не гарантирует поддержку в кратчайший срок.
