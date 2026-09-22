@@ -41,11 +41,31 @@ const tauriConfig = JSON.parse(fs.readFileSync(tauriConfigPath));
 
 tauriConfig.version = version;
 
+// WiX/MSI requires a numeric-only version (`major.minor.patch[.build]`) and
+// rejects human-readable pre-releases like `-harrier.6-beta`, so the build
+// number from the pre-release is mapped to the fourth field:
+// `4.12.6-harrier.6-beta` -> `4.12.6.6`.
+const semverMatch = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/);
+if (!semverMatch) {
+  console.error(`Cannot derive a numeric MSI version from "${version}"`);
+  process.exit(1);
+}
+const [, major, minor, patch, pre = ""] = semverMatch;
+const buildMatch = pre.match(/(\d+)(?!.*\d)/);
+const wixVersion = buildMatch
+  ? `${major}.${minor}.${patch}.${buildMatch[1]}`
+  : `${major}.${minor}.${patch}`;
+
+tauriConfig.bundle ??= {};
+tauriConfig.bundle.windows ??= {};
+tauriConfig.bundle.windows.wix ??= {};
+tauriConfig.bundle.windows.wix.version = wixVersion;
+
 fs.writeFileSync(
   tauriConfigPath,
   JSON.stringify(tauriConfig, null, 2) + "\n"
 );
-console.log(`Updated ${tauriConfigPath} -> ${version}`);
+console.log(`Updated ${tauriConfigPath} -> ${version} (msi ${wixVersion})`);
 
 // 5. Update Cinny web submodule to latest tag
 console.log("Updating cinny web submodule");
