@@ -46,7 +46,7 @@
   },
   "productName": "Harrier",
   "mainBinaryName": "harrier",
-  "version": "4.12.6-harrier.5-beta",
+  "version": "4.12.6-harrier.6-beta",
   "identifier": "io.github.schadin.harrier",
   "app": {
     "security": {
