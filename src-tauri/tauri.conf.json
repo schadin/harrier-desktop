@@ -9,7 +9,7 @@
       "wix": {
         "bannerPath": "wix/banner.bmp",
         "dialogImagePath": "wix/dialogImage.bmp",
-        "version": "4.12.6.7"
+        "version": "4.12.6.8"
       }
     },
     "icon": [
@@ -47,7 +47,7 @@
   },
   "productName": "Harrier",
   "mainBinaryName": "harrier",
-  "version": "4.12.6-harrier.7-beta",
+  "version": "4.12.6-harrier.8-beta",
   "identifier": "io.github.schadin.harrier",
   "app": {
     "security": {

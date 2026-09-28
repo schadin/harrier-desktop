@@ -1,6 +1,6 @@
 {
   "name": "harrier-desktop",
-  "version": "4.12.6-harrier.7-beta",
+  "version": "4.12.6-harrier.8-beta",
   "description": "Matrix desktop client powered by Cinny",
   "main": "index.js",
   "engines": {
