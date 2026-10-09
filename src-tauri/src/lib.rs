@@ -37,6 +37,12 @@ pub fn run() {
     // }
 
     builder
+        // Перехватывает повторный запуск: второй процесс не создаётся,
+        // уже запущенный экземпляр показывает и фокусирует своё окно.
+        // Плагин должен регистрироваться первым, до создания окна.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            tray::show_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_localhost::Builder::new(port).build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
