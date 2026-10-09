@@ -55,6 +55,11 @@ semver-версии.
 Релизы публикуются как GitHub Release (workflow `tauri.yml`): Windows (MSI),
 Linux (deb/AppImage), macOS (DMG).
 
+Полный процесс выпуска предрелизов и релизов — чек-листы, оформление release
+notes, создание релиза в обоих репозиториях и откат при сбое — описан в
+[docs/RELEASING.md](https://github.com/schadin/harrier-project/blob/harrier/docs/RELEASING.md)
+зонтичного репозитория.
+
 ## Поддержка
 
 Автор форка занимается проектом в свободное время и не гарантирует поддержку в кратчайший срок.
