@@ -1,48 +1,11 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const OLD_IDENTIFIER: &str = "in.cinny.app";
 const NEW_IDENTIFIER: &str = "io.github.schadin.harrier";
 const MARKER_FILE: &str = "migration.success";
 
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-}
-
-#[cfg(target_os = "linux")]
-fn base_config_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| home_dir().map(|h| h.join(".config")))
-}
-
-#[cfg(target_os = "linux")]
-fn base_data_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| home_dir().map(|h| h.join(".local").join("share")))
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn base_config_dir() -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        home_dir().map(|h| h.join("Library").join("Application Support"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var_os("APPDATA").map(PathBuf::from)
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn base_data_dir() -> Option<PathBuf> {
-    base_config_dir()
-}
+use crate::paths;
 
 fn copy_dir_no_overwrite(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !src.is_dir() {
@@ -79,13 +42,13 @@ fn create_marker(new_config_dir: &Path) {
 
 pub fn migrate_settings() {
     let (Some(old_config), Some(new_config)) = (
-        base_config_dir().map(|d| d.join(OLD_IDENTIFIER)),
-        base_config_dir().map(|d| d.join(NEW_IDENTIFIER)),
+        paths::base_config_dir().map(|d| d.join(OLD_IDENTIFIER)),
+        paths::base_config_dir().map(|d| d.join(NEW_IDENTIFIER)),
     ) else {
         return;
     };
-    let old_data = base_data_dir().map(|d| d.join(OLD_IDENTIFIER));
-    let new_data = base_data_dir().map(|d| d.join(NEW_IDENTIFIER));
+    let old_data = paths::base_data_dir().map(|d| d.join(OLD_IDENTIFIER));
+    let new_data = paths::base_data_dir().map(|d| d.join(NEW_IDENTIFIER));
 
     if new_config.join(MARKER_FILE).exists() {
         return;

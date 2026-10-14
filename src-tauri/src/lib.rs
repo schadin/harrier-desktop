@@ -5,6 +5,8 @@
 
 // mod menu;
 mod migrate;
+mod paths;
+mod settings;
 mod tray;
 
 use tauri::{webview::{NewWindowResponse, WebviewWindowBuilder}, WebviewUrl};
@@ -14,6 +16,10 @@ use tauri_plugin_opener::OpenerExt;
 
 pub fn run() {
     migrate::migrate_settings();
+
+    // Решение о перехвате повторного запуска принимается запускаемым процессом
+    // ещё до создания окна и вебview, поэтому флаг читаем из файла каталога данных.
+    let single_instance = settings::read_single_instance();
 
     for key in ["NO_PROXY", "no_proxy"] {
         let current_val = std::env::var(key).unwrap_or_default();
@@ -36,13 +42,17 @@ pub fn run() {
     //     builder = builder.menu(menu::menu());
     // }
 
-    builder
-        // Перехватывает повторный запуск: второй процесс не создаётся,
-        // уже запущенный экземпляр показывает и фокусирует своё окно.
-        // Плагин должен регистрироваться первым, до создания окна.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    // Перехватывает повторный запуск, только если включена настройка Single instance.
+    // Плагин должен регистрироваться первым, до создания окна и других плагинов.
+    let builder = if single_instance {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::show_main_window(app);
         }))
+    } else {
+        builder
+    };
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -55,6 +65,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(tray::DesktopState::default())
         .invoke_handler(tauri::generate_handler![
+            settings::set_single_instance,
             tray::set_desktop_settings,
             tray::set_statuses,
             tray::set_active_status,
