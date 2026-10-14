@@ -317,8 +317,8 @@ diff --git i/src/app/pages/client/ClientNonUIFeatures.tsx w/src/app/pages/client
 index 631bf10..1203710 100644
 --- i/src/app/pages/client/ClientNonUIFeatures.tsx
 +++ w/src/app/pages/client/ClientNonUIFeatures.tsx
-@@ -12,9 +12,9 @@ import {
- } from 'matrix-js-sdk';
+@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
+ import { MatrixEvent, MatrixEventEvent, Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
  
  import { roomToUnreadAtom, unreadEqual, unreadInfoToUnread } from '../../state/room/roomToUnread';
 -import LogoSVG from '../../../../public/res/svg/cinny.svg';
