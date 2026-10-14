@@ -154,8 +154,7 @@ fn set_linux_secondary_activate_target(app: AppHandle, tray: &tauri::tray::TrayI
             use gtk::glib::translate::ToGlibPtr;
             use gtk::prelude::*;
 
-            let air = *(inner.app_indicator() as *const libappindicator::AppIndicator
-                as *const *mut libappindicator::_AppIndicator);
+            let air = *(inner.app_indicator() as *const *mut libappindicator::_AppIndicator);
 
             if !ayatana_has_activate_signal(air) {
                 eprintln!(
