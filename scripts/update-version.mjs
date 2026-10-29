@@ -67,25 +67,4 @@ fs.writeFileSync(
 );
 console.log(`Updated ${tauriConfigPath} -> ${version} (msi ${wixVersion})`);
 
-// 5. Update Cinny web submodule to latest tag
-console.log("Updating cinny web submodule");
-
-execSync("git submodule update --init --recursive", { stdio: "inherit" });
-
-execSync("git fetch --tags", { cwd: "cinny", stdio: "inherit" });
-
-const latestCommit = execSync("git rev-list --tags --max-count=1", {
-  cwd: "cinny",
-}).toString().trim();
-
-const latestTag = execSync(`git describe --tags ${latestCommit}`, {
-  cwd: "cinny",
-}).toString().trim();
-
-console.log(`Latest cinny tag: ${latestTag}`);
-
-execSync(`git checkout ${latestTag}`, { cwd: "cinny", stdio: "inherit" });
-
-execSync("git add cinny", { stdio: "inherit" });
-
 console.log("Release preparation complete");

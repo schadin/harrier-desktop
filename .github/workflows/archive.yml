@@ -12,9 +12,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          submodules: true
-      - name: Create zip including submodules
+      - name: Create source zip
         run: |
           cd ..
           zip ${{ github.event.repository.name }}/${{ github.event.repository.name }}-${{ github.ref_name }}.zip ${{ github.event.repository.name }} -r

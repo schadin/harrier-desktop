@@ -23,15 +23,24 @@ Harrier — форк десктопного клиента Cinny для прот
 - **Миграция настроек** — перенос конфигурации и данных из Cinny при первом запуске без удаления исходных данных.
 - **Интеграция с окружением** — скрытие заголовка окна под Niri.
 - **Интеграция DsTaskBot** — команды бота задач (`!list`, `!close N`, `!file N`, `!help` и др.) с автодополнением и slash-шорткатами `/dstask`, карточки задач, отчётов и справки со списком команд в таймлайне, сворачивание служебных сообщений (в личке — только в переписке с ботом).
-- **Веб-версия** — публикация веб-клиента на GitHub Pages.
+- **Веб-legacy** — автономная веб-версия на GitHub Pages в репозитории [schadin/harrier](https://github.com/schadin/harrier).
+
+## Структура монорепозитория
+
+```text
+harrier-desktop/
+├── client/       # React/TypeScript-клиент и его история
+├── src-tauri/    # Десктоп-обёртка на Tauri/Rust
+└── scripts/      # Сборочные и релизные скрипты
+```
 
 ## Локальная разработка
 
 Потребуются Rust, Node.js и системные зависимости Tauri.
 
 ```sh
-git clone --recursive https://github.com/schadin/harrier-desktop.git
-cd cinny-desktop/cinny
+git clone https://github.com/schadin/harrier-desktop.git
+cd harrier-desktop/client
 npm ci
 cd ..
 npm ci
@@ -39,12 +48,19 @@ npm run tauri dev      # запуск в режиме разработки
 npm run tauri build    # продакшен-сборка
 ```
 
+В существующих клонах с подмодулем перед переходом на новую ревизию выполните:
+
+```sh
+git submodule deinit -f cinny
+git pull
+rm -rf .git/modules/cinny
+```
+
 ## Версионирование и релизы
 
 Версия синхронизируется командой `npm run bump <version>`: обновляются
-`package.json`, `src-tauri/Cargo.toml`/`Cargo.lock` и `src-tauri/tauri.conf.json`,
-а подмодуль `cinny` переключается на последний тег. Версия меняется только по
-явной команде.
+`package.json`, `src-tauri/Cargo.toml`/`Cargo.lock` и `src-tauri/tauri.conf.json`.
+Версия меняется только по явной команде.
 
 Скрипт `scripts/update-version.mjs` дополнительно выводит числовую версию
 `bundle.windows.wix.version` для MSI-инсталлятора: WiX не принимает
@@ -52,12 +68,13 @@ npm run tauri build    # продакшен-сборка
 (`4.12.6-harrier.6-beta` → `4.12.6.6`). macOS и Linux собираются из полной
 semver-версии.
 
-Релизы публикуются как GitHub Release (workflow `tauri.yml`): Windows (MSI),
-Linux (deb/AppImage), macOS (DMG).
+Релизы публикуются как GitHub Release только в этом репозитории (workflow
+`tauri.yml`): Windows (MSI), Linux (deb/AppImage), macOS (DMG). Веб-legacy
+выпускает собственные независимые релизы только при необходимости.
 
 Полный процесс выпуска предрелизов и релизов — чек-листы, оформление release
-notes, создание релиза в обоих репозиториях и откат при сбое — описан в
-[docs/RELEASING.md](https://github.com/schadin/harrier-project/blob/harrier/docs/RELEASING.md)
+notes, создание релиза и откат при сбое — описан в
+[docs/RELEASING.md](https://github.com/schadin/harrier-project/blob/main/docs/RELEASING.md)
 зонтичного репозитория.
 
 ## Поддержка
