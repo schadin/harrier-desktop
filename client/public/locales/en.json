@@ -1,0 +1,126 @@
+{
+  "Organisms": {
+    "RoomCommon": {
+      "changed_room_name": " changed room name"
+    }
+  },
+  "DsTaskBot": {
+    "SettingsTitle": "DsTaskBot",
+    "BotMxid": "Bot MXID",
+    "BotMxidDescription": "Matrix ID of the task bot. Its replies are parsed and commands forwarded.",
+    "Save": "Save",
+    "Features": "Features",
+    "CommandHelpers": "Command helpers",
+    "CommandHelpersDescription": "Enable the /dstask command and autocomplete for the bot.",
+    "TaskCards": "Task cards",
+    "TaskCardsDescription": "Render bot task lists as cards in the timeline.",
+    "CollapseCommands": "Collapse bot commands",
+    "CollapseCommandsDescription": "Collapse bot command messages in the room timeline.",
+    "Tasks": "Tasks",
+    "History": "Closed tasks",
+    "Report": "Task report",
+    "NoTasks": "No tasks",
+    "HelpTitle": "Bot commands",
+    "AssignedToMe": "Assigned to me",
+    "AssignedByMe": "Assigned by me",
+    "TaskCreated": "Task created",
+    "TaskClosed": "Task closed",
+    "Reminder": "Task reminder",
+    "FileSent": "Task file",
+    "FileAttached": "File attached to task",
+    "StatusClosed": "closed",
+    "DueAt": "Due",
+    "RemindAt": "Remind",
+    "TaskFiles": "Files",
+    "CloseTask": "Close",
+    "StopSeries": "Cancel",
+    "SeriesStopped": "stopped",
+    "CloseIds": "close",
+    "CmdHelp": "List bot commands",
+    "CmdList": "Your tasks",
+    "CmdAll": "Room tasks",
+    "CmdHistory": "Closed task history",
+    "CmdClose": "Close task by number",
+    "CmdFile": "Task files by number",
+    "CmdVerify": "Request bot device verification",
+    "CmdAdd": "Create task (in direct chat)",
+    "CommandDescription": "Send command to DsTaskBot: !help | !list | !all | !history | !close N | !file N | !verify",
+    "CardFontScale": "Card text size",
+    "CardFontScaleDescription": "Scale of text inside DsTaskBot cards, in percent (100% by default)."
+  },
+  "DecryptionFailure": {
+    "Action": {
+      "RequestKey": "Request key",
+      "KeyRequested": "Key requested",
+      "VerifyDevice": "Verify device",
+      "RestoreBackup": "Set up / restore key backup"
+    },
+    "Reason": {
+      "KeyNotReceived": "The key for this message has not been received yet",
+      "KeyWithheld": "The sender is withholding the decryption key",
+      "KeyWithheldUnverifiedDevice": "The sender is not sharing the key because your device is not verified",
+      "UnknownMessageIndex": "This message was encrypted with a key that this device does not know",
+      "HistoricalNoBackup": "Historical message: the key is unavailable, set up or restore the key backup",
+      "HistoricalWorkingBackup": "Historical message: the key backup is working, but the key is not available yet",
+      "HistoricalNotJoined": "This message was sent before you joined the room",
+      "SenderIdentityPreviouslyVerified": "The sender's identity is no longer verified",
+      "UnsignedSenderDevice": "The sender's device is not cross-signed",
+      "UnknownSenderDevice": "The sender's device is unknown",
+      "Unknown": "This message cannot be decrypted"
+    }
+  },
+  "CommandPalette": {
+    "placeholder": "Search rooms, people, actions…",
+    "noResults": "No match found",
+    "noResultsFor": "No match found for \"{{query}}\".",
+    "recent": "Recent",
+    "hint": "Type",
+    "hintRooms": "for rooms",
+    "hintPeople": "for people",
+    "hintSpaces": "for spaces",
+    "hotkey": "Hotkey",
+    "categories": {
+      "actions": "Actions",
+      "rooms": "Rooms",
+      "people": "People",
+      "spaces": "Spaces",
+      "settings": "Settings"
+    },
+    "settings": {
+      "general": "General",
+      "account": "Account",
+      "status": "Status",
+      "notifications": "Notifications",
+      "devices": "Devices",
+      "emojisStickers": "Emojis & Stickers",
+      "developerTools": "Developer Tools",
+      "about": "About"
+    },
+    "actions": {
+      "setStatus": "Set status: {{status}}",
+      "clearStatus": "Clear status",
+      "muteRoom": "Mute this room",
+      "unmuteRoom": "Unmute this room",
+      "markAllRead": "Mark all as read",
+      "createRoom": "Create room",
+      "createDm": "Create direct message",
+      "createSpace": "Create space",
+      "logout": "Log out",
+      "unread": "Show unread chats"
+    },
+    "unreadPlaceholder": "Unread chats",
+    "noUnread": "No unread chats",
+    "noUnreadDescription": "All your chats are read.",
+    "unreadFooter": "Unread chats",
+    "unreadFooterHint": "Backspace to go back, Esc to close",
+    "unreadPreview": {
+      "image": "[Photo]",
+      "video": "[Video]",
+      "audio": "[Audio]",
+      "file": "[File]",
+      "sticker": "[Sticker]",
+      "redacted": "[Deleted message]",
+      "encrypted": "[Encrypted message]"
+    }
+  }
+}
