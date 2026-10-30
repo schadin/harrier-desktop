@@ -1,11 +1,14 @@
 import { ClientEvent, createClient, MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 
 export const TEST_USER_ID = '@tester:example.org';
+const DIRECT_PARTNER_ID = '@alice:example.org';
 
 export type SyncFixtureRoom = {
   readonly roomId: string;
   readonly membership: 'join' | 'invite' | 'leave';
   readonly name?: string;
+  readonly direct?: boolean;
+  readonly space?: boolean;
 };
 
 export type SyncFixture = {
@@ -38,6 +41,16 @@ export function createSyncDriver(): SyncDriver {
     userId: TEST_USER_ID,
     accessToken: 'test-token',
   });
+  const directRooms = new Set<string>();
+
+  const publishDirectRooms = () => {
+    const event = new MatrixEvent({
+      type: 'm.direct',
+      content: { [DIRECT_PARTNER_ID]: [...directRooms] },
+    });
+    client.store.storeAccountDataEvents([event]);
+    client.emit(ClientEvent.AccountData, event);
+  };
 
   return {
     client,
@@ -47,12 +60,22 @@ export function createSyncDriver(): SyncDriver {
         client.store.storeRoom(room);
         room.updateMyMembership(item.membership);
         if (item.name !== undefined) {
-          const event = stateEvent(item.roomId, 'm.room.name', { name: item.name });
-          room.currentState.setStateEvents([event]);
-          room.recalculate();
+          room.currentState.setStateEvents([
+            stateEvent(item.roomId, 'm.room.name', { name: item.name }),
+          ]);
         }
+        if (item.space) {
+          room.currentState.setStateEvents([
+            stateEvent(item.roomId, 'm.room.create', { type: 'm.space' }),
+          ]);
+        }
+        if (item.direct) {
+          directRooms.add(item.roomId);
+        }
+        room.recalculate();
         client.emit(ClientEvent.Room, room);
       });
+      publishDirectRooms();
     },
   };
 }

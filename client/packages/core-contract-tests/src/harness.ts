@@ -4,6 +4,8 @@ export type SyncFixtureRoom = {
   readonly roomId: string;
   readonly membership: 'join' | 'invite' | 'leave';
   readonly name?: string;
+  readonly direct?: boolean;
+  readonly space?: boolean;
 };
 
 export type SyncFixture = {

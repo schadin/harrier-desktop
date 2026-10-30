@@ -19,4 +19,58 @@ export const roomsCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('left rooms disappear from the joined list', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!general:example.org', membership: 'join', name: 'General' }],
+      });
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!general:example.org', membership: 'leave', name: 'General' }],
+      });
+      expect(core.rooms.list.getSnapshot().value).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('direct rooms are flagged from m.direct account data', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!dm:example.org', membership: 'join', name: 'Alice', direct: true }],
+      });
+      const [room] = core.rooms.list.getSnapshot().value;
+      expect(room?.isDirect).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('space rooms are flagged isSpace', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!space:example.org', membership: 'join', name: 'Team', space: true }],
+      });
+      const [room] = core.rooms.list.getSnapshot().value;
+      expect(room?.isSpace).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('room state is readable through rooms.getState', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!general:example.org', membership: 'join', name: 'General' }],
+      });
+      const result = await core.rooms.getState('!general:example.org', 'm.room.name', '');
+      expect(result).toEqual({ ok: true, value: { name: 'General' } });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];
