@@ -11,7 +11,7 @@ export const useBindAtoms = (mx: MatrixClient) => {
   useBindMDirectAtom(mx, mDirectAtom);
   useBindAllInvitesAtom(allInvitesAtom);
   useBindAllRoomsAtom(allRoomsAtom);
-  useBindRoomToParentsAtom(mx, roomToParentsAtom);
+  useBindRoomToParentsAtom(roomToParentsAtom);
   useBindRoomToUnreadAtom(mx, roomToUnreadAtom);
 
   useBindRoomIdToTypingMembersAtom(mx, roomIdToTypingMembersAtom);

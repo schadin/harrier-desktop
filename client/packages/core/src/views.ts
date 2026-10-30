@@ -58,6 +58,7 @@ export type RoomView = RoomSummaryView & {
   readonly avatarMxc?: string;
   readonly dmAvatarMxc?: string;
   readonly viaServers: readonly string[];
+  readonly spaceChildren: readonly string[];
 };
 
 export type MemberView = {

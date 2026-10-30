@@ -359,6 +359,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       avatarMxc,
       dmAvatarMxc,
       viaServers: viaServersOf(room),
+      spaceChildren: (room.currentState.getStateEvents('m.space.child') ?? [])
+        .filter((event) => Array.isArray(event.getContent<{ via?: unknown }>().via))
+        .map((event) => event.getStateKey())
+        .filter((childId): childId is string => typeof childId === 'string' && childId.length > 0),
     };
   };
 
