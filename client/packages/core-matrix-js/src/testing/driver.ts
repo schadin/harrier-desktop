@@ -49,6 +49,10 @@ export type SyncFixtureRoom = {
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
   readonly backwardToken?: string;
+  readonly history?: {
+    readonly messages: readonly SyncFixtureMessage[];
+    readonly nextToken?: string;
+  };
   readonly typing?: readonly string[];
   readonly unread?: { readonly total: number; readonly highlight: number };
   readonly notificationMode?: 'all' | 'mentions' | 'mute';
@@ -162,6 +166,21 @@ export function createSyncDriver(): SyncDriver {
     accessToken: 'test-token',
   });
   const directRooms = new Set<string>();
+  const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
+
+  client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
+    if (path.endsWith('/messages')) {
+      const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
+      const history = historyByRoom.get(roomId);
+      if (!history) throw new Error(`No fake history for ${roomId}`);
+      return {
+        start: params.from ?? 't0',
+        end: history.nextToken,
+        chunk: history.messages.map((message) => messageEvent(roomId, message).event),
+      };
+    }
+    throw new Error(`Unexpected fake request: ${path}`);
+  }) as typeof client.http.authedRequest;
 
   const publishDirectRooms = () => {
     const event = new MatrixEvent({
@@ -224,6 +243,7 @@ export function createSyncDriver(): SyncDriver {
         if (member) client.emit(RoomMemberEvent.Typing, typingEvent, member);
       });
     }
+    if (item.history) historyByRoom.set(item.roomId, item.history);
     if (item.unread) {
       room.setUnreadNotificationCount(NotificationCountType.Total, item.unread.total);
       room.setUnreadNotificationCount(NotificationCountType.Highlight, item.unread.highlight);

@@ -335,4 +335,34 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest(
+    'paginateBackward prepends history and clears the token at the end',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              backwardToken: 't1',
+              messages: [{ eventId: '$recent', sender: '@alice:example.org', body: 'recent' }],
+              history: {
+                messages: [{ eventId: '$older', sender: '@alice:example.org', body: 'older' }],
+              },
+            },
+          ],
+        });
+        const result = await core.timeline.paginateBackward('!room:example.org', 10);
+        expect(result.ok).toBe(true);
+        const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        expect(timeline.items.map((item) => item.eventId)).toEqual(['$older', '$recent']);
+        expect(timeline.hasBackwardHistory).toBe(false);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
 ];

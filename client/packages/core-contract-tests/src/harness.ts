@@ -36,6 +36,10 @@ export type SyncFixtureRoom = {
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly SyncFixtureReceipt[];
   readonly backwardToken?: string;
+  readonly history?: {
+    readonly messages: readonly SyncFixtureMessage[];
+    readonly nextToken?: string;
+  };
   readonly typing?: readonly string[];
   readonly unread?: { readonly total: number; readonly highlight: number };
   readonly notificationMode?: 'all' | 'mentions' | 'mute';

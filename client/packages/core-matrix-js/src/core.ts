@@ -1,5 +1,6 @@
 import {
   createSnapshotStore,
+  toCoreError,
   type CoreResult,
   type HarrierCore,
   type JsonObject,
@@ -288,7 +289,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         timelines.set(roomId, store);
         return store;
       },
-      paginateBackward: notImplemented('timeline.paginateBackward'),
+      async paginateBackward(roomId, limit): Promise<CoreResult<void>> {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        try {
+          await client.paginateEventTimeline(room.getLiveTimeline(), {
+            backwards: true,
+            limit,
+          });
+          timelines.get(roomId)?.publish(buildTimeline(roomId));
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
     },
     presence: {
       presence(userId) {
