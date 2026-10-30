@@ -31,6 +31,7 @@ export type SyncFixtureRoom = {
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly SyncFixtureReceipt[];
+  readonly backwardToken?: string;
 };
 
 export type SyncFixture = {

@@ -1,6 +1,7 @@
 import {
   ClientEvent,
   createClient,
+  EventTimeline,
   type IEvent,
   MatrixClient,
   MatrixEvent,
@@ -38,6 +39,7 @@ export type SyncFixtureRoom = {
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
+  readonly backwardToken?: string;
 };
 
 export type SyncFixture = {
@@ -167,6 +169,7 @@ export function createSyncDriver(): SyncDriver {
         false
       );
     });
+    room.getLiveTimeline().setPaginationToken(item.backwardToken ?? null, EventTimeline.BACKWARDS);
     if (item.receipts?.length) {
       client.emit(
         RoomEvent.Receipt,

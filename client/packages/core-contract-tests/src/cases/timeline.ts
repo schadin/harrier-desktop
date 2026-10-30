@@ -157,4 +157,50 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest(
+    'timeline reports backward history when a pagination token is known',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'recent' }],
+              backwardToken: 't1',
+            },
+          ],
+        });
+        expect(
+          core.timeline.timeline('!room:example.org').getSnapshot().value.hasBackwardHistory
+        ).toBe(true);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('timeline reports no backward history for a fully loaded room', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'only' }],
+          },
+        ],
+      });
+      expect(
+        core.timeline.timeline('!room:example.org').getSnapshot().value.hasBackwardHistory
+      ).toBe(false);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

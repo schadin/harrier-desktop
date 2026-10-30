@@ -10,7 +10,15 @@ import {
   type TimelineView,
   type WritableSnapshotStore,
 } from '@harrier/core';
-import { ClientEvent, EventType, MatrixClient, MatrixEvent, Room, RoomEvent } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  EventType,
+  EventTimeline,
+  MatrixClient,
+  MatrixEvent,
+  Room,
+  RoomEvent,
+} from 'matrix-js-sdk';
 
 const notImplemented = (name: string) => () => {
   throw new Error(`${name} is not implemented yet`);
@@ -124,7 +132,9 @@ const toTimelineView = (
       return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
     });
 
-  return { roomId, items, hasBackwardHistory: false };
+  const hasBackwardHistory =
+    room?.getLiveTimeline().getPaginationToken(EventTimeline.BACKWARDS) != null;
+  return { roomId, items, hasBackwardHistory };
 };
 
 export function createMatrixJsCore(client: MatrixClient): HarrierCore {
