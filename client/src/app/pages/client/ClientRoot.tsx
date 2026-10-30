@@ -15,19 +15,28 @@ import {
 } from 'folds';
 import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
-import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
+import React, {
+  MouseEventHandler,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { createMatrixJsCore } from '@harrier/core-matrix-js';
+import type { HarrierCore } from '@harrier/core';
 import {
   clearCacheAndReload,
   clearLoginData,
   initClient,
   logoutClient,
-  startClient,
 } from '../../../client/initMatrix';
 import { SplashScreen } from '../../components/splash-screen';
 import { ServerConfigsLoader } from '../../components/ServerConfigsLoader';
 import { CapabilitiesProvider } from '../../hooks/useCapabilities';
 import { MediaConfigProvider } from '../../hooks/useMediaConfig';
 import { MatrixClientProvider } from '../../hooks/useMatrixClient';
+import { CoreProvider } from '../../hooks/useCore';
 import { SpecVersions } from './SpecVersions';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useSyncState } from '../../hooks/useSyncState';
@@ -158,8 +167,12 @@ export function ClientRoot({ children }: ClientRootProps) {
     }, [])
   );
   const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
-  const [startState, startMatrix] = useAsyncCallback<void, Error, [MatrixClient]>(
-    useCallback((m) => startClient(m), [])
+  const core = useMemo(() => (mx ? createMatrixJsCore(mx) : undefined), [mx]);
+  const [startState, startMatrix] = useAsyncCallback<void, Error, [HarrierCore]>(
+    useCallback(async (currentCore) => {
+      const result = await currentCore.auth.start();
+      if (!result.ok) throw result.error;
+    }, [])
   );
 
   useLogoutListener(mx);
@@ -171,10 +184,10 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [loadState, loadMatrix]);
 
   useEffect(() => {
-    if (mx && !mx.clientRunning) {
-      startMatrix(mx);
+    if (core && mx && !mx.clientRunning) {
+      startMatrix(core);
     }
-  }, [mx, startMatrix]);
+  }, [core, mx, startMatrix]);
 
   useSyncState(
     mx,
@@ -207,7 +220,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                   {startState.status === AsyncStatus.Error && (
                     <Text>{`Failed to start. ${startState.error.message}`}</Text>
                   )}
-                  <Button variant="Critical" onClick={mx ? () => startMatrix(mx) : loadMatrix}>
+                  <Button variant="Critical" onClick={core ? () => startMatrix(core) : loadMatrix}>
                     <Text as="span" size="B400">
                       Retry
                     </Text>
@@ -217,22 +230,24 @@ export function ClientRoot({ children }: ClientRootProps) {
             </Box>
           </SplashScreen>
         )}
-        {loading || !mx ? (
+        {loading || !mx || !core ? (
           <ClientRootLoading />
         ) : (
-          <MatrixClientProvider value={mx}>
-            <ServerConfigsLoader>
-              {(serverConfigs) => (
-                <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
-                  <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
-                    <AuthMetadataProvider value={serverConfigs.authMetadata}>
-                      {children}
-                    </AuthMetadataProvider>
-                  </MediaConfigProvider>
-                </CapabilitiesProvider>
-              )}
-            </ServerConfigsLoader>
-          </MatrixClientProvider>
+          <CoreProvider value={core}>
+            <MatrixClientProvider value={mx}>
+              <ServerConfigsLoader>
+                {(serverConfigs) => (
+                  <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
+                    <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
+                      <AuthMetadataProvider value={serverConfigs.authMetadata}>
+                        {children}
+                      </AuthMetadataProvider>
+                    </MediaConfigProvider>
+                  </CapabilitiesProvider>
+                )}
+              </ServerConfigsLoader>
+            </MatrixClientProvider>
+          </CoreProvider>
         )}
       </SpecVersions>
     </AutoDiscovery>
