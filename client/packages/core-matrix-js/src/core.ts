@@ -6,6 +6,7 @@ import {
   type Membership,
   type ReactionCountView,
   type RoomSummaryView,
+  type SendStatus,
   type TimelineItem,
   type TimelineView,
   type WritableSnapshotStore,
@@ -13,6 +14,7 @@ import {
 import {
   ClientEvent,
   EventType,
+  EventStatus,
   EventTimeline,
   MatrixClient,
   MatrixEvent,
@@ -52,6 +54,12 @@ const toSummary = (room: Room, direct: Set<string>): RoomSummaryView | null => {
 
 const isEdit = (event: MatrixEvent): boolean => event.getRelation()?.rel_type === 'm.replace';
 
+const toSendStatus = (status: EventStatus | null): SendStatus => {
+  if (status === EventStatus.SENDING || status === EventStatus.QUEUED) return 'sending';
+  if (status === EventStatus.NOT_SENT || status === EventStatus.CANCELLED) return 'failed';
+  return 'sent';
+};
+
 type RelatesTo = { 'm.in_reply_to'?: { event_id?: unknown } };
 
 const replyTargetOf = (event: MatrixEvent): string | undefined => {
@@ -84,7 +92,7 @@ const toItem = (
       msgtype: content.msgtype ?? 'm.text',
       body: latestEdit.get(eventId) ?? content.body ?? '',
     },
-    status: 'sent',
+    status: toSendStatus(event.status),
     ...(replyTo !== undefined ? { replyTo } : {}),
     ...(reactions.length > 0 ? { reactions } : {}),
   };

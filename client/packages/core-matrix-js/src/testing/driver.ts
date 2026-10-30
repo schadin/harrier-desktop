@@ -1,6 +1,7 @@
 import {
   ClientEvent,
   createClient,
+  EventStatus,
   EventTimeline,
   type IEvent,
   MatrixClient,
@@ -27,6 +28,7 @@ export type SyncFixtureMessage = {
   readonly replaces?: string;
   readonly replyTo?: string;
   readonly redacted?: boolean;
+  readonly status?: 'sending' | 'sent' | 'failed';
 };
 
 export type SyncFixtureRoom = {
@@ -95,7 +97,7 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
     Object.keys(content).forEach((key) => delete content[key]);
   }
   eventCounter += 1;
-  return new MatrixEvent({
+  const event = new MatrixEvent({
     type: 'm.room.message',
     sender: message.sender,
     room_id: roomId,
@@ -104,6 +106,13 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
     content,
     unsigned: message.redacted ? { redacted_because: redactionEvent(roomId, message.sender) } : {},
   });
+  const statusByFixture: Record<string, EventStatus> = {
+    sending: EventStatus.SENDING,
+    failed: EventStatus.NOT_SENT,
+    sent: EventStatus.SENT,
+  };
+  event.setStatus(statusByFixture[message.status ?? 'sent']);
+  return event;
 }
 
 function reactionEvent(roomId: string, reaction: SyncFixtureReaction): MatrixEvent {

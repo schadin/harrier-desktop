@@ -226,4 +226,30 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('sending and failed messages keep their send status', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@tester:example.org', body: 'pending', status: 'sending' },
+              { eventId: '$2', sender: '@tester:example.org', body: 'broken', status: 'failed' },
+            ],
+          },
+        ],
+      });
+      const { items } = core.timeline.timeline('!room:example.org').getSnapshot().value;
+      expect(items.map((item) => (item.kind === 'message' ? item.status : null))).toEqual([
+        'sending',
+        'failed',
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

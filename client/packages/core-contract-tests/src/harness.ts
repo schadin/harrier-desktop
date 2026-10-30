@@ -7,6 +7,7 @@ export type SyncFixtureMessage = {
   readonly replaces?: string;
   readonly replyTo?: string;
   readonly redacted?: boolean;
+  readonly status?: 'sending' | 'sent' | 'failed';
 };
 
 export type SyncFixtureReaction = {
