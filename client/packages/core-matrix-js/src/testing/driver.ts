@@ -33,6 +33,8 @@ export type SyncFixtureMessage = {
   readonly replyTo?: string;
   readonly redacted?: boolean;
   readonly status?: 'sending' | 'sent' | 'failed';
+  readonly encrypted?: boolean;
+  readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
 };
 
 export type SyncFixtureRoom = {
@@ -98,7 +100,10 @@ function redactionEvent(roomId: string, sender: string): IEvent {
 }
 
 function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent {
-  const content: Record<string, unknown> = { msgtype: 'm.text', body: message.body };
+  const content: Record<string, unknown> = {
+    msgtype: message.encrypted ? 'm.bad.encrypted' : 'm.text',
+    body: message.body,
+  };
   if (message.replaces !== undefined) {
     content['m.new_content'] = { msgtype: 'm.text', body: message.body };
     content['m.relates_to'] = { rel_type: 'm.replace', event_id: message.replaces };
@@ -111,7 +116,7 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
   }
   eventCounter += 1;
   const event = new MatrixEvent({
-    type: 'm.room.message',
+    type: message.encrypted ? 'm.room.encrypted' : 'm.room.message',
     sender: message.sender,
     room_id: roomId,
     event_id: message.eventId,

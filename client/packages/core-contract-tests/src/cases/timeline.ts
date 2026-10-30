@@ -252,4 +252,59 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('encrypted messages expose decryption failure and preview', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$1',
+                sender: '@alice:example.org',
+                body: 'ciphertext',
+                encrypted: true,
+                failure: 'missing-keys',
+              },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind).toBe('encrypted');
+      expect(item?.kind === 'encrypted' && item.failure).toBe('missing-keys');
+      expect(item?.preview).toBe('Unable to decrypt message');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('text preview is normalized and redaction has its own preview', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'hello   world\nagain' },
+              { eventId: '$2', sender: '@alice:example.org', body: 'secret', redacted: true },
+            ],
+          },
+        ],
+      });
+      const [text, redacted] = core.timeline.timeline('!room:example.org').getSnapshot()
+        .value.items;
+      expect(text?.preview).toBe('hello world again');
+      expect(redacted?.preview).toBe('Message deleted');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

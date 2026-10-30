@@ -95,6 +95,11 @@ const replyTargetOf = (event: MatrixEvent): string | undefined => {
   return typeof target === 'string' ? target : undefined;
 };
 
+const previewText = (body: string): string => {
+  const cleaned = body.replace(/\s+/g, ' ').trim();
+  return cleaned.length <= 100 ? cleaned : `${cleaned.slice(0, 100).trimEnd()}…`;
+};
+
 const toItem = (
   roomId: string,
   event: MatrixEvent,
@@ -108,16 +113,27 @@ const toItem = (
     sender: event.getSender() ?? '',
     timestamp: event.getTs(),
   };
-  if (event.isRedacted()) return { ...base, kind: 'redacted' };
+  if (event.isRedacted()) return { ...base, kind: 'redacted', preview: 'Message deleted' };
 
   const content = event.getContent<{ msgtype?: string; body?: string }>();
+  if (event.getType() === 'm.room.encrypted') {
+    return {
+      ...base,
+      kind: 'encrypted',
+      preview: 'Unable to decrypt message',
+      ...(content.msgtype === 'm.bad.encrypted' ? { failure: 'missing-keys' as const } : {}),
+    };
+  }
+
+  const body = latestEdit.get(eventId) ?? content.body ?? '';
   const replyTo = replyTargetOf(event);
   return {
     ...base,
     kind: 'message',
+    preview: previewText(body),
     content: {
       msgtype: content.msgtype ?? 'm.text',
-      body: latestEdit.get(eventId) ?? content.body ?? '',
+      body,
     },
     status: toSendStatus(event.status),
     ...(replyTo !== undefined ? { replyTo } : {}),
@@ -154,7 +170,11 @@ const toTimelineView = (
   });
 
   const items = events
-    .filter((event) => !isEdit(event) && event.getType() === 'm.room.message')
+    .filter(
+      (event) =>
+        !isEdit(event) &&
+        (event.getType() === 'm.room.message' || event.getType() === 'm.room.encrypted')
+    )
     .map((event) => {
       const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
       const reactions = [...counts].map(([key, count]) => ({ key, count }));

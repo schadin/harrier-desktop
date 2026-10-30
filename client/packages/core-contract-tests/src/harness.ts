@@ -8,6 +8,8 @@ export type SyncFixtureMessage = {
   readonly replyTo?: string;
   readonly redacted?: boolean;
   readonly status?: 'sending' | 'sent' | 'failed';
+  readonly encrypted?: boolean;
+  readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
 };
 
 export type SyncFixtureReaction = {

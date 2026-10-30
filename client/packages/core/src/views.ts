@@ -74,6 +74,7 @@ type TimelineBase = {
   readonly roomId: RoomId;
   readonly sender: UserId;
   readonly timestamp: Timestamp;
+  readonly preview: string;
 };
 
 export type TimelineItem =
