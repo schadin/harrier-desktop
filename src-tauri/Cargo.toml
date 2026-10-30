@@ -2,7 +2,7 @@
 
 [package]
 name = "harrier"
-version = "4.12.6-harrier.8-beta"
+version = "4.12.6-harrier.9-beta"
 description = "Matrix desktop client powered by Cinny"
 authors = ["Ajay Bura"]
 license = "AGPL-3.0-only"

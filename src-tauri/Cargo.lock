@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "harrier"
-version = "4.12.6-harrier.8-beta"
+version = "4.12.6-harrier.9-beta"
 dependencies = [
  "gtk",
  "libappindicator",
