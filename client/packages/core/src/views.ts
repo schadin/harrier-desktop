@@ -31,12 +31,21 @@ export type SyncView = {
   readonly error?: string;
 };
 
+export type UnreadCountView = {
+  readonly total: number;
+  readonly highlight: number;
+};
+
+export type NotificationMode = 'all' | 'mentions' | 'mute';
+
 export type RoomSummaryView = {
   readonly roomId: RoomId;
   readonly name: string;
   readonly membership: Membership;
   readonly isDirect: boolean;
   readonly isSpace: boolean;
+  readonly unread?: UnreadCountView;
+  readonly notificationMode?: NotificationMode;
 };
 
 export type RoomView = RoomSummaryView & {

@@ -8,6 +8,7 @@ import {
   MatrixEvent,
   ReceiptType,
   Room,
+  NotificationCountType,
   RoomEvent,
   RoomMemberEvent,
   User,
@@ -46,6 +47,8 @@ export type SyncFixtureRoom = {
   readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
   readonly backwardToken?: string;
   readonly typing?: readonly string[];
+  readonly unread?: { readonly total: number; readonly highlight: number };
+  readonly notificationMode?: 'all' | 'mentions' | 'mute';
 };
 
 export type SyncFixturePresence = {
@@ -208,6 +211,10 @@ export function createSyncDriver(): SyncDriver {
         if (member) client.emit(RoomMemberEvent.Typing, typingEvent, member);
       });
     }
+    if (item.unread) {
+      room.setUnreadNotificationCount(NotificationCountType.Total, item.unread.total);
+      room.setUnreadNotificationCount(NotificationCountType.Highlight, item.unread.highlight);
+    }
     room.getLiveTimeline().setPaginationToken(item.backwardToken ?? null, EventTimeline.BACKWARDS);
     if (item.receipts?.length) {
       client.emit(
@@ -234,6 +241,22 @@ export function createSyncDriver(): SyncDriver {
         await applyRoom(item);
       }, Promise.resolve());
       publishDirectRooms();
+      const overrideRules = fixture.rooms
+        .filter((item) => item.notificationMode && item.notificationMode !== 'all')
+        .map((item) => ({
+          rule_id: item.roomId,
+          enabled: true,
+          actions: item.notificationMode === 'mute' ? [] : ['highlight'],
+          conditions: [{ kind: 'event_match', key: 'room_id', pattern: item.roomId }],
+        }));
+      if (overrideRules.length > 0) {
+        const event = new MatrixEvent({
+          type: 'm.push_rules',
+          content: { global: { override: overrideRules } },
+        });
+        client.store.storeAccountDataEvents([event]);
+        client.emit(ClientEvent.AccountData, event);
+      }
       (fixture.presence ?? []).forEach((item) => {
         const user = new User(item.userId);
         const event = new MatrixEvent({

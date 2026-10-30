@@ -4,6 +4,7 @@ import {
   type HarrierCore,
   type JsonObject,
   type Membership,
+  type NotificationMode,
   type PresenceView,
   type ReactionCountView,
   type RoomSummaryView,
@@ -19,6 +20,7 @@ import {
   EventTimeline,
   MatrixClient,
   MatrixEvent,
+  NotificationCountType,
   Room,
   RoomEvent,
   RoomMemberEvent,
@@ -44,15 +46,36 @@ const directRoomIds = (client: MatrixClient): Set<string> => {
   return ids;
 };
 
-const toSummary = (room: Room, direct: Set<string>): RoomSummaryView | null => {
+type PushRule = { actions?: unknown[]; rule_id?: string };
+
+const notificationModeOf = (client: MatrixClient, roomId: string): NotificationMode => {
+  const content = client
+    .getAccountData(EventType.PushRules)
+    ?.getContent<{ global?: { override?: PushRule[] } }>();
+  const rule = content?.global?.override?.find((item) => item.rule_id === roomId);
+  if (!rule) return 'all';
+  const actions = rule.actions ?? [];
+  if (actions.length === 0 || actions[0] === 'dont_notify') return 'mute';
+  return actions[0] === 'notify' ? 'all' : 'mentions';
+};
+
+const toSummary = (
+  room: Room,
+  direct: Set<string>,
+  client: MatrixClient
+): RoomSummaryView | null => {
   const membership = toMembership(room.getMyMembership());
   if (!membership) return null;
+  const total = room.getUnreadNotificationCount(NotificationCountType.Total);
+  const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
   return {
     roomId: room.roomId,
     name: room.name,
     membership,
     isDirect: direct.has(room.roomId),
     isSpace: room.isSpaceRoom(),
+    ...(total > 0 || highlight > 0 ? { unread: { total, highlight } } : {}),
+    notificationMode: notificationModeOf(client, room.roomId),
   };
 };
 
@@ -161,7 +184,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return client
       .getRooms()
       .filter((room) => room.getMyMembership() === 'join')
-      .map((room) => toSummary(room, direct))
+      .map((room) => toSummary(room, direct, client))
       .filter((summary): summary is RoomSummaryView => summary !== null);
   };
 

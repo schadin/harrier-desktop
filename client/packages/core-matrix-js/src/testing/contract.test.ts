@@ -1,4 +1,5 @@
 import {
+  notificationCases,
   presenceCases,
   roomsCases,
   runCoreContractSuite,
@@ -26,4 +27,9 @@ const matrixJsHarness: CoreContractHarness = {
   },
 };
 
-runCoreContractSuite(matrixJsHarness, [...roomsCases, ...timelineCases, ...presenceCases]);
+runCoreContractSuite(matrixJsHarness, [
+  ...roomsCases,
+  ...timelineCases,
+  ...presenceCases,
+  ...notificationCases,
+]);

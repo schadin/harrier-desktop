@@ -34,6 +34,8 @@ export type SyncFixtureRoom = {
   readonly receipts?: readonly SyncFixtureReceipt[];
   readonly backwardToken?: string;
   readonly typing?: readonly string[];
+  readonly unread?: { readonly total: number; readonly highlight: number };
+  readonly notificationMode?: 'all' | 'mentions' | 'mute';
 };
 
 export type SyncFixturePresence = {
