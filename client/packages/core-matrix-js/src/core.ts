@@ -4,6 +4,7 @@ import {
   type HarrierCore,
   type JsonObject,
   type Membership,
+  type PresenceView,
   type ReactionCountView,
   type RoomSummaryView,
   type SendStatus,
@@ -20,6 +21,9 @@ import {
   MatrixEvent,
   Room,
   RoomEvent,
+  RoomMemberEvent,
+  User,
+  UserEvent,
 } from 'matrix-js-sdk';
 
 const notImplemented = (name: string) => () => {
@@ -179,6 +183,29 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(RoomEvent.Timeline, republish);
   client.on(RoomEvent.Receipt, republish);
 
+  const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
+  const buildPresence = (userId: string): PresenceView | null => {
+    const user = client.getUser(userId);
+    if (!user) return null;
+    const status =
+      user.presence === 'online' || user.presence === 'unavailable' ? user.presence : 'offline';
+    return { userId, status };
+  };
+  client.on(UserEvent.Presence, (_event: MatrixEvent | undefined, user: User) => {
+    presenceStores.get(user.userId)?.publish(buildPresence(user.userId));
+  });
+
+  const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
+  const buildTyping = (roomId: string): readonly string[] =>
+    client
+      .getRoom(roomId)
+      ?.getMembers()
+      .filter((member) => member.typing)
+      .map((member) => member.userId) ?? [];
+  client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member) => {
+    typingStores.get(member.roomId)?.publish(buildTyping(member.roomId));
+  });
+
   return {
     capabilities: { calls: false, threads: false },
     auth: {
@@ -216,6 +243,22 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         return store;
       },
       paginateBackward: notImplemented('timeline.paginateBackward'),
+    },
+    presence: {
+      presence(userId) {
+        const existing = presenceStores.get(userId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildPresence(userId));
+        presenceStores.set(userId, store);
+        return store;
+      },
+      typing(roomId) {
+        const existing = typingStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildTyping(roomId));
+        typingStores.set(roomId, store);
+        return store;
+      },
     },
   };
 }

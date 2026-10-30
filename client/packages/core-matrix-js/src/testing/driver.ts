@@ -9,6 +9,9 @@ import {
   ReceiptType,
   Room,
   RoomEvent,
+  RoomMemberEvent,
+  User,
+  UserEvent,
 } from 'matrix-js-sdk';
 
 export const TEST_USER_ID = '@tester:example.org';
@@ -42,10 +45,17 @@ export type SyncFixtureRoom = {
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
   readonly backwardToken?: string;
+  readonly typing?: readonly string[];
+};
+
+export type SyncFixturePresence = {
+  readonly userId: string;
+  readonly status: 'online' | 'offline' | 'unavailable';
 };
 
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
+  readonly presence?: readonly SyncFixturePresence[];
 };
 
 export type SyncDriver = {
@@ -160,6 +170,14 @@ export function createSyncDriver(): SyncDriver {
     (item.children ?? []).forEach((childId) => {
       states.push(stateEvent(item.roomId, 'm.space.child', childId, { via: ['example.org'] }));
     });
+    (item.typing ?? []).forEach((userId) => {
+      states.push(
+        stateEvent(item.roomId, 'm.room.member', userId, {
+          membership: 'join',
+          displayname: userId,
+        })
+      );
+    });
     if (states.length > 0) room.currentState.setStateEvents(states);
     if (item.direct) directRooms.add(item.roomId);
     room.recalculate();
@@ -178,6 +196,18 @@ export function createSyncDriver(): SyncDriver {
         false
       );
     });
+    if (item.typing?.length) {
+      const typingEvent = new MatrixEvent({
+        type: 'm.typing',
+        room_id: item.roomId,
+        content: { user_ids: [...item.typing] },
+      });
+      room.addEphemeralEvents([typingEvent]);
+      item.typing.forEach((userId) => {
+        const member = room.getMember(userId);
+        if (member) client.emit(RoomMemberEvent.Typing, typingEvent, member);
+      });
+    }
     room.getLiveTimeline().setPaginationToken(item.backwardToken ?? null, EventTimeline.BACKWARDS);
     if (item.receipts?.length) {
       client.emit(
@@ -204,6 +234,16 @@ export function createSyncDriver(): SyncDriver {
         await applyRoom(item);
       }, Promise.resolve());
       publishDirectRooms();
+      (fixture.presence ?? []).forEach((item) => {
+        const user = new User(item.userId);
+        const event = new MatrixEvent({
+          type: 'm.presence',
+          content: { presence: item.status },
+        });
+        user.setPresenceEvent(event);
+        client.store.storeUser(user);
+        client.emit(UserEvent.Presence, event, user);
+      });
     },
   };
 }

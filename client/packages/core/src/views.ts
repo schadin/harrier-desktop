@@ -92,6 +92,13 @@ export type TimelineView = {
   readonly readUpTo?: EventId;
 };
 
+export type PresenceStatus = 'online' | 'offline' | 'unavailable';
+
+export type PresenceView = {
+  readonly userId: UserId;
+  readonly status: PresenceStatus;
+};
+
 export type SendStatusView = {
   readonly localId: string;
   readonly roomId: RoomId;

@@ -6,6 +6,7 @@ import type {
   RoomId,
   RoomSummaryView,
   RoomView,
+  PresenceView,
   SessionView,
   SyncView,
   TimelineView,
@@ -43,9 +44,15 @@ export type TimelineModule = {
   paginateBackward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
 };
 
+export type PresenceModule = {
+  presence(userId: string): SnapshotStore<PresenceView | null>;
+  typing(roomId: RoomId): SnapshotStore<readonly string[]>;
+};
+
 export type HarrierCore = {
   readonly capabilities: CoreCapabilities;
   readonly auth: AuthModule;
   readonly rooms: RoomsModule;
   readonly timeline: TimelineModule;
+  readonly presence: PresenceModule;
 };

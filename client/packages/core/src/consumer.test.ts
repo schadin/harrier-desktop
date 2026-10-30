@@ -13,7 +13,7 @@ describe('public contract consumer', () => {
 describe('raw SDK access is absent from the public root', () => {
   it('has no raw client, room or event handles', () => {
     expectTypeOf<keyof HarrierCore>().toEqualTypeOf<
-      'capabilities' | 'auth' | 'rooms' | 'timeline'
+      'capabilities' | 'auth' | 'rooms' | 'timeline' | 'presence'
     >();
   });
 });

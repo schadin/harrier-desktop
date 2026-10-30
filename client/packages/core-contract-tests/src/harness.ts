@@ -33,10 +33,17 @@ export type SyncFixtureRoom = {
   readonly reactions?: readonly SyncFixtureReaction[];
   readonly receipts?: readonly SyncFixtureReceipt[];
   readonly backwardToken?: string;
+  readonly typing?: readonly string[];
+};
+
+export type SyncFixturePresence = {
+  readonly userId: string;
+  readonly status: 'online' | 'offline' | 'unavailable';
 };
 
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
+  readonly presence?: readonly SyncFixturePresence[];
 };
 
 export type CoreContractHarness = {
