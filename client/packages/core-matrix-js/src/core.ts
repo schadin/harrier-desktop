@@ -103,6 +103,28 @@ const previewText = (body: string): string => {
   return cleaned.length <= 100 ? cleaned : `${cleaned.slice(0, 100).trimEnd()}…`;
 };
 
+const dmUserIdOf = (room: Room): string => {
+  const oldestMember = (members: ReturnType<Room['getMembers']>) => {
+    let oldestTs: number | undefined;
+    let oldestUserId: string | undefined;
+    members.forEach((member) => {
+      if (member.userId === room.myUserId) return;
+      const ts = member.events.member?.getTs();
+      if (oldestTs === undefined || (ts !== undefined && ts < oldestTs)) {
+        oldestTs = ts;
+        oldestUserId = member.userId;
+      }
+    });
+    return oldestUserId;
+  };
+
+  return (
+    oldestMember(room.getJoinedMembers()) ??
+    oldestMember(room.getLiveTimeline().getState(EventTimeline.FORWARDS)?.getMembers() ?? []) ??
+    room.myUserId
+  );
+};
+
 const toItem = (
   roomId: string,
   event: MatrixEvent,
@@ -276,6 +298,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       encrypted,
       joinRule: room.getJoinRule(),
       roomType: room.getType(),
+      canonicalAlias: room.getCanonicalAlias() ?? undefined,
+      dmUserId: dmUserIdOf(room),
     };
   };
 

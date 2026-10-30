@@ -10,8 +10,9 @@ import { useDirects, useRooms, useSpaces } from '../../../state/hooks/roomList';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../../hooks/useGetRoom';
-import { getDMRoomFor, getMxIdLocalPart, guessDmRoomUserId } from '../../../utils/matrix';
+import { useAllJoinedRoomsSet } from '../../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../../hooks/useGetCoreRoom';
+import { getDMRoomFor, getMxIdLocalPart } from '../../../utils/matrix';
 import { getDirectCreatePath } from '../../../pages/pathUtils';
 import { useOpenSettingsPage } from '../../../state/settingsNav';
 import { SettingsPages } from '../../settings';
@@ -38,22 +39,21 @@ const useRoomItems = (): PaletteItem[] => {
   const mx = useMatrixClient();
   const { navigateRoom } = useRoomNavigate();
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
   const mDirects = useAtomValue(mDirectAtom);
   const rooms = useRooms(mx, allRoomsAtom, mDirects);
   const directs = useDirects(mx, allRoomsAtom, mDirects);
 
   return useMemo(() => {
-    const myUserId = mx.getSafeUserId();
     const makeItem = (roomId: string, dm: boolean): PaletteItem => {
       const room = getRoom(roomId);
       const title = room?.name ?? roomId;
       const keywords = [roomId];
-      const canonicalAlias = room?.getCanonicalAlias();
+      const canonicalAlias = room?.canonicalAlias;
       if (canonicalAlias) keywords.push(canonicalAlias);
       let subtitle: string | undefined;
       if (dm && room) {
-        const dmUserId = guessDmRoomUserId(room, myUserId);
+        const { dmUserId } = room;
         if (dmUserId) {
           keywords.push(dmUserId, getMxIdLocalPart(dmUserId) ?? '');
           subtitle = dmUserId;
@@ -74,7 +74,7 @@ const useRoomItems = (): PaletteItem[] => {
       ...rooms.map((roomId) => makeItem(roomId, false)),
       ...directs.map((roomId) => makeItem(roomId, true)),
     ];
-  }, [mx, getRoom, rooms, directs, navigateRoom]);
+  }, [getRoom, rooms, directs, navigateRoom]);
 };
 
 const useSpaceItems = (): PaletteItem[] => {
@@ -82,14 +82,14 @@ const useSpaceItems = (): PaletteItem[] => {
   const { navigateSpace } = useRoomNavigate();
   const spaces = useSpaces(mx, allRoomsAtom);
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
 
   return useMemo(
     () =>
       spaces.map((roomId) => {
         const room = getRoom(roomId);
         const keywords = [roomId];
-        const canonicalAlias = room?.getCanonicalAlias();
+        const canonicalAlias = room?.canonicalAlias;
         if (canonicalAlias) keywords.push(canonicalAlias);
         return {
           id: `space:${roomId}`,
@@ -109,7 +109,7 @@ const usePeopleItems = (): PaletteItem[] => {
   const navigate = useNavigate();
   const { navigateRoom } = useRoomNavigate();
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
   const mDirects = useAtomValue(mDirectAtom);
   const directs = useDirects(mx, allRoomsAtom, mDirects);
   // mx.getUsers() меняется по мере синка; пересчитываем при смене списка комнат
@@ -121,7 +121,7 @@ const usePeopleItems = (): PaletteItem[] => {
     const dmPartnerIds = new Set<string>();
     directs.forEach((roomId) => {
       const room = getRoom(roomId);
-      if (room) dmPartnerIds.add(guessDmRoomUserId(room, myUserId));
+      if (room?.dmUserId) dmPartnerIds.add(room.dmUserId);
     });
     const users = mx
       .getUsers()
