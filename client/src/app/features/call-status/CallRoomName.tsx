@@ -8,7 +8,8 @@ import { useOrphanSpaces } from '../../state/hooks/roomList';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { mDirectAtom } from '../../state/mDirectList';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
+import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useCoreRoom } from '../../hooks/useCoreRoom';
 
@@ -24,7 +25,7 @@ export function CallRoomName({ roomId }: CallRoomNameProps) {
   const dm = mDirects.has(roomId);
 
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
 
   const allParents = getAllParents(roomToParents, roomId);
   const orphanParents = allParents && orphanSpaces.filter((o) => allParents.has(o));
