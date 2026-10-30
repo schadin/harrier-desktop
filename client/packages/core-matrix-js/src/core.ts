@@ -10,6 +10,8 @@ import {
   type ReactionCountView,
   type RoomSummaryView,
   type SendStatus,
+  type SessionView,
+  type SyncView,
   type TimelineItem,
   type TimelineView,
   type WritableSnapshotStore,
@@ -25,6 +27,8 @@ import {
   Room,
   RoomEvent,
   RoomMemberEvent,
+  SetPresence,
+  SyncState,
   User,
   UserEvent,
 } from 'matrix-js-sdk';
@@ -253,14 +257,55 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     typingStores.get(member.roomId)?.publish(buildTyping(member.roomId));
   });
 
+  const sessionStore = createSnapshotStore<SessionView | null>({
+    userId: client.getSafeUserId(),
+    deviceId: client.getDeviceId() ?? '',
+    ready: false,
+  });
+  const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
+  client.on(ClientEvent.Sync, (state: SyncState) => {
+    let phase: SyncView['phase'] = 'syncing';
+    if (state === SyncState.Prepared) phase = 'prepared';
+    if (state === SyncState.Error) phase = 'error';
+    syncStore.publish({ phase });
+    if (state === SyncState.Prepared) {
+      const session = sessionStore.getSnapshot().value;
+      if (session) sessionStore.publish({ ...session, ready: true });
+    }
+  });
+
   return {
     capabilities: { calls: false, threads: false },
     auth: {
-      session: createSnapshotStore(null),
-      sync: createSnapshotStore({ phase: 'idle' as const }),
-      start: notImplemented('auth.start'),
-      stop: notImplemented('auth.stop'),
-      logout: notImplemented('auth.logout'),
+      session: sessionStore,
+      sync: syncStore,
+      async start(): Promise<CoreResult<void>> {
+        try {
+          syncStore.publish({ phase: 'syncing' });
+          client.setSyncPresence(SetPresence.Online);
+          await client.startClient({ lazyLoadMembers: true });
+          return { ok: true, value: undefined };
+        } catch (error) {
+          syncStore.publish({ phase: 'error', error: toCoreError(error).message });
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async stop() {
+        client.stopClient();
+        syncStore.publish({ phase: 'stopped' });
+      },
+      async logout(): Promise<CoreResult<void>> {
+        client.stopClient();
+        try {
+          await client.logout();
+        } catch {
+          // Local cleanup continues even if the server logout fails.
+        }
+        await client.clearStores();
+        sessionStore.publish(null);
+        syncStore.publish({ phase: 'stopped' });
+        return { ok: true, value: undefined };
+      },
     },
     rooms: {
       list: roomsStore,

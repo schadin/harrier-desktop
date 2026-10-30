@@ -169,6 +169,7 @@ export function createSyncDriver(): SyncDriver {
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
 
   client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
+    if (path.endsWith('/logout')) return {};
     if (path.endsWith('/messages')) {
       const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
       const history = historyByRoom.get(roomId);

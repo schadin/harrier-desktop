@@ -1,4 +1,5 @@
 import {
+  authCases,
   notificationCases,
   presenceCases,
   roomsCases,
@@ -32,4 +33,5 @@ runCoreContractSuite(matrixJsHarness, [
   ...timelineCases,
   ...presenceCases,
   ...notificationCases,
+  ...authCases,
 ]);
