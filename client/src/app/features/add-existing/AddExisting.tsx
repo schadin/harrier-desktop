@@ -29,16 +29,17 @@ import React, {
 } from 'react';
 import { useAtomValue } from 'jotai';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Room } from 'matrix-js-sdk';
+import type { RoomView } from '@harrier/core';
 import { stopPropagation } from '../../utils/keyboard';
 import { useDirects, useRooms, useSpaces } from '../../state/hooks/roomList';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { mDirectAtom } from '../../state/mDirectList';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
+import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { VirtualTile } from '../../components/virtualizer';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '../../utils/room';
+import { mxcUrlToHttp, rateLimitedActions } from '../../utils/matrix';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -51,8 +52,6 @@ import {
 import { highlightText, makeHighlightRegex } from '../../plugins/react-custom-html-parser';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { StateEvent } from '../../../types/matrix/room';
-import { getViaServers } from '../../plugins/via-servers';
-import { rateLimitedActions } from '../../utils/matrix';
 import { useAlive } from '../../hooks/useAlive';
 
 const SEARCH_OPTS: UseAsyncSearchOptions = {
@@ -85,7 +84,7 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
   const [selected, setSelected] = useState<string[]>([]);
 
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
 
   const allItems: string[] = useMemo(() => {
     const rIds = space ? [...spaces] : [...rooms, ...directs];
@@ -128,11 +127,11 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
     searchRoom(value);
   };
 
-  const [applyState, applyChanges] = useAsyncCallback<undefined, Error, [Room[]]>(
+  const [applyState, applyChanges] = useAsyncCallback<undefined, Error, [RoomView[]]>(
     useCallback(
       async (selectedRooms) => {
         await rateLimitedActions(selectedRooms, async (room) => {
-          const via = getViaServers(room);
+          const via = room.viaServers;
 
           await mx.sendStateEvent(
             parentId,
@@ -166,7 +165,7 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
   const handleApplyChanges = () => {
     const selectedRooms = selected
       .map((rId) => getRoom(rId))
-      .filter((room): room is Room => room !== undefined);
+      .filter((room): room is RoomView => room !== null);
     applyChanges(selectedRooms).then(() => {
       if (alive()) {
         setSelected([]);
@@ -277,13 +276,27 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                               aria-pressed={selectedItem}
                               before={
                                 <Avatar size="200" radii={dm ? '400' : '300'}>
-                                  {dm || room.isSpaceRoom() ? (
+                                  {dm || room.isSpace ? (
                                     <RoomAvatar
                                       roomId={room.roomId}
                                       src={
                                         dm
-                                          ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-                                          : getRoomAvatarUrl(mx, room, 96, useAuthentication)
+                                          ? mxcUrlToHttp(
+                                              mx,
+                                              room.dmAvatarMxc ?? room.avatarMxc ?? '',
+                                              useAuthentication,
+                                              96,
+                                              96,
+                                              'crop'
+                                            ) ?? undefined
+                                          : mxcUrlToHttp(
+                                              mx,
+                                              room.avatarMxc ?? '',
+                                              useAuthentication,
+                                              96,
+                                              96,
+                                              'crop'
+                                            ) ?? undefined
                                       }
                                       alt={room.name}
                                       renderFallback={() => (
@@ -295,8 +308,8 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                                   ) : (
                                     <RoomIcon
                                       size="200"
-                                      joinRule={room.getJoinRule()}
-                                      roomType={room.getType()}
+                                      joinRule={room.joinRule}
+                                      roomType={room.roomType}
                                     />
                                   )}
                                 </Avatar>

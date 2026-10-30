@@ -103,6 +103,46 @@ const previewText = (body: string): string => {
   return cleaned.length <= 100 ? cleaned : `${cleaned.slice(0, 100).trimEnd()}…`;
 };
 
+const viaServersOf = (room: Room): readonly string[] => {
+  const serverOf = (userId: string) => {
+    const separator = userId.indexOf(':');
+    return separator > 0 ? userId.slice(separator + 1) : undefined;
+  };
+  const createEvent = room.currentState.getStateEvents('m.room.create', '');
+  const creatorsSupported = (version: string) =>
+    !['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'].includes(version);
+  let highestPowerUserId: string | undefined;
+  if (
+    createEvent &&
+    creatorsSupported(createEvent.getContent<{ room_version?: string }>().room_version ?? '')
+  ) {
+    highestPowerUserId = createEvent.getSender();
+  } else {
+    const powerLevels = room.currentState
+      .getStateEvents('m.room.power_levels', '')
+      ?.getContent<{ users?: Record<string, number>; users_default?: number }>();
+    const users = powerLevels?.users;
+    if (users) {
+      Object.keys(users).forEach((userId) => {
+        if (users[userId] <= (powerLevels?.users_default ?? 0)) return;
+        if (!highestPowerUserId || users[userId] > users[highestPowerUserId]) {
+          highestPowerUserId = userId;
+        }
+      });
+    }
+  }
+
+  const population = new Map<string, number>();
+  room.getMembers().forEach((member) => {
+    const server = serverOf(member.userId);
+    if (server) population.set(server, (population.get(server) ?? 0) + 1);
+  });
+  const sorted = [...population].sort((a, b) => b[1] - a[1]).map(([server]) => server);
+  const creatorServer = highestPowerUserId ? serverOf(highestPowerUserId) : undefined;
+  if (!creatorServer) return sorted.slice(0, 3);
+  return [creatorServer, ...sorted.filter((server) => server !== creatorServer).slice(0, 2)];
+};
+
 const dmUserIdOf = (room: Room): string => {
   const oldestMember = (members: ReturnType<Room['getMembers']>) => {
     let oldestTs: number | undefined;
@@ -306,6 +346,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       dmUserId: dmUserIdOf(room),
       avatarMxc,
       dmAvatarMxc,
+      viaServers: viaServersOf(room),
     };
   };
 
