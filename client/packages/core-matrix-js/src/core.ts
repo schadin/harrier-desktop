@@ -4,11 +4,13 @@ import {
   type CoreResult,
   type HarrierCore,
   type JsonObject,
+  type MemberView,
   type Membership,
   type NotificationMode,
   type PresenceView,
   type ReactionCountView,
   type RoomSummaryView,
+  type RoomView,
   type SendStatus,
   type SessionView,
   type SyncView,
@@ -32,10 +34,6 @@ import {
   User,
   UserEvent,
 } from 'matrix-js-sdk';
-
-const notImplemented = (name: string) => () => {
-  throw new Error(`${name} is not implemented yet`);
-};
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -262,6 +260,30 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     deviceId: client.getDeviceId() ?? '',
     ready: false,
   });
+  const roomStores = new Map<string, WritableSnapshotStore<RoomView | null>>();
+  const buildRoomView = (roomId: string): RoomView | null => {
+    const room = client.getRoom(roomId);
+    if (!room) return null;
+    const summary = toSummary(room, directRoomIds(client), client);
+    if (!summary) return null;
+    const topic = room.currentState
+      .getStateEvents('m.room.topic', '')
+      ?.getContent<{ topic?: string }>().topic;
+    const encrypted = room.currentState.getStateEvents('m.room.encryption', '') !== null;
+    return { ...summary, topic, encrypted };
+  };
+
+  const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
+  const buildMembers = (roomId: string): readonly MemberView[] =>
+    client
+      .getRoom(roomId)
+      ?.getMembers()
+      .map((member) => ({
+        userId: member.userId,
+        displayName: member.name,
+        membership: toMembership(member.membership) ?? 'leave',
+      })) ?? [];
+
   const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
   client.on(ClientEvent.Sync, (state: SyncState) => {
     let phase: SyncView['phase'] = 'syncing';
@@ -309,8 +331,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     },
     rooms: {
       list: roomsStore,
-      room: notImplemented('rooms.room'),
-      members: notImplemented('rooms.members'),
+      room(roomId) {
+        const existing = roomStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildRoomView(roomId));
+        roomStores.set(roomId, store);
+        return store;
+      },
+      members(roomId) {
+        const existing = memberStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildMembers(roomId));
+        memberStores.set(roomId, store);
+        return store;
+      },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
         const room = client.getRoom(roomId);
         const event = room?.currentState.getStateEvents(eventType, stateKey) ?? null;

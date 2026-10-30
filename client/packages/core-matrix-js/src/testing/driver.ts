@@ -56,6 +56,13 @@ export type SyncFixtureRoom = {
   readonly typing?: readonly string[];
   readonly unread?: { readonly total: number; readonly highlight: number };
   readonly notificationMode?: 'all' | 'mentions' | 'mute';
+  readonly topic?: string;
+  readonly encrypted?: boolean;
+  readonly members?: readonly {
+    readonly userId: string;
+    readonly displayName: string;
+    readonly membership?: 'join' | 'invite' | 'leave';
+  }[];
 };
 
 export type SyncFixturePresence = {
@@ -203,6 +210,22 @@ export function createSyncDriver(): SyncDriver {
     if (item.space) {
       states.push(stateEvent(item.roomId, 'm.room.create', '', { type: 'm.space' }));
     }
+    if (item.topic !== undefined) {
+      states.push(stateEvent(item.roomId, 'm.room.topic', '', { topic: item.topic }));
+    }
+    if (item.encrypted) {
+      states.push(
+        stateEvent(item.roomId, 'm.room.encryption', '', { algorithm: 'm.megolm.v1.aes-sha2' })
+      );
+    }
+    (item.members ?? []).forEach((member) => {
+      states.push(
+        stateEvent(item.roomId, 'm.room.member', member.userId, {
+          membership: member.membership ?? 'join',
+          displayname: member.displayName,
+        })
+      );
+    });
     (item.children ?? []).forEach((childId) => {
       states.push(stateEvent(item.roomId, 'm.space.child', childId, { via: ['example.org'] }));
     });

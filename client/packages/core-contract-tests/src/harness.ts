@@ -43,6 +43,13 @@ export type SyncFixtureRoom = {
   readonly typing?: readonly string[];
   readonly unread?: { readonly total: number; readonly highlight: number };
   readonly notificationMode?: 'all' | 'mentions' | 'mute';
+  readonly topic?: string;
+  readonly encrypted?: boolean;
+  readonly members?: readonly {
+    readonly userId: string;
+    readonly displayName: string;
+    readonly membership?: 'join' | 'invite' | 'leave';
+  }[];
 };
 
 export type SyncFixturePresence = {

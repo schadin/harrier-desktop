@@ -129,4 +129,52 @@ export const roomsCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('room view exposes topic and encryption', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            topic: 'Discuss Harrier',
+            encrypted: true,
+          },
+        ],
+      });
+      const room = core.rooms.room('!room:example.org').getSnapshot().value;
+      expect(room?.topic).toBe('Discuss Harrier');
+      expect(room?.encrypted).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('members are exposed with display names and membership', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            members: [
+              { userId: '@alice:example.org', displayName: 'Alice' },
+              { userId: '@bob:example.org', displayName: 'Bob', membership: 'invite' },
+            ],
+          },
+        ],
+      });
+      const members = core.rooms.members('!room:example.org').getSnapshot().value;
+      expect(members).toEqual([
+        { userId: '@alice:example.org', displayName: 'Alice', membership: 'join' },
+        { userId: '@bob:example.org', displayName: 'Bob', membership: 'invite' },
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];
