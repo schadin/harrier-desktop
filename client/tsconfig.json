@@ -14,5 +14,5 @@
     "lib": ["ES2016", "DOM", "ES2022.Intl"]
   },
   "exclude": ["node_modules", "dist"],
-  "include": ["src"]
+  "include": ["src", "packages/*/src"]
 }

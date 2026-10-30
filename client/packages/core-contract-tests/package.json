@@ -1,0 +1,17 @@
+{
+  "name": "@harrier/core-contract-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Implementation-independent contract test suite for @harrier/core",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@harrier/core": "0.0.0"
+  },
+  "devDependencies": {
+    "vitest": "4.1.10"
+  }
+}

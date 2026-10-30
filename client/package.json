@@ -1,9 +1,13 @@
 {
   "name": "cinny",
   "version": "4.12.6",
+  "private": true,
   "description": "Yet another matrix client",
   "main": "index.js",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": ">=16.0.0"
   },
@@ -13,7 +17,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "npm run check:eslint && npm run check:prettier",
-    "check:eslint": "eslint src/*",
+    "check:eslint": "eslint src/* packages",
     "check:prettier": "prettier --check .",
     "fix:prettier": "prettier --write .",
     "typecheck": "tsc --noEmit",
@@ -37,6 +41,8 @@
     "@atlaskit/pragmatic-drag-and-drop": "1.1.6",
     "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "1.3.0",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "1.0.3",
+    "@harrier/core": "0.0.0",
+    "@harrier/core-matrix-js": "0.0.0",
     "@fontsource/inter": "4.5.14",
     "@tanstack/react-query": "5.24.1",
     "@tanstack/react-query-devtools": "5.24.1",
