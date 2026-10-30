@@ -203,4 +203,27 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('own read receipt is exposed as the room read position', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'first' },
+              { eventId: '$2', sender: '@alice:example.org', body: 'second' },
+            ],
+            receipts: [{ eventId: '$1', userId: '@tester:example.org' }],
+          },
+        ],
+      });
+      expect(core.timeline.timeline('!room:example.org').getSnapshot().value.readUpTo).toBe('$1');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

@@ -89,6 +89,7 @@ export type TimelineView = {
   readonly roomId: RoomId;
   readonly items: readonly TimelineItem[];
   readonly hasBackwardHistory: boolean;
+  readonly readUpTo?: EventId;
 };
 
 export type SendStatusView = {

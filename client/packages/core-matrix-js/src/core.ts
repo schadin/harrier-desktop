@@ -134,7 +134,13 @@ const toTimelineView = (
 
   const hasBackwardHistory =
     room?.getLiveTimeline().getPaginationToken(EventTimeline.BACKWARDS) != null;
-  return { roomId, items, hasBackwardHistory };
+  const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
+  return {
+    roomId,
+    items,
+    hasBackwardHistory,
+    ...(ownReadUpTo !== null && ownReadUpTo !== undefined ? { readUpTo: ownReadUpTo } : {}),
+  };
 };
 
 export function createMatrixJsCore(client: MatrixClient): HarrierCore {
