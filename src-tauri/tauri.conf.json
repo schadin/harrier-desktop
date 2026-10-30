@@ -40,9 +40,9 @@
     }
   },
   "build": {
-    "beforeBuildCommand": "node scripts/rebrand.mjs apply && cd cinny && npm run build && cd .. && node scripts/rebrand.mjs revert",
-    "frontendDist": "../cinny/dist",
-    "beforeDevCommand": "node scripts/rebrand.mjs apply && cd cinny && npm start",
+    "beforeBuildCommand": "cd client && npm run build",
+    "frontendDist": "../client/dist",
+    "beforeDevCommand": "cd client && npm start",
     "devUrl": "http://localhost:8080"
   },
   "productName": "Harrier",

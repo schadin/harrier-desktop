@@ -1,0 +1,82 @@
+{
+  "Organisms": {
+    "RoomCommon": {
+      "changed_room_name": " hat den Raum Name geändert"
+    }
+  },
+  "DecryptionFailure": {
+    "Action": {
+      "RequestKey": "Schlüssel anfordern",
+      "KeyRequested": "Schlüssel angefordert",
+      "VerifyDevice": "Gerät verifizieren",
+      "RestoreBackup": "Schlüssel-Backup einrichten/wiederherstellen"
+    },
+    "Reason": {
+      "KeyNotReceived": "Der Schlüssel für diese Nachricht wurde noch nicht empfangen",
+      "KeyWithheld": "Der Absender hält den Entschlüsselungsschlüssel zurück",
+      "KeyWithheldUnverifiedDevice": "Der Absender teilt den Schlüssel nicht, weil Ihr Gerät nicht verifiziert ist",
+      "UnknownMessageIndex": "Diese Nachricht wurde mit einem Schlüssel verschlüsselt, den dieses Gerät nicht kennt",
+      "HistoricalNoBackup": "Alte Nachricht: der Schlüssel ist nicht verfügbar, richten Sie das Schlüssel-Backup ein oder stellen Sie es wieder her",
+      "HistoricalWorkingBackup": "Alte Nachricht: das Schlüssel-Backup funktioniert, aber der Schlüssel ist noch nicht verfügbar",
+      "HistoricalNotJoined": "Diese Nachricht wurde gesendet, bevor Sie dem Raum beigetreten sind",
+      "SenderIdentityPreviouslyVerified": "Die Identität des Absenders ist nicht mehr verifiziert",
+      "UnsignedSenderDevice": "Das Gerät des Absenders ist nicht cross-signed",
+      "UnknownSenderDevice": "Das Gerät des Absenders ist unbekannt",
+      "Unknown": "Diese Nachricht kann nicht entschlüsselt werden"
+    }
+  },
+  "CommandPalette": {
+    "placeholder": "Räume, Personen, Aktionen suchen…",
+    "noResults": "Keine Treffer",
+    "noResultsFor": "Keine Treffer für \"{{query}}\".",
+    "recent": "Zuletzt verwendet",
+    "hint": "Tippe",
+    "hintRooms": "für Räume",
+    "hintPeople": "für Personen",
+    "hintSpaces": "für Spaces",
+    "hotkey": "Tastenkürzel",
+    "categories": {
+      "actions": "Aktionen",
+      "rooms": "Räume",
+      "people": "Personen",
+      "spaces": "Spaces",
+      "settings": "Einstellungen"
+    },
+    "settings": {
+      "general": "Allgemein",
+      "account": "Konto",
+      "status": "Status",
+      "notifications": "Benachrichtigungen",
+      "devices": "Geräte",
+      "emojisStickers": "Emojis & Sticker",
+      "developerTools": "Entwicklerwerkzeuge",
+      "about": "Über"
+    },
+    "actions": {
+      "setStatus": "Status setzen: {{status}}",
+      "clearStatus": "Status löschen",
+      "muteRoom": "Raum stummschalten",
+      "unmuteRoom": "Stummschaltung des Raums aufheben",
+      "markAllRead": "Alle als gelesen markieren",
+      "createRoom": "Raum erstellen",
+      "createDm": "Direktnachricht erstellen",
+      "createSpace": "Space erstellen",
+      "logout": "Abmelden",
+      "unread": "Ungelesene Chats anzeigen"
+    },
+    "unreadPlaceholder": "Ungelesene Chats",
+    "noUnread": "Keine ungelesenen Chats",
+    "noUnreadDescription": "Alle deine Chats sind gelesen.",
+    "unreadFooter": "Ungelesene Chats",
+    "unreadFooterHint": "Backspace für Zurück, Esc zum Schließen",
+    "unreadPreview": {
+      "image": "[Foto]",
+      "video": "[Video]",
+      "audio": "[Audio]",
+      "file": "[Datei]",
+      "sticker": "[Sticker]",
+      "redacted": "[Gelöschte Nachricht]",
+      "encrypted": "[Verschlüsselte Nachricht]"
+    }
+  }
+}

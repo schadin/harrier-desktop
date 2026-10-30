@@ -7,10 +7,8 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "tauri": "shx cp config.json cinny/ && node scripts/tauri.mjs",
+    "tauri": "node scripts/tauri.mjs",
     "bump": "node scripts/update-version.mjs",
-    "rebrand:apply": "node scripts/rebrand.mjs apply",
-    "rebrand:revert": "node scripts/rebrand.mjs revert",
     "install-bin": "test -f src-tauri/target/release/harrier || npm run tauri build -- --no-bundle && sudo install -m 755 src-tauri/target/release/harrier /usr/bin/harrier"
   },
   "keywords": [],
@@ -30,7 +28,6 @@
   },
   "devDependencies": {
     "@actions/github": "9.1.1",
-    "@tauri-apps/cli": "2.7.1",
-    "shx": "0.4.0"
+    "@tauri-apps/cli": "2.7.1"
   }
 }

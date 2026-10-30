@@ -1,0 +1,188 @@
+import React, { useCallback, useEffect, useRef } from 'react';
+import { Box, Text, config } from 'folds';
+import { EventType } from 'matrix-js-sdk';
+import { ReactEditor } from 'slate-react';
+import { isKeyHotkey } from 'is-hotkey';
+import { useAtomValue } from 'jotai';
+import { useStateEvent } from '../../hooks/useStateEvent';
+import { StateEvent } from '../../../types/matrix/room';
+import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
+import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useEditor } from '../../components/editor';
+import { RoomInputPlaceholder } from './RoomInputPlaceholder';
+import { RoomTimeline } from './RoomTimeline';
+import { RoomViewTyping } from './RoomViewTyping';
+import { RoomTombstone } from './RoomTombstone';
+import { RoomInput } from './RoomInput';
+import { RoomViewFollowing, RoomViewFollowingPlaceholder } from './RoomViewFollowing';
+import { Page } from '../../components/page';
+import { useKeyDown } from '../../hooks/useKeyDown';
+import { editableActiveElement } from '../../utils/dom';
+import { settingsAtom } from '../../state/settings';
+import { useSetting } from '../../state/hooks/settings';
+import { useRoomPermissions } from '../../hooks/useRoomPermissions';
+import { useRoomCreators } from '../../hooks/useRoomCreators';
+import { useRoom, useIsDirectRoom } from '../../hooks/useRoom';
+import { messageInputFocusAtom } from '../../state/messageInputFocus';
+import { searchModalAtom } from '../../state/searchModal';
+
+const FN_KEYS_REGEX = /^F\d+$/;
+
+/** Ctrl/Cmd+Shift+M — фокус на поле ввода сообщения (по event.code, любая раскладка) */
+const isMessageInputHotkey = (evt: KeyboardEvent): boolean =>
+  (evt.ctrlKey || evt.metaKey) && evt.shiftKey && !evt.altKey && evt.code === 'KeyM';
+
+/** Открыто ли модальное окно (палитра или любой портал) */
+const isOverlayOpened = (paletteOpened: boolean): boolean => {
+  if (paletteOpened) return true;
+  const portalContainer = document.getElementById('portalContainer');
+  return !!portalContainer && portalContainer.children.length > 0;
+};
+
+const shouldFocusMessageField = (evt: KeyboardEvent): boolean => {
+  const { code } = evt;
+  if (evt.metaKey || evt.altKey || evt.ctrlKey) {
+    return false;
+  }
+
+  if (FN_KEYS_REGEX.test(code)) return false;
+
+  if (
+    code.startsWith('OS') ||
+    code.startsWith('Meta') ||
+    code.startsWith('Shift') ||
+    code.startsWith('Alt') ||
+    code.startsWith('Control') ||
+    code.startsWith('Arrow') ||
+    code.startsWith('Page') ||
+    code.startsWith('End') ||
+    code.startsWith('Home') ||
+    code === 'Tab' ||
+    code === 'Space' ||
+    code === 'Enter' ||
+    code === 'NumLock' ||
+    code === 'ScrollLock'
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+export function RoomView({ eventId }: { eventId?: string }) {
+  const roomInputRef = useRef<HTMLDivElement>(null);
+  const roomViewRef = useRef<HTMLDivElement>(null);
+
+  const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
+  const [roomReadReceipts] = useSetting(settingsAtom, 'roomReadReceipts');
+  const [directReadReceipts] = useSetting(settingsAtom, 'directReadReceipts');
+  const direct = useIsDirectRoom();
+  const showFollowing = (direct ? directReadReceipts : roomReadReceipts) === 'status';
+
+  const room = useRoom();
+  const { roomId } = room;
+  const editor = useEditor();
+
+  const mx = useMatrixClient();
+
+  const tombstoneEvent = useStateEvent(room, StateEvent.RoomTombstone);
+  const powerLevels = usePowerLevelsContext();
+  const creators = useRoomCreators(room);
+
+  const permissions = useRoomPermissions(creators, powerLevels);
+  const canMessage = permissions.event(EventType.RoomMessage, mx.getSafeUserId());
+
+  const paletteOpened = useAtomValue(searchModalAtom);
+  const messageInputFocusToken = useAtomValue(messageInputFocusAtom);
+  const handledFocusTokenRef = useRef(0);
+
+  // Фокус на композер после перехода в комнату из Command Palette
+  useEffect(() => {
+    if (
+      messageInputFocusToken === 0 ||
+      messageInputFocusToken === handledFocusTokenRef.current ||
+      !canMessage
+    ) {
+      handledFocusTokenRef.current = messageInputFocusToken;
+      return undefined;
+    }
+    handledFocusTokenRef.current = messageInputFocusToken;
+
+    // композер может монтироваться в том же рендере — фокусируем после кадра
+    const frame = requestAnimationFrame(() => ReactEditor.focus(editor));
+    return () => cancelAnimationFrame(frame);
+  }, [messageInputFocusToken, canMessage, editor]);
+
+  useKeyDown(
+    window,
+    useCallback(
+      (evt) => {
+        if (isMessageInputHotkey(evt)) {
+          if (isOverlayOpened(paletteOpened)) return;
+          evt.preventDefault();
+          ReactEditor.focus(editor);
+          return;
+        }
+
+        if (editableActiveElement()) return;
+        if (isOverlayOpened(paletteOpened)) return;
+        if (shouldFocusMessageField(evt) || isKeyHotkey('mod+v', evt)) {
+          ReactEditor.focus(editor);
+        }
+      },
+      [editor, paletteOpened]
+    )
+  );
+
+  return (
+    <Page ref={roomViewRef}>
+      <Box grow="Yes" direction="Column">
+        <RoomTimeline
+          key={roomId}
+          room={room}
+          eventId={eventId}
+          roomInputRef={roomInputRef}
+          editor={editor}
+        />
+        <RoomViewTyping room={room} />
+      </Box>
+      <Box shrink="No" direction="Column">
+        <div style={{ padding: `0 ${config.space.S400}` }}>
+          {tombstoneEvent ? (
+            <RoomTombstone
+              roomId={roomId}
+              body={tombstoneEvent.getContent().body}
+              replacementRoomId={tombstoneEvent.getContent().replacement_room}
+            />
+          ) : (
+            <>
+              {canMessage && (
+                <RoomInput
+                  room={room}
+                  editor={editor}
+                  roomId={roomId}
+                  fileDropContainerRef={roomViewRef}
+                  ref={roomInputRef}
+                />
+              )}
+              {!canMessage && (
+                <RoomInputPlaceholder
+                  style={{ padding: config.space.S200 }}
+                  alignItems="Center"
+                  justifyContent="Center"
+                >
+                  <Text align="Center">You do not have permission to post in this room</Text>
+                </RoomInputPlaceholder>
+              )}
+            </>
+          )}
+        </div>
+        {hideActivity || !showFollowing ? (
+          <RoomViewFollowingPlaceholder />
+        ) : (
+          <RoomViewFollowing room={room} />
+        )}
+      </Box>
+    </Page>
+  );
+}
