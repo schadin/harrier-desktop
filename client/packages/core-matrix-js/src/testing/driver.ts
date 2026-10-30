@@ -35,6 +35,7 @@ export type SyncFixtureMessage = {
   readonly status?: 'sending' | 'sent' | 'failed';
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
+  readonly threadRoot?: string;
 };
 
 export type SyncFixtureRoom = {
@@ -110,6 +111,13 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
   }
   if (message.replyTo !== undefined) {
     content['m.relates_to'] = { 'm.in_reply_to': { event_id: message.replyTo } };
+  }
+  if (message.threadRoot !== undefined) {
+    content['m.relates_to'] = {
+      rel_type: 'm.thread',
+      event_id: message.threadRoot,
+      'm.in_reply_to': { event_id: message.threadRoot },
+    };
   }
   if (message.redacted) {
     Object.keys(content).forEach((key) => delete content[key]);

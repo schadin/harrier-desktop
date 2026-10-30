@@ -307,4 +307,32 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('thread replies keep the root event id', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$root', sender: '@alice:example.org', body: 'root' },
+              {
+                eventId: '$reply',
+                sender: '@bob:example.org',
+                body: 'reply',
+                threadRoot: '$root',
+              },
+            ],
+          },
+        ],
+      });
+      const [, reply] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(reply?.kind === 'message' && reply.threadRoot).toBe('$root');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

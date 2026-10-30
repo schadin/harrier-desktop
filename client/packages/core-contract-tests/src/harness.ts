@@ -10,6 +10,7 @@ export type SyncFixtureMessage = {
   readonly status?: 'sending' | 'sent' | 'failed';
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
+  readonly threadRoot?: string;
 };
 
 export type SyncFixtureReaction = {

@@ -127,6 +127,8 @@ const toItem = (
 
   const body = latestEdit.get(eventId) ?? content.body ?? '';
   const replyTo = replyTargetOf(event);
+  const relation = event.getRelation();
+  const threadRoot = relation?.rel_type === 'm.thread' ? relation.event_id : undefined;
   return {
     ...base,
     kind: 'message',
@@ -137,6 +139,7 @@ const toItem = (
     },
     status: toSendStatus(event.status),
     ...(replyTo !== undefined ? { replyTo } : {}),
+    ...(threadRoot !== undefined ? { threadRoot } : {}),
     ...(reactions.length > 0 ? { reactions } : {}),
   };
 };

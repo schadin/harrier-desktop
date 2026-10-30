@@ -85,6 +85,7 @@ export type TimelineItem =
       readonly replyTo?: EventId;
       readonly reactions?: readonly ReactionCountView[];
       readonly readBy?: readonly UserId[];
+      readonly threadRoot?: EventId;
     })
   | (TimelineBase & {
       readonly kind: 'state';
