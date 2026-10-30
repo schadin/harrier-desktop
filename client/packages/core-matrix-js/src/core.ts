@@ -82,7 +82,11 @@ const toItem = (
   };
 };
 
-const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): TimelineView => {
+const toTimelineView = (
+  roomId: string,
+  events: readonly MatrixEvent[],
+  room: Room | undefined
+): TimelineView => {
   const latestEdit = new Map<string, string>();
   events.forEach((event) => {
     if (!isEdit(event)) return;
@@ -111,7 +115,13 @@ const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): Timelin
     .map((event) => {
       const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
       const reactions = [...counts].map(([key, count]) => ({ key, count }));
-      return toItem(roomId, event, latestEdit, reactions);
+      const item = toItem(roomId, event, latestEdit, reactions);
+      const readers = room
+        ? room
+            .getUsersReadUpTo(event)
+            .filter((userId) => userId !== room.myUserId && userId !== event.getSender())
+        : [];
+      return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
     });
 
   return { roomId, items, hasBackwardHistory: false };
@@ -134,12 +144,16 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(ClientEvent.AccountData, refresh);
 
   const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
-  const buildTimeline = (roomId: string) =>
-    toTimelineView(roomId, client.getRoom(roomId)?.getLiveTimeline().getEvents() ?? []);
-  client.on(RoomEvent.Timeline, (_event: MatrixEvent, room: Room | undefined) => {
+  const buildTimeline = (roomId: string) => {
+    const room = client.getRoom(roomId) ?? undefined;
+    return toTimelineView(roomId, room?.getLiveTimeline().getEvents() ?? [], room);
+  };
+  const republish = (_event: MatrixEvent, room: Room | undefined) => {
     if (!room) return;
     timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
-  });
+  };
+  client.on(RoomEvent.Timeline, republish);
+  client.on(RoomEvent.Receipt, republish);
 
   return {
     capabilities: { calls: false, threads: false },

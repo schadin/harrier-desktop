@@ -132,4 +132,29 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('remote read receipts list the readers of the event', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'first' },
+              { eventId: '$2', sender: '@alice:example.org', body: 'second' },
+            ],
+            receipts: [{ eventId: '$1', userId: '@bob:example.org' }],
+          },
+        ],
+      });
+      const [first, second] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(first?.kind === 'message' && first.readBy).toEqual(['@bob:example.org']);
+      expect(second?.kind === 'message' && second.readBy).toBeUndefined();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

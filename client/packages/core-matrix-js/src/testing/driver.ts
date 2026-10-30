@@ -4,6 +4,7 @@ import {
   type IEvent,
   MatrixClient,
   MatrixEvent,
+  ReceiptType,
   Room,
   RoomEvent,
 } from 'matrix-js-sdk';
@@ -36,6 +37,7 @@ export type SyncFixtureRoom = {
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];
+  readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
 };
 
 export type SyncFixture = {
@@ -156,6 +158,22 @@ export function createSyncDriver(): SyncDriver {
       ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),
       ...(item.reactions ?? []).map((reaction) => reactionEvent(item.roomId, reaction)),
     ];
+    (item.receipts ?? []).forEach((receipt) => {
+      room.addReceiptToStructure(
+        receipt.eventId,
+        ReceiptType.Read,
+        receipt.userId,
+        { ts: 1 },
+        false
+      );
+    });
+    if (item.receipts?.length) {
+      client.emit(
+        RoomEvent.Receipt,
+        new MatrixEvent({ type: 'm.receipt', room_id: item.roomId, content: {} }),
+        room
+      );
+    }
     await events.reduce(async (previous, event) => {
       await previous;
       await room.addLiveEvents([event], { addToState: false });

@@ -16,6 +16,11 @@ export type SyncFixtureReaction = {
   readonly key: string;
 };
 
+export type SyncFixtureReceipt = {
+  readonly eventId: string;
+  readonly userId: string;
+};
+
 export type SyncFixtureRoom = {
   readonly roomId: string;
   readonly membership: 'join' | 'invite' | 'leave';
@@ -25,6 +30,7 @@ export type SyncFixtureRoom = {
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];
+  readonly receipts?: readonly SyncFixtureReceipt[];
 };
 
 export type SyncFixture = {
