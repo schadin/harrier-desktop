@@ -28,6 +28,7 @@ export type AuthModule = {
 };
 
 export type RoomsModule = {
+  readonly all: SnapshotStore<readonly RoomSummaryView[]>;
   readonly list: SnapshotStore<readonly RoomSummaryView[]>;
   room(roomId: RoomId): SnapshotStore<RoomView | null>;
   members(roomId: RoomId): SnapshotStore<readonly MemberView[]>;

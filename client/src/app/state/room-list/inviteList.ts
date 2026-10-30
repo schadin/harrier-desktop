@@ -1,5 +1,4 @@
 import { atom, WritableAtom } from 'jotai';
-import { MatrixClient } from 'matrix-js-sdk';
 import { useMemo } from 'react';
 import { Membership } from '../../../types/matrix/room';
 import { RoomsAction, useBindRoomsWithMembershipsAtom } from './utils';
@@ -21,11 +20,9 @@ export const allInvitesAtom = atom<string[], [RoomsAction], undefined>(
 );
 
 export const useBindAllInvitesAtom = (
-  mx: MatrixClient,
   allRooms: WritableAtom<string[], [RoomsAction], undefined>
 ) => {
   useBindRoomsWithMembershipsAtom(
-    mx,
     allRooms,
     useMemo(() => [Membership.Invite], [])
   );

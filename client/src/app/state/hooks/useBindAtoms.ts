@@ -9,8 +9,8 @@ import { spaceSortAtom, useBindSpaceSortAtom } from '../spaceSort';
 
 export const useBindAtoms = (mx: MatrixClient) => {
   useBindMDirectAtom(mx, mDirectAtom);
-  useBindAllInvitesAtom(mx, allInvitesAtom);
-  useBindAllRoomsAtom(mx, allRoomsAtom);
+  useBindAllInvitesAtom(allInvitesAtom);
+  useBindAllRoomsAtom(allRoomsAtom);
   useBindRoomToParentsAtom(mx, roomToParentsAtom);
   useBindRoomToUnreadAtom(mx, roomToUnreadAtom);
 

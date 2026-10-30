@@ -15,6 +15,10 @@ export const roomsCases = [
       expect(rooms.map((room) => [room.roomId, room.name, room.membership])).toEqual([
         ['!general:example.org', 'General', 'join'],
       ]);
+      expect(core.rooms.all.getSnapshot().value.map((room) => room.membership)).toEqual([
+        'join',
+        'invite',
+      ]);
     } finally {
       await harness.dispose(core);
     }

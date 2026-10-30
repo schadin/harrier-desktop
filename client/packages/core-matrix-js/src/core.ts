@@ -276,8 +276,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       .filter((summary): summary is RoomSummaryView => summary !== null);
   };
 
+  const allRooms = () => {
+    const direct = directRoomIds(client);
+    return client
+      .getRooms()
+      .map((room) => toSummary(room, direct, client))
+      .filter((summary): summary is RoomSummaryView => summary !== null);
+  };
+
+  const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
   const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
-  const refresh = () => roomsStore.publish(joined());
+  const refresh = () => {
+    allRoomsStore.publish(allRooms());
+    roomsStore.publish(joined());
+  };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
   client.on(ClientEvent.AccountData, refresh);
@@ -407,6 +419,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
     },
     rooms: {
+      all: allRoomsStore,
       list: roomsStore,
       room(roomId) {
         const existing = roomStores.get(roomId);
