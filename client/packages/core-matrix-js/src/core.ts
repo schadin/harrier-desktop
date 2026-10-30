@@ -270,7 +270,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       .getStateEvents('m.room.topic', '')
       ?.getContent<{ topic?: string }>().topic;
     const encrypted = room.currentState.getStateEvents('m.room.encryption', '') !== null;
-    return { ...summary, topic, encrypted };
+    return {
+      ...summary,
+      topic,
+      encrypted,
+      joinRule: room.getJoinRule(),
+      roomType: room.getType(),
+    };
   };
 
   const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();

@@ -1,8 +1,6 @@
 import React from 'react';
-import { Room } from 'matrix-js-sdk';
 import { Chip, Icon, Icons, Text } from 'folds';
 import { useAtomValue } from 'jotai';
-import { useRoomName } from '../../hooks/useRoomMeta';
 import { RoomIcon } from '../../components/room-avatar';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { getAllParents, guessPerfectParent } from '../../utils/room';
@@ -12,24 +10,25 @@ import { allRoomsAtom } from '../../state/room-list/roomList';
 import { mDirectAtom } from '../../state/mDirectList';
 import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
+import { useCoreRoom } from '../../hooks/useCoreRoom';
 
 type CallRoomNameProps = {
-  room: Room;
+  roomId: string;
 };
-export function CallRoomName({ room }: CallRoomNameProps) {
+export function CallRoomName({ roomId }: CallRoomNameProps) {
   const mx = useMatrixClient();
-  const name = useRoomName(room);
+  const room = useCoreRoom(roomId);
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
   const mDirects = useAtomValue(mDirectAtom);
-  const dm = mDirects.has(room.roomId);
+  const dm = mDirects.has(roomId);
 
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetRoom(allRoomsSet);
 
-  const allParents = getAllParents(roomToParents, room.roomId);
+  const allParents = getAllParents(roomToParents, roomId);
   const orphanParents = allParents && orphanSpaces.filter((o) => allParents.has(o));
-  const perfectOrphanParent = orphanParents && guessPerfectParent(mx, room.roomId, orphanParents);
+  const perfectOrphanParent = orphanParents && guessPerfectParent(mx, roomId, orphanParents);
 
   const { navigateRoom } = useRoomNavigate();
 
@@ -41,13 +40,13 @@ export function CallRoomName({ room }: CallRoomNameProps) {
         dm ? (
           <Icon size="200" src={Icons.VolumeHigh} filled />
         ) : (
-          <RoomIcon size="200" joinRule={room.getJoinRule()} roomType={room.getType()} filled />
+          <RoomIcon size="200" joinRule={room?.joinRule} roomType={room?.roomType} filled />
         )
       }
-      onClick={() => navigateRoom(room.roomId)}
+      onClick={() => navigateRoom(roomId)}
     >
       <Text size="L400" truncate>
-        {name}
+        {room?.name ?? roomId}
         {!dm && perfectOrphanParent && (
           <Text as="span" size="T200" priority="300">
             {' •'} <b>{getRoom(perfectOrphanParent)?.name ?? perfectOrphanParent}</b>

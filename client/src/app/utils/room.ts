@@ -269,7 +269,7 @@ export const getUnreadInfos = (mx: MatrixClient): UnreadInfo[] => {
 export const getRoomIconSrc = (
   icons: Record<IconName, IconSrc>,
   roomType?: string,
-  joinRule?: JoinRule
+  joinRule?: string
 ): IconSrc => {
   if (roomType === RoomType.Space) {
     if (joinRule === JoinRule.Public) return icons.SpaceGlobe;

@@ -51,6 +51,8 @@ export type RoomSummaryView = {
 export type RoomView = RoomSummaryView & {
   readonly topic?: string;
   readonly encrypted: boolean;
+  readonly joinRule?: string;
+  readonly roomType?: string;
 };
 
 export type MemberView = {

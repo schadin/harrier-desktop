@@ -50,7 +50,7 @@ export function CallStatus({ callEmbed }: CallStatusProps) {
         <Box grow="Yes" alignItems="Center" gap="Inherit">
           {!compact && (
             <>
-              <CallRoomName room={room} />
+              <CallRoomName roomId={room.roomId} />
               {speakers.size > 0 && (
                 <>
                   <StatusDivider />
@@ -71,7 +71,7 @@ export function CallStatus({ callEmbed }: CallStatusProps) {
       <Box shrink="No" alignItems="Center" gap="Inherit">
         {compact && (
           <Box grow="Yes">
-            <CallRoomName room={room} />
+            <CallRoomName roomId={room.roomId} />
           </Box>
         )}
         <CallControl callJoined={callJoined} compact={compact} callEmbed={callEmbed} />
