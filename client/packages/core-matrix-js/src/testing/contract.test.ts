@@ -3,18 +3,25 @@ import {
   runCoreContractSuite,
   type CoreContractHarness,
 } from '@harrier/core-contract-tests';
+import { createMatrixJsCore } from '../core';
+import { createSyncDriver, type SyncDriver } from './driver';
 
-const pendingHarness: CoreContractHarness = {
+let driver: SyncDriver | undefined;
+
+const matrixJsHarness: CoreContractHarness = {
   name: 'matrix-js',
   async create() {
-    throw new Error('createMatrixJsCore is not implemented yet');
+    driver = createSyncDriver();
+    return createMatrixJsCore(driver.client);
   },
-  async applySyncFixture() {
-    throw new Error('createMatrixJsCore is not implemented yet');
+  async applySyncFixture(fixture) {
+    if (!driver) throw new Error('create() must run before applySyncFixture()');
+    await driver.applyFixture(fixture);
   },
   async dispose() {
-    return undefined;
+    driver?.client.stopClient();
+    driver = undefined;
   },
 };
 
-runCoreContractSuite(pendingHarness, roomsCases);
+runCoreContractSuite(matrixJsHarness, roomsCases);

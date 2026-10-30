@@ -1,4 +1,4 @@
-import { createClient, MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import { ClientEvent, createClient, MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
 
 export const TEST_USER_ID = '@tester:example.org';
 
@@ -51,6 +51,7 @@ export function createSyncDriver(): SyncDriver {
           room.currentState.setStateEvents([event]);
           room.recalculate();
         }
+        client.emit(ClientEvent.Room, room);
       });
     },
   };

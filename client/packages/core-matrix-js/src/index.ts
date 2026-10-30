@@ -1,0 +1,1 @@
+export { createMatrixJsCore } from './core';
