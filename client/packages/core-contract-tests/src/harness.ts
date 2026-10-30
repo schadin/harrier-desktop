@@ -6,6 +6,7 @@ export type SyncFixtureRoom = {
   readonly name?: string;
   readonly direct?: boolean;
   readonly space?: boolean;
+  readonly children?: readonly string[];
 };
 
 export type SyncFixture = {

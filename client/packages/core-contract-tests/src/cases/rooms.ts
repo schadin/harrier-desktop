@@ -73,4 +73,60 @@ export const roomsCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('space children are listed in hierarchy order', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!space:example.org',
+            membership: 'join',
+            name: 'Team',
+            space: true,
+            children: ['!a:example.org', '!b:example.org'],
+          },
+          { roomId: '!a:example.org', membership: 'join', name: 'A' },
+          { roomId: '!b:example.org', membership: 'join', name: 'B' },
+        ],
+      });
+      const result = await core.rooms.children('!space:example.org');
+      expect(result).toEqual({ ok: true, value: ['!a:example.org', '!b:example.org'] });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('incremental sync keeps rooms it does not mention', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!b:example.org', membership: 'join', name: 'B' }],
+      });
+      expect(core.rooms.list.getSnapshot().value.map((room) => room.roomId)).toEqual([
+        '!a:example.org',
+        '!b:example.org',
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('incremental sync updates an existing room name', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'Old' }],
+      });
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'New' }],
+      });
+      expect(core.rooms.list.getSnapshot().value[0]?.name).toBe('New');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

@@ -9,6 +9,7 @@ export type SyncFixtureRoom = {
   readonly name?: string;
   readonly direct?: boolean;
   readonly space?: boolean;
+  readonly children?: readonly string[];
 };
 
 export type SyncFixture = {
@@ -22,11 +23,16 @@ export type SyncDriver = {
 
 let eventCounter = 0;
 
-function stateEvent(roomId: string, type: string, content: Record<string, unknown>): MatrixEvent {
+function stateEvent(
+  roomId: string,
+  type: string,
+  stateKey: string,
+  content: Record<string, unknown>
+): MatrixEvent {
   eventCounter += 1;
   return new MatrixEvent({
     type,
-    state_key: '',
+    state_key: stateKey,
     sender: TEST_USER_ID,
     room_id: roomId,
     event_id: `$fixture${eventCounter}`,
@@ -59,19 +65,18 @@ export function createSyncDriver(): SyncDriver {
         const room = new Room(item.roomId, client, TEST_USER_ID);
         client.store.storeRoom(room);
         room.updateMyMembership(item.membership);
+        const states: MatrixEvent[] = [];
         if (item.name !== undefined) {
-          room.currentState.setStateEvents([
-            stateEvent(item.roomId, 'm.room.name', { name: item.name }),
-          ]);
+          states.push(stateEvent(item.roomId, 'm.room.name', '', { name: item.name }));
         }
         if (item.space) {
-          room.currentState.setStateEvents([
-            stateEvent(item.roomId, 'm.room.create', { type: 'm.space' }),
-          ]);
+          states.push(stateEvent(item.roomId, 'm.room.create', '', { type: 'm.space' }));
         }
-        if (item.direct) {
-          directRooms.add(item.roomId);
-        }
+        (item.children ?? []).forEach((childId) => {
+          states.push(stateEvent(item.roomId, 'm.space.child', childId, { via: ['example.org'] }));
+        });
+        if (states.length > 0) room.currentState.setStateEvents(states);
+        if (item.direct) directRooms.add(item.roomId);
         room.recalculate();
         client.emit(ClientEvent.Room, room);
       });

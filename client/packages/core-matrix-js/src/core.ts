@@ -67,6 +67,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       list: roomsStore,
       room: notImplemented('rooms.room'),
       members: notImplemented('rooms.members'),
+      async children(roomId): Promise<CoreResult<readonly string[]>> {
+        const room = client.getRoom(roomId);
+        const events = room?.currentState.getStateEvents(EventType.SpaceChild) ?? [];
+        const ids = events
+          .filter((event) => Array.isArray(event.getContent<{ via?: unknown }>().via))
+          .map((event) => event.getStateKey())
+          .filter((key): key is string => typeof key === 'string' && key.length > 0);
+        return { ok: true, value: ids };
+      },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
         const room = client.getRoom(roomId);
         const event = room?.currentState.getStateEvents(eventType, stateKey) ?? null;

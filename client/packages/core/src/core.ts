@@ -35,6 +35,7 @@ export type RoomsModule = {
     eventType: string,
     stateKey: string
   ): Promise<CoreResult<JsonObject | null>>;
+  children(roomId: RoomId): Promise<CoreResult<readonly RoomId[]>>;
 };
 
 export type TimelineModule = {
