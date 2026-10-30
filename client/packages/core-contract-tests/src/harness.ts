@@ -1,5 +1,12 @@
 import type { HarrierCore } from '@harrier/core';
 
+export type SyncFixtureMessage = {
+  readonly eventId: string;
+  readonly sender: string;
+  readonly body: string;
+  readonly replaces?: string;
+};
+
 export type SyncFixtureRoom = {
   readonly roomId: string;
   readonly membership: 'join' | 'invite' | 'leave';
@@ -7,6 +14,7 @@ export type SyncFixtureRoom = {
   readonly direct?: boolean;
   readonly space?: boolean;
   readonly children?: readonly string[];
+  readonly messages?: readonly SyncFixtureMessage[];
 };
 
 export type SyncFixture = {

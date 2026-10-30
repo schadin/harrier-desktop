@@ -1,7 +1,21 @@
-import { ClientEvent, createClient, MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import {
+  ClientEvent,
+  createClient,
+  MatrixClient,
+  MatrixEvent,
+  Room,
+  RoomEvent,
+} from 'matrix-js-sdk';
 
 export const TEST_USER_ID = '@tester:example.org';
 const DIRECT_PARTNER_ID = '@alice:example.org';
+
+export type SyncFixtureMessage = {
+  readonly eventId: string;
+  readonly sender: string;
+  readonly body: string;
+  readonly replaces?: string;
+};
 
 export type SyncFixtureRoom = {
   readonly roomId: string;
@@ -10,6 +24,7 @@ export type SyncFixtureRoom = {
   readonly direct?: boolean;
   readonly space?: boolean;
   readonly children?: readonly string[];
+  readonly messages?: readonly SyncFixtureMessage[];
 };
 
 export type SyncFixture = {
@@ -41,6 +56,23 @@ function stateEvent(
   });
 }
 
+function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent {
+  const content: Record<string, unknown> = { msgtype: 'm.text', body: message.body };
+  if (message.replaces !== undefined) {
+    content['m.new_content'] = { msgtype: 'm.text', body: message.body };
+    content['m.relates_to'] = { rel_type: 'm.replace', event_id: message.replaces };
+  }
+  eventCounter += 1;
+  return new MatrixEvent({
+    type: 'm.room.message',
+    sender: message.sender,
+    room_id: roomId,
+    event_id: message.eventId,
+    origin_server_ts: 1_700_000_000_000 + eventCounter,
+    content,
+  });
+}
+
 export function createSyncDriver(): SyncDriver {
   const client = createClient({
     baseUrl: 'https://matrix.example.org',
@@ -58,28 +90,43 @@ export function createSyncDriver(): SyncDriver {
     client.emit(ClientEvent.AccountData, event);
   };
 
+  const applyRoom = async (item: SyncFixtureRoom) => {
+    const room = new Room(item.roomId, client, TEST_USER_ID);
+    client.store.storeRoom(room);
+    room.updateMyMembership(item.membership);
+    const states: MatrixEvent[] = [];
+    if (item.name !== undefined) {
+      states.push(stateEvent(item.roomId, 'm.room.name', '', { name: item.name }));
+    }
+    if (item.space) {
+      states.push(stateEvent(item.roomId, 'm.room.create', '', { type: 'm.space' }));
+    }
+    (item.children ?? []).forEach((childId) => {
+      states.push(stateEvent(item.roomId, 'm.space.child', childId, { via: ['example.org'] }));
+    });
+    if (states.length > 0) room.currentState.setStateEvents(states);
+    if (item.direct) directRooms.add(item.roomId);
+    room.recalculate();
+    client.emit(ClientEvent.Room, room);
+
+    await (item.messages ?? []).reduce(async (previous, message) => {
+      await previous;
+      const event = messageEvent(item.roomId, message);
+      await room.addLiveEvents([event], { addToState: false });
+      client.emit(RoomEvent.Timeline, event, room, false, false, {
+        timeline: room.getLiveTimeline(),
+        liveEvent: true,
+      });
+    }, Promise.resolve());
+  };
+
   return {
     client,
     async applyFixture(fixture) {
-      fixture.rooms.forEach((item) => {
-        const room = new Room(item.roomId, client, TEST_USER_ID);
-        client.store.storeRoom(room);
-        room.updateMyMembership(item.membership);
-        const states: MatrixEvent[] = [];
-        if (item.name !== undefined) {
-          states.push(stateEvent(item.roomId, 'm.room.name', '', { name: item.name }));
-        }
-        if (item.space) {
-          states.push(stateEvent(item.roomId, 'm.room.create', '', { type: 'm.space' }));
-        }
-        (item.children ?? []).forEach((childId) => {
-          states.push(stateEvent(item.roomId, 'm.space.child', childId, { via: ['example.org'] }));
-        });
-        if (states.length > 0) room.currentState.setStateEvents(states);
-        if (item.direct) directRooms.add(item.roomId);
-        room.recalculate();
-        client.emit(ClientEvent.Room, room);
-      });
+      await fixture.rooms.reduce(async (previous, item) => {
+        await previous;
+        await applyRoom(item);
+      }, Promise.resolve());
       publishDirectRooms();
     },
   };

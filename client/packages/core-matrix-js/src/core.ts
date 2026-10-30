@@ -5,8 +5,11 @@ import {
   type JsonObject,
   type Membership,
   type RoomSummaryView,
+  type TimelineItem,
+  type TimelineView,
+  type WritableSnapshotStore,
 } from '@harrier/core';
-import { ClientEvent, EventType, MatrixClient, Room, RoomEvent } from 'matrix-js-sdk';
+import { ClientEvent, EventType, MatrixClient, MatrixEvent, Room, RoomEvent } from 'matrix-js-sdk';
 
 const notImplemented = (name: string) => () => {
   throw new Error(`${name} is not implemented yet`);
@@ -38,6 +41,40 @@ const toSummary = (room: Room, direct: Set<string>): RoomSummaryView | null => {
   };
 };
 
+const isEdit = (event: MatrixEvent): boolean => event.getRelation()?.rel_type === 'm.replace';
+
+const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): TimelineView => {
+  const latestEdit = new Map<string, string>();
+  events.forEach((event) => {
+    if (!isEdit(event)) return;
+    const target = event.getRelation()?.event_id;
+    const body = event.getContent<{ 'm.new_content'?: { body?: unknown } }>()['m.new_content']
+      ?.body;
+    if (target && typeof body === 'string') latestEdit.set(target, body);
+  });
+
+  const items = events
+    .filter((event) => !isEdit(event) && event.getType() === 'm.room.message')
+    .map((event): TimelineItem => {
+      const eventId = event.getId() ?? '';
+      const content = event.getContent<{ msgtype?: string; body?: string }>();
+      return {
+        kind: 'message',
+        eventId,
+        roomId,
+        sender: event.getSender() ?? '',
+        timestamp: event.getTs(),
+        content: {
+          msgtype: content.msgtype ?? 'm.text',
+          body: latestEdit.get(eventId) ?? content.body ?? '',
+        },
+        status: 'sent',
+      };
+    });
+
+  return { roomId, items, hasBackwardHistory: false };
+};
+
 export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const joined = () => {
     const direct = directRoomIds(client);
@@ -54,6 +91,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(RoomEvent.MyMembership, refresh);
   client.on(ClientEvent.AccountData, refresh);
 
+  const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
+  const buildTimeline = (roomId: string) =>
+    toTimelineView(roomId, client.getRoom(roomId)?.getLiveTimeline().getEvents() ?? []);
+  client.on(RoomEvent.Timeline, (_event: MatrixEvent, room: Room | undefined) => {
+    if (!room) return;
+    timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
+  });
+
   return {
     capabilities: { calls: false, threads: false },
     auth: {
@@ -67,6 +112,11 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       list: roomsStore,
       room: notImplemented('rooms.room'),
       members: notImplemented('rooms.members'),
+      async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
+        const room = client.getRoom(roomId);
+        const event = room?.currentState.getStateEvents(eventType, stateKey) ?? null;
+        return { ok: true, value: event ? (event.getContent() as JsonObject) : null };
+      },
       async children(roomId): Promise<CoreResult<readonly string[]>> {
         const room = client.getRoom(roomId);
         const events = room?.currentState.getStateEvents(EventType.SpaceChild) ?? [];
@@ -76,14 +126,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           .filter((key): key is string => typeof key === 'string' && key.length > 0);
         return { ok: true, value: ids };
       },
-      async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
-        const room = client.getRoom(roomId);
-        const event = room?.currentState.getStateEvents(eventType, stateKey) ?? null;
-        return { ok: true, value: event ? (event.getContent() as JsonObject) : null };
-      },
     },
     timeline: {
-      timeline: notImplemented('timeline.timeline'),
+      timeline(roomId) {
+        const existing = timelines.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildTimeline(roomId));
+        timelines.set(roomId, store);
+        return store;
+      },
       paginateBackward: notImplemented('timeline.paginateBackward'),
     },
   };

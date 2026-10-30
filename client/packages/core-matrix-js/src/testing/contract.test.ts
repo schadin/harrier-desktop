@@ -1,6 +1,7 @@
 import {
   roomsCases,
   runCoreContractSuite,
+  timelineCases,
   type CoreContractHarness,
 } from '@harrier/core-contract-tests';
 import { createMatrixJsCore } from '../core';
@@ -24,4 +25,4 @@ const matrixJsHarness: CoreContractHarness = {
   },
 };
 
-runCoreContractSuite(matrixJsHarness, roomsCases);
+runCoreContractSuite(matrixJsHarness, [...roomsCases, ...timelineCases]);
