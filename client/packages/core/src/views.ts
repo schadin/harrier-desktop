@@ -55,6 +55,11 @@ export type MessageContentView = {
   readonly body: string;
 };
 
+export type ReactionCountView = {
+  readonly key: string;
+  readonly count: number;
+};
+
 type TimelineBase = {
   readonly eventId: EventId;
   readonly roomId: RoomId;
@@ -68,6 +73,7 @@ export type TimelineItem =
       readonly content: MessageContentView;
       readonly status: SendStatus;
       readonly replyTo?: EventId;
+      readonly reactions?: readonly ReactionCountView[];
     })
   | (TimelineBase & {
       readonly kind: 'state';

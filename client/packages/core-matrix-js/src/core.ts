@@ -4,6 +4,7 @@ import {
   type HarrierCore,
   type JsonObject,
   type Membership,
+  type ReactionCountView,
   type RoomSummaryView,
   type TimelineItem,
   type TimelineView,
@@ -54,7 +55,8 @@ const replyTargetOf = (event: MatrixEvent): string | undefined => {
 const toItem = (
   roomId: string,
   event: MatrixEvent,
-  latestEdit: ReadonlyMap<string, string>
+  latestEdit: ReadonlyMap<string, string>,
+  reactions: readonly ReactionCountView[]
 ): TimelineItem => {
   const eventId = event.getId() ?? '';
   const base = {
@@ -76,6 +78,7 @@ const toItem = (
     },
     status: 'sent',
     ...(replyTo !== undefined ? { replyTo } : {}),
+    ...(reactions.length > 0 ? { reactions } : {}),
   };
 };
 
@@ -89,9 +92,27 @@ const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): Timelin
     if (target && typeof body === 'string') latestEdit.set(target, body);
   });
 
+  const countsByTarget = new Map<string, Map<string, number>>();
+  events.forEach((event) => {
+    if (event.getType() !== 'm.reaction') return;
+    const relates = event.getContent()['m.relates_to'] as
+      | { event_id?: unknown; key?: unknown }
+      | undefined;
+    const target = relates?.event_id;
+    const key = relates?.key;
+    if (typeof target !== 'string' || typeof key !== 'string') return;
+    const counts = countsByTarget.get(target) ?? new Map<string, number>();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    countsByTarget.set(target, counts);
+  });
+
   const items = events
     .filter((event) => !isEdit(event) && event.getType() === 'm.room.message')
-    .map((event) => toItem(roomId, event, latestEdit));
+    .map((event) => {
+      const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
+      const reactions = [...counts].map(([key, count]) => ({ key, count }));
+      return toItem(roomId, event, latestEdit, reactions);
+    });
 
   return { roomId, items, hasBackwardHistory: false };
 };

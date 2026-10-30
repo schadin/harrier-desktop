@@ -9,6 +9,13 @@ export type SyncFixtureMessage = {
   readonly redacted?: boolean;
 };
 
+export type SyncFixtureReaction = {
+  readonly eventId: string;
+  readonly target: string;
+  readonly sender: string;
+  readonly key: string;
+};
+
 export type SyncFixtureRoom = {
   readonly roomId: string;
   readonly membership: 'join' | 'invite' | 'leave';
@@ -17,6 +24,7 @@ export type SyncFixtureRoom = {
   readonly space?: boolean;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
+  readonly reactions?: readonly SyncFixtureReaction[];
 };
 
 export type SyncFixture = {

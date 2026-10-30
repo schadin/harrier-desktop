@@ -104,4 +104,32 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('reactions are counted per key on the reacted message', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'hi' }],
+            reactions: [
+              { eventId: '$r1', target: '$1', sender: '@bob:example.org', key: '👍' },
+              { eventId: '$r2', target: '$1', sender: '@carol:example.org', key: '👍' },
+              { eventId: '$r3', target: '$1', sender: '@bob:example.org', key: '🎉' },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind === 'message' && item.reactions).toEqual([
+        { key: '👍', count: 2 },
+        { key: '🎉', count: 1 },
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

@@ -11,6 +11,13 @@ import {
 export const TEST_USER_ID = '@tester:example.org';
 const DIRECT_PARTNER_ID = '@alice:example.org';
 
+export type SyncFixtureReaction = {
+  readonly eventId: string;
+  readonly target: string;
+  readonly sender: string;
+  readonly key: string;
+};
+
 export type SyncFixtureMessage = {
   readonly eventId: string;
   readonly sender: string;
@@ -28,6 +35,7 @@ export type SyncFixtureRoom = {
   readonly space?: boolean;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
+  readonly reactions?: readonly SyncFixtureReaction[];
 };
 
 export type SyncFixture = {
@@ -94,6 +102,20 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
   });
 }
 
+function reactionEvent(roomId: string, reaction: SyncFixtureReaction): MatrixEvent {
+  eventCounter += 1;
+  return new MatrixEvent({
+    type: 'm.reaction',
+    sender: reaction.sender,
+    room_id: roomId,
+    event_id: reaction.eventId,
+    origin_server_ts: 1_700_000_000_000 + eventCounter,
+    content: {
+      'm.relates_to': { rel_type: 'm.annotation', event_id: reaction.target, key: reaction.key },
+    },
+  });
+}
+
 export function createSyncDriver(): SyncDriver {
   const client = createClient({
     baseUrl: 'https://matrix.example.org',
@@ -130,9 +152,12 @@ export function createSyncDriver(): SyncDriver {
     room.recalculate();
     client.emit(ClientEvent.Room, room);
 
-    await (item.messages ?? []).reduce(async (previous, message) => {
+    const events = [
+      ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),
+      ...(item.reactions ?? []).map((reaction) => reactionEvent(item.roomId, reaction)),
+    ];
+    await events.reduce(async (previous, event) => {
       await previous;
-      const event = messageEvent(item.roomId, message);
       await room.addLiveEvents([event], { addToState: false });
       client.emit(RoomEvent.Timeline, event, room, false, false, {
         timeline: room.getLiveTimeline(),
