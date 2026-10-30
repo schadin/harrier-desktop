@@ -55,6 +55,8 @@ export type RoomView = RoomSummaryView & {
   readonly roomType?: string;
   readonly canonicalAlias?: string;
   readonly dmUserId?: string;
+  readonly avatarMxc?: string;
+  readonly dmAvatarMxc?: string;
 };
 
 export type MemberView = {

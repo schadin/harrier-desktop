@@ -292,6 +292,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       .getStateEvents('m.room.topic', '')
       ?.getContent<{ topic?: string }>().topic;
     const encrypted = room.currentState.getStateEvents('m.room.encryption', '') !== null;
+    const avatarMxc = room.currentState
+      .getStateEvents('m.room.avatar', '')
+      ?.getContent<{ url?: string }>().url;
+    const dmAvatarMxc = room.getAvatarFallbackMember()?.getMxcAvatarUrl() ?? undefined;
     return {
       ...summary,
       topic,
@@ -300,6 +304,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       roomType: room.getType(),
       canonicalAlias: room.getCanonicalAlias() ?? undefined,
       dmUserId: dmUserIdOf(room),
+      avatarMxc,
+      dmAvatarMxc,
     };
   };
 

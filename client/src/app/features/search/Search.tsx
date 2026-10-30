@@ -28,9 +28,10 @@ import React, {
 import { useTranslation } from 'react-i18next';
 import { useAtom, useAtomValue } from 'jotai';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
+import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '../../utils/room';
+import { mxcUrlToHttp } from '../../utils/matrix';
 import { nameInitials } from '../../utils/common';
 import { useListFocusIndex } from '../../hooks/useListFocusIndex';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
@@ -168,7 +169,7 @@ export function Search({ requestClose }: SearchProps) {
   const requestMessageInputFocus = useRequestMessageInputFocus();
 
   const allRoomsSet = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allRoomsSet);
+  const getRoom = useGetCoreRoom(allRoomsSet);
 
   const [parsedQuery, setParsedQuery] = useState<ParsedQuery>({
     query: '',
@@ -412,13 +413,27 @@ export function Search({ requestClose }: SearchProps) {
                             before={
                               room ? (
                                 <Avatar size="200" radii={item.dm ? '400' : '300'}>
-                                  {item.dm || room.isSpaceRoom() ? (
+                                  {item.dm || room.isSpace ? (
                                     <RoomAvatar
                                       roomId={room.roomId}
                                       src={
                                         item.dm
-                                          ? getDirectRoomAvatarUrl(mx, room, 32, useAuthentication)
-                                          : getRoomAvatarUrl(mx, room, 32, useAuthentication)
+                                          ? mxcUrlToHttp(
+                                              mx,
+                                              room.dmAvatarMxc ?? room.avatarMxc ?? '',
+                                              useAuthentication,
+                                              32,
+                                              32,
+                                              'crop'
+                                            ) ?? undefined
+                                          : mxcUrlToHttp(
+                                              mx,
+                                              room.avatarMxc ?? '',
+                                              useAuthentication,
+                                              32,
+                                              32,
+                                              'crop'
+                                            ) ?? undefined
                                       }
                                       alt={room.name}
                                       renderFallback={() => (
@@ -430,8 +445,8 @@ export function Search({ requestClose }: SearchProps) {
                                   ) : (
                                     <RoomIcon
                                       size="100"
-                                      joinRule={room.getJoinRule()}
-                                      roomType={room.getType()}
+                                      joinRule={room.joinRule}
+                                      roomType={room.roomType}
                                     />
                                   )}
                                 </Avatar>
