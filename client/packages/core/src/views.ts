@@ -67,6 +67,7 @@ export type TimelineItem =
       readonly kind: 'message';
       readonly content: MessageContentView;
       readonly status: SendStatus;
+      readonly replyTo?: EventId;
     })
   | (TimelineBase & {
       readonly kind: 'state';

@@ -58,4 +58,50 @@ export const timelineCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('a redacted message is listed as redacted without its body', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'secret', redacted: true },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind).toBe('redacted');
+      expect(item && 'content' in item).toBe(false);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('a reply keeps the id of the event it answers', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'question' },
+              { eventId: '$2', sender: '@bob:example.org', body: 'answer', replyTo: '$1' },
+            ],
+          },
+        ],
+      });
+      const [, reply] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(reply?.kind === 'message' && reply.replyTo).toBe('$1');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

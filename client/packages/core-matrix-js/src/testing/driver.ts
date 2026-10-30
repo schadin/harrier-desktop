@@ -1,6 +1,7 @@
 import {
   ClientEvent,
   createClient,
+  type IEvent,
   MatrixClient,
   MatrixEvent,
   Room,
@@ -15,6 +16,8 @@ export type SyncFixtureMessage = {
   readonly sender: string;
   readonly body: string;
   readonly replaces?: string;
+  readonly replyTo?: string;
+  readonly redacted?: boolean;
 };
 
 export type SyncFixtureRoom = {
@@ -56,11 +59,28 @@ function stateEvent(
   });
 }
 
+function redactionEvent(roomId: string, sender: string): IEvent {
+  return {
+    type: 'm.room.redaction',
+    event_id: '$redaction',
+    room_id: roomId,
+    sender,
+    origin_server_ts: 1_700_000_000_000,
+    content: {},
+  } as IEvent;
+}
+
 function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent {
   const content: Record<string, unknown> = { msgtype: 'm.text', body: message.body };
   if (message.replaces !== undefined) {
     content['m.new_content'] = { msgtype: 'm.text', body: message.body };
     content['m.relates_to'] = { rel_type: 'm.replace', event_id: message.replaces };
+  }
+  if (message.replyTo !== undefined) {
+    content['m.relates_to'] = { 'm.in_reply_to': { event_id: message.replyTo } };
+  }
+  if (message.redacted) {
+    Object.keys(content).forEach((key) => delete content[key]);
   }
   eventCounter += 1;
   return new MatrixEvent({
@@ -70,6 +90,7 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
     event_id: message.eventId,
     origin_server_ts: 1_700_000_000_000 + eventCounter,
     content,
+    unsigned: message.redacted ? { redacted_because: redactionEvent(roomId, message.sender) } : {},
   });
 }
 

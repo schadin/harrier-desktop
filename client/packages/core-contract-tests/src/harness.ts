@@ -5,6 +5,8 @@ export type SyncFixtureMessage = {
   readonly sender: string;
   readonly body: string;
   readonly replaces?: string;
+  readonly replyTo?: string;
+  readonly redacted?: boolean;
 };
 
 export type SyncFixtureRoom = {

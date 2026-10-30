@@ -43,6 +43,42 @@ const toSummary = (room: Room, direct: Set<string>): RoomSummaryView | null => {
 
 const isEdit = (event: MatrixEvent): boolean => event.getRelation()?.rel_type === 'm.replace';
 
+type RelatesTo = { 'm.in_reply_to'?: { event_id?: unknown } };
+
+const replyTargetOf = (event: MatrixEvent): string | undefined => {
+  const relates = event.getContent()['m.relates_to'] as RelatesTo | undefined;
+  const target = relates?.['m.in_reply_to']?.event_id;
+  return typeof target === 'string' ? target : undefined;
+};
+
+const toItem = (
+  roomId: string,
+  event: MatrixEvent,
+  latestEdit: ReadonlyMap<string, string>
+): TimelineItem => {
+  const eventId = event.getId() ?? '';
+  const base = {
+    eventId,
+    roomId,
+    sender: event.getSender() ?? '',
+    timestamp: event.getTs(),
+  };
+  if (event.isRedacted()) return { ...base, kind: 'redacted' };
+
+  const content = event.getContent<{ msgtype?: string; body?: string }>();
+  const replyTo = replyTargetOf(event);
+  return {
+    ...base,
+    kind: 'message',
+    content: {
+      msgtype: content.msgtype ?? 'm.text',
+      body: latestEdit.get(eventId) ?? content.body ?? '',
+    },
+    status: 'sent',
+    ...(replyTo !== undefined ? { replyTo } : {}),
+  };
+};
+
 const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): TimelineView => {
   const latestEdit = new Map<string, string>();
   events.forEach((event) => {
@@ -55,22 +91,7 @@ const toTimelineView = (roomId: string, events: readonly MatrixEvent[]): Timelin
 
   const items = events
     .filter((event) => !isEdit(event) && event.getType() === 'm.room.message')
-    .map((event): TimelineItem => {
-      const eventId = event.getId() ?? '';
-      const content = event.getContent<{ msgtype?: string; body?: string }>();
-      return {
-        kind: 'message',
-        eventId,
-        roomId,
-        sender: event.getSender() ?? '',
-        timestamp: event.getTs(),
-        content: {
-          msgtype: content.msgtype ?? 'm.text',
-          body: latestEdit.get(eventId) ?? content.body ?? '',
-        },
-        status: 'sent',
-      };
-    });
+    .map((event) => toItem(roomId, event, latestEdit));
 
   return { roomId, items, hasBackwardHistory: false };
 };
