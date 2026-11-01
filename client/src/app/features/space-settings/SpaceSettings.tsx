@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, MenuItem, Text } from 'folds';
-import { JoinRule } from 'matrix-js-sdk';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { mxcUrlToHttp } from '../../utils/matrix';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { useRoomAvatar, useRoomJoinRule, useRoomName } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../state/mDirectList';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { SpaceSettingsPage } from '../../state/spaceSettings';
@@ -66,9 +65,9 @@ export function SpaceSettings({ initialPage, requestClose }: SpaceSettingsProps)
   const useAuthentication = useMediaAuthentication();
   const mDirects = useAtomValue(mDirectAtom);
 
-  const roomAvatar = useRoomAvatar(room, mDirects.has(room.roomId));
-  const roomName = useRoomName(room);
-  const joinRuleContent = useRoomJoinRule(room);
+  const meta = useCoreRoomMeta(room.roomId);
+  const roomAvatar = mDirects.has(room.roomId) ? meta.dmAvatarMxc : meta.avatarMxc;
+  const roomName = meta.name;
 
   const avatarUrl = roomAvatar
     ? mxcUrlToHttp(mx, roomAvatar, useAuthentication, 96, 96, 'crop') ?? undefined
@@ -103,9 +102,9 @@ export function SpaceSettings({ initialPage, requestClose }: SpaceSettingsProps)
                     alt={roomName}
                     renderFallback={() => (
                       <RoomIcon
-                        roomType={room.getType()}
+                        roomType={meta.roomType}
                         size="50"
-                        joinRule={joinRuleContent?.join_rule ?? JoinRule.Invite}
+                        joinRule={meta.joinRule ?? 'invite'}
                         filled
                       />
                     )}

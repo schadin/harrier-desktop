@@ -441,6 +441,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       topic,
       encrypted,
       joinRule: room.getJoinRule(),
+      joinRuleContent: room.currentState.getStateEvents('m.room.join_rules', '')?.getContent() as
+        | JsonObject
+        | undefined,
       roomType: room.getType(),
       canonicalAlias: room.getCanonicalAlias() ?? undefined,
       dmUserId: dmUserIdOf(room),

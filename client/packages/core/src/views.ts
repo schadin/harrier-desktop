@@ -52,6 +52,7 @@ export type RoomView = RoomSummaryView & {
   readonly topic?: string;
   readonly encrypted: boolean;
   readonly joinRule?: string;
+  readonly joinRuleContent?: JsonObject;
   readonly roomType?: string;
   readonly canonicalAlias?: string;
   readonly dmUserId?: string;
