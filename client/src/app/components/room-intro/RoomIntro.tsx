@@ -11,7 +11,7 @@ import { timeDayMonthYear, timeHourMinute } from '../../utils/time';
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { RoomAvatar } from '../room-avatar';
 import { nameInitials } from '../../utils/common';
-import { useRoomAvatar, useRoomName, useRoomTopic } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../state/mDirectList';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useSetting } from '../../state/hooks/settings';
@@ -30,9 +30,11 @@ export const RoomIntro = as<'div', RoomIntroProps>(({ room, ...props }, ref) => 
   const [invitePrompt, setInvitePrompt] = useState(false);
 
   const createEvent = getStateEvent(room, StateEvent.RoomCreate);
-  const avatarMxc = useRoomAvatar(room, mDirects.has(room.roomId));
-  const name = useRoomName(room);
-  const topic = useRoomTopic(room);
+  const meta = useCoreRoomMeta(room.roomId);
+  const dm = mDirects.has(room.roomId);
+  const avatarMxc = dm ? meta.dmAvatarMxc : meta.avatarMxc;
+  const { name } = meta;
+  const { topic } = meta;
   const avatarHttpUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
 
   const createContent = createEvent?.getContent<IRoomCreateContent>();

@@ -52,7 +52,7 @@ import { makeNavCategoryId } from '../../../state/closedNavCategories';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
-import { useRoomName } from '../../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
 import { useSpaceJoinedHierarchy, sortRoomsByOrder } from '../../../hooks/useSpaceHierarchy';
 import { factoryRoomIdByActivity } from '../../../utils/sort';
 import {
@@ -254,7 +254,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
 
 function SpaceHeader() {
   const space = useSpace();
-  const spaceName = useRoomName(space);
+  const { name: spaceName } = useCoreRoomMeta(space.roomId);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [sortMenuAnchor, setSortMenuAnchor] = useState<RectCords>();
   const sortType = useSpaceRoomSort(space.roomId);
