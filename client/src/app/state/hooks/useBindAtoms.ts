@@ -12,7 +12,7 @@ export const useBindAtoms = (mx: MatrixClient) => {
   useBindAllInvitesAtom(allInvitesAtom);
   useBindAllRoomsAtom(allRoomsAtom);
   useBindRoomToParentsAtom(roomToParentsAtom);
-  useBindRoomToUnreadAtom(mx, roomToUnreadAtom);
+  useBindRoomToUnreadAtom(roomToUnreadAtom);
 
   useBindRoomIdToTypingMembersAtom(mx, roomIdToTypingMembersAtom);
   useBindSpaceSortAtom(mx, spaceSortAtom);

@@ -118,6 +118,11 @@ export type PresenceView = {
   readonly status: PresenceStatus;
 };
 
+export type UnreadMapEntry = {
+  readonly roomId: RoomId;
+  readonly unread: UnreadCountView;
+};
+
 export type SendStatusView = {
   readonly localId: string;
   readonly roomId: RoomId;

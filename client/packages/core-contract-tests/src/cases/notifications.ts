@@ -16,6 +16,9 @@ export const notificationCases = [
         ],
       });
       expect(core.rooms.list.getSnapshot().value[0]?.unread).toEqual({ total: 3, highlight: 1 });
+      expect(core.rooms.unreads.getSnapshot().value).toEqual([
+        { roomId: '!room:example.org', unread: { total: 3, highlight: 1 } },
+      ]);
     } finally {
       await harness.dispose(core);
     }

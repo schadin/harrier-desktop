@@ -10,6 +10,7 @@ import type {
   SessionView,
   SyncView,
   TimelineView,
+  UnreadMapEntry,
 } from './views';
 
 export type CoreCapabilities = {
@@ -30,6 +31,7 @@ export type AuthModule = {
 export type RoomsModule = {
   readonly all: SnapshotStore<readonly RoomSummaryView[]>;
   readonly list: SnapshotStore<readonly RoomSummaryView[]>;
+  readonly unreads: SnapshotStore<readonly UnreadMapEntry[]>;
   room(roomId: RoomId): SnapshotStore<RoomView | null>;
   members(roomId: RoomId): SnapshotStore<readonly MemberView[]>;
   getState(

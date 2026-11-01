@@ -1,37 +1,10 @@
 import produce from 'immer';
 import { atom, useSetAtom } from 'jotai';
-import {
-  ClientEvent,
-  IRoomTimelineData,
-  MatrixClient,
-  MatrixEvent,
-  Room,
-  RoomEvent,
-  RoomEventHandlerMap,
-  SyncState,
-} from 'matrix-js-sdk';
-import { ReceiptContent, ReceiptType } from 'matrix-js-sdk/lib/@types/read_receipts';
-import { useCallback, useEffect } from 'react';
-import {
-  Membership,
-  NotificationType,
-  RoomToUnread,
-  UnreadInfo,
-  Unread,
-  StateEvent,
-} from '../../../types/matrix/room';
-import {
-  getAllParents,
-  getNotificationType,
-  getUnreadInfo,
-  getUnreadInfos,
-  isNotificationEvent,
-  roomIsUnread,
-} from '../../utils/room';
+import { useEffect } from 'react';
+import { RoomToUnread, UnreadInfo, Unread } from '../../../types/matrix/room';
+import { getAllParents } from '../../utils/room';
+import { useCore } from '../../hooks/useCore';
 import { roomToParentsAtom } from './roomToParents';
-import { useStateEventCallback } from '../../hooks/useStateEventCallback';
-import { useSyncState } from '../../hooks/useSyncState';
-import { useRoomsNotificationPreferencesContext } from '../../hooks/useRoomsNotificationPreferences';
 
 export type RoomToUnreadAction =
   | {
@@ -123,15 +96,15 @@ export const roomToUnreadAtom = atom<RoomToUnread, [RoomToUnreadAction], undefin
   (get) => get(baseRoomToUnread),
   (get, set, action) => {
     if (action.type === 'RESET') {
-      const draftRoomToUnread: RoomToUnread = new Map();
-      action.unreadInfos.forEach((unreadInfo) => {
-        putUnreadInfo(
-          draftRoomToUnread,
-          getAllParents(get(roomToParentsAtom), unreadInfo.roomId),
-          unreadInfo
-        );
-      });
-      set(baseRoomToUnread, draftRoomToUnread);
+      set(
+        baseRoomToUnread,
+        new Map(
+          action.unreadInfos.map((unreadInfo) => [
+            unreadInfo.roomId,
+            unreadInfoToUnread(unreadInfo),
+          ])
+        )
+      );
       return;
     }
     if (action.type === 'PUT') {
@@ -169,159 +142,20 @@ export const roomToUnreadAtom = atom<RoomToUnread, [RoomToUnreadAction], undefin
   }
 );
 
-export const useBindRoomToUnreadAtom = (mx: MatrixClient, unreadAtom: typeof roomToUnreadAtom) => {
+export const useBindRoomToUnreadAtom = (unreadAtom: typeof roomToUnreadAtom) => {
+  const core = useCore();
   const setUnreadAtom = useSetAtom(unreadAtom);
-  const roomsNotificationPreferences = useRoomsNotificationPreferencesContext();
 
   useEffect(() => {
-    setUnreadAtom({
-      type: 'RESET',
-      unreadInfos: getUnreadInfos(mx),
-    });
-  }, [mx, setUnreadAtom]);
-
-  useSyncState(
-    mx,
-    useCallback(
-      (state, prevState) => {
-        if (
-          (state === SyncState.Prepared && prevState === null) ||
-          (state === SyncState.Syncing && prevState !== SyncState.Syncing)
-        ) {
-          setUnreadAtom({
-            type: 'RESET',
-            unreadInfos: getUnreadInfos(mx),
-          });
-        }
-      },
-      [mx, setUnreadAtom]
-    )
-  );
-
-  const recomputeRoom = useCallback(
-    (room: Room) => {
-      if (room.isSpaceRoom()) return;
-      if (room.getMyMembership() !== Membership.Join) {
-        setUnreadAtom({ type: 'DELETE', roomId: room.roomId });
-        return;
-      }
-      if (getNotificationType(mx, room.roomId) === NotificationType.Mute) {
-        setUnreadAtom({ type: 'DELETE', roomId: room.roomId });
-        return;
-      }
-      const unreadInfo = getUnreadInfo(room);
-      const isUnread = roomIsUnread(mx, room);
-      if (isUnread) {
-        setUnreadAtom({ type: 'PUT', unreadInfo });
-        return;
-      }
-      setUnreadAtom({ type: 'DELETE', roomId: room.roomId });
-    },
-    [mx, setUnreadAtom]
-  );
-
-  useEffect(() => {
-    const handleTimelineEvent = (
-      mEvent: MatrixEvent,
-      room: Room | undefined,
-      toStartOfTimeline: boolean | undefined,
-      removed: boolean,
-      data: IRoomTimelineData
-    ) => {
-      if (!room || !data.liveEvent || !isNotificationEvent(mEvent)) return;
-      if (mEvent.getSender() === mx.getUserId()) return;
-      recomputeRoom(room);
-    };
-    mx.on(RoomEvent.Timeline, handleTimelineEvent);
-    return () => {
-      mx.removeListener(RoomEvent.Timeline, handleTimelineEvent);
-    };
-  }, [mx, recomputeRoom]);
-
-  useEffect(() => {
-    const roomHandlers = new Map<string, () => void>();
-
-    const registerRoom = (room: Room) => {
-      if (roomHandlers.has(room.roomId)) return;
-      const handleUnreadNotifications: RoomEventHandlerMap[RoomEvent.UnreadNotifications] = () => {
-        recomputeRoom(room);
-      };
-      room.on(RoomEvent.UnreadNotifications, handleUnreadNotifications);
-      roomHandlers.set(room.roomId, () => {
-        room.removeListener(RoomEvent.UnreadNotifications, handleUnreadNotifications);
+    const store = core.rooms.unreads;
+    const update = () => {
+      setUnreadAtom({
+        type: 'RESET',
+        unreadInfos: store.getSnapshot().value.map(({ roomId, unread }) => ({ roomId, ...unread })),
       });
     };
 
-    const handleNewRoom = (room: Room) => registerRoom(room);
-    const handleDeleteRoom = (roomId: string) => {
-      setUnreadAtom({ type: 'DELETE', roomId });
-      roomHandlers.get(roomId)?.();
-      roomHandlers.delete(roomId);
-    };
-
-    mx.getRooms().forEach(registerRoom);
-    mx.on(ClientEvent.Room, handleNewRoom);
-    mx.on(ClientEvent.DeleteRoom, handleDeleteRoom);
-
-    return () => {
-      mx.removeListener(ClientEvent.Room, handleNewRoom);
-      mx.removeListener(ClientEvent.DeleteRoom, handleDeleteRoom);
-      roomHandlers.forEach((dispose) => dispose());
-      roomHandlers.clear();
-    };
-  }, [mx, recomputeRoom, setUnreadAtom]);
-
-  useEffect(() => {
-    const handleReceipt = (mEvent: MatrixEvent, room: Room) => {
-      const myUserId = mx.getUserId();
-      if (!myUserId) return;
-      if (room.isSpaceRoom()) return;
-      const content = mEvent.getContent<ReceiptContent>();
-
-      const isMyReceipt = Object.keys(content).find((eventId) =>
-        (Object.keys(content[eventId]) as ReceiptType[]).find(
-          (receiptType) => content[eventId][receiptType][myUserId]
-        )
-      );
-      if (isMyReceipt) {
-        recomputeRoom(room);
-      }
-    };
-    mx.on(RoomEvent.Receipt, handleReceipt);
-    return () => {
-      mx.removeListener(RoomEvent.Receipt, handleReceipt);
-    };
-  }, [mx, recomputeRoom]);
-
-  useEffect(() => {
-    setUnreadAtom({
-      type: 'RESET',
-      unreadInfos: getUnreadInfos(mx),
-    });
-  }, [mx, setUnreadAtom, roomsNotificationPreferences]);
-
-  useEffect(() => {
-    const handleMembershipChange = (room: Room) => {
-      recomputeRoom(room);
-    };
-    mx.on(RoomEvent.MyMembership, handleMembershipChange);
-    return () => {
-      mx.removeListener(RoomEvent.MyMembership, handleMembershipChange);
-    };
-  }, [mx, recomputeRoom]);
-
-  useStateEventCallback(
-    mx,
-    useCallback(
-      (mEvent) => {
-        if (mEvent.getType() === StateEvent.SpaceChild) {
-          setUnreadAtom({
-            type: 'RESET',
-            unreadInfos: getUnreadInfos(mx),
-          });
-        }
-      },
-      [mx, setUnreadAtom]
-    )
-  );
+    update();
+    return store.subscribe(update);
+  }, [core, setUnreadAtom]);
 };

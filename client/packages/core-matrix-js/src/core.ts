@@ -12,6 +12,8 @@ import {
   type RoomSummaryView,
   type RoomView,
   type SendStatus,
+  type UnreadCountView,
+  type UnreadMapEntry,
   type SessionView,
   type SyncView,
   type TimelineItem,
@@ -266,6 +268,50 @@ const toTimelineView = (
   };
 };
 
+const spaceChildrenOf = (room: Room | null | undefined): readonly string[] =>
+  (room?.currentState.getStateEvents('m.space.child') ?? [])
+    .filter((event) => Array.isArray(event.getContent<{ via?: unknown }>().via))
+    .map((event) => event.getStateKey())
+    .filter((childId): childId is string => typeof childId === 'string' && childId.length > 0);
+
+const NOTIFICATION_EVENT_TYPES = [
+  'm.room.create',
+  'm.room.message',
+  'm.room.encrypted',
+  'm.sticker',
+];
+
+const isNotificationEvent = (event: MatrixEvent): boolean => {
+  if (!NOTIFICATION_EVENT_TYPES.includes(event.getType())) return false;
+  if (event.getType() === 'm.room.member') return false;
+  if (event.isRedacted()) return false;
+  if (event.getRelation()?.rel_type === 'm.replace') return false;
+  return true;
+};
+
+const unreadCountOf = (room: Room) => {
+  const total = room.getUnreadNotificationCount(NotificationCountType.Total);
+  const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
+  return { total: highlight > total ? highlight : total, highlight };
+};
+
+const isUnreadRoom = (room: Room): boolean => {
+  const { total, highlight } = unreadCountOf(room);
+  if (total > 0 || highlight > 0) return true;
+  const liveEvents = room.getLiveTimeline().getEvents();
+  if (liveEvents.length === 0) return false;
+  const userId = room.myUserId;
+  const readUpTo = room.getEventReadUpTo(userId);
+  if (liveEvents[liveEvents.length - 1]?.getSender() === userId) return false;
+  for (let index = liveEvents.length - 1; index >= 0; index -= 1) {
+    const event = liveEvents[index];
+    if (!event) return false;
+    if (event.getId() === readUpTo) return false;
+    if (isNotificationEvent(event)) return true;
+  }
+  return true;
+};
+
 export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const joined = () => {
     const direct = directRoomIds(client);
@@ -284,11 +330,52 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       .filter((summary): summary is RoomSummaryView => summary !== null);
   };
 
+  const buildUnreads = (): readonly UnreadMapEntry[] => {
+    const parentChildren = new Map<string, string[]>();
+    allRooms()
+      .filter((room) => room.isSpace)
+      .forEach((room) => {
+        parentChildren.set(room.roomId, [...spaceChildrenOf(client.getRoom(room.roomId))]);
+      });
+
+    const allParentsOf = (roomId: string, seen = new Set<string>()): Set<string> => {
+      const parents = new Set<string>();
+      parentChildren.forEach((children, parentId) => {
+        if (!children.includes(roomId) || seen.has(parentId)) return;
+        seen.add(parentId);
+        parents.add(parentId);
+        allParentsOf(parentId, seen).forEach((id) => parents.add(id));
+      });
+      return parents;
+    };
+
+    const unreads = new Map<string, UnreadCountView>();
+    client.getRooms().forEach((room) => {
+      if (room.isSpaceRoom()) return;
+      if (room.getMyMembership() !== 'join') return;
+      if (notificationModeOf(client, room.roomId) === 'mute') return;
+      if (!isUnreadRoom(room)) return;
+      const unread = unreadCountOf(room);
+      unreads.set(room.roomId, unread);
+      allParentsOf(room.roomId).forEach((parentId) => {
+        const parent = unreads.get(parentId) ?? { total: 0, highlight: 0 };
+        unreads.set(parentId, {
+          total: parent.total + unread.total,
+          highlight: parent.highlight + unread.highlight,
+        });
+      });
+    });
+
+    return [...unreads].map(([roomId, unread]) => ({ roomId, unread }));
+  };
+
   const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
   const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
+  const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
   const refresh = () => {
     allRoomsStore.publish(allRooms());
     roomsStore.publish(joined());
+    unreadsStore.publish(buildUnreads());
   };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
@@ -300,6 +387,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return toTimelineView(roomId, room?.getLiveTimeline().getEvents() ?? [], room);
   };
   const republish = (_event: MatrixEvent, room: Room | undefined) => {
+    refresh();
     if (!room) return;
     timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
   };
@@ -425,6 +513,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     rooms: {
       all: allRoomsStore,
       list: roomsStore,
+      unreads: unreadsStore,
       room(roomId) {
         const existing = roomStores.get(roomId);
         if (existing) return existing;
