@@ -1,10 +1,5 @@
-import {
-  createClient,
-  MatrixClient,
-  IndexedDBStore,
-  IndexedDBCryptoStore,
-  SetPresence,
-} from 'matrix-js-sdk';
+import { MatrixClient, SetPresence } from 'matrix-js-sdk';
+import { createMatrixJsClient } from '@harrier/core-matrix-js';
 
 import {
   cryptoCallbacks,
@@ -23,33 +18,7 @@ type Session = {
 
 export const initClient = async (session: Session): Promise<MatrixClient> => {
   await loadSecretStorageKeys();
-
-  const indexedDBStore = new IndexedDBStore({
-    indexedDB: global.indexedDB,
-    localStorage: global.localStorage,
-    dbName: 'web-sync-store',
-  });
-
-  const legacyCryptoStore = new IndexedDBCryptoStore(global.indexedDB, 'crypto-store');
-
-  const mx = createClient({
-    baseUrl: session.baseUrl,
-    accessToken: session.accessToken,
-    userId: session.userId,
-    store: indexedDBStore,
-    cryptoStore: legacyCryptoStore,
-    deviceId: session.deviceId,
-    timelineSupport: true,
-    cryptoCallbacks: cryptoCallbacks as any,
-    verificationMethods: ['m.sas.v1'],
-  });
-
-  await indexedDBStore.startup();
-  await mx.initRustCrypto();
-
-  mx.setMaxListeners(50);
-
-  return mx;
+  return createMatrixJsClient(session, { cryptoCallbacks });
 };
 
 export const startClient = async (mx: MatrixClient) => {
