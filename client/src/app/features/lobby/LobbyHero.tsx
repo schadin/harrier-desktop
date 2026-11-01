@@ -1,7 +1,7 @@
 import React from 'react';
 import { Avatar, Overlay, OverlayBackdrop, OverlayCenter, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { useRoomAvatar, useRoomName, useRoomTopic } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { useSpace } from '../../hooks/useSpace';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomAvatar } from '../../components/room-avatar';
@@ -19,9 +19,7 @@ export function LobbyHero() {
   const useAuthentication = useMediaAuthentication();
   const space = useSpace();
 
-  const name = useRoomName(space);
-  const topic = useRoomTopic(space);
-  const avatarMxc = useRoomAvatar(space);
+  const { name, topic, avatarMxc } = useCoreRoomMeta(space.roomId);
   const avatarUrl = avatarMxc
     ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
     : undefined;

@@ -20,7 +20,7 @@ import FocusTrap from 'focus-trap-react';
 import { PageHeader } from '../../components/page';
 import { useSetSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
-import { useRoomAvatar, useRoomName } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { useSpace } from '../../hooks/useSpace';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomAvatar } from '../../components/room-avatar';
@@ -153,8 +153,7 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
   const setSpaceRoomSort = useSetSpaceRoomSort();
   const screenSize = useScreenSizeContext();
 
-  const name = useRoomName(space);
-  const avatarMxc = useRoomAvatar(space);
+  const { name, avatarMxc } = useCoreRoomMeta(space.roomId);
   const avatarUrl = avatarMxc
     ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
     : undefined;
