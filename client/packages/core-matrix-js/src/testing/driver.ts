@@ -187,6 +187,8 @@ export function createSyncDriver(): SyncDriver {
     }
     if (path.endsWith('/leave')) return {};
     if (path.endsWith('/invite')) return {};
+    if (path.endsWith('/createRoom')) return { room_id: '!created:example.org' };
+    if (path.includes('/state/')) return {};
     if (path.endsWith('/messages')) {
       const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
       const history = historyByRoom.get(roomId);

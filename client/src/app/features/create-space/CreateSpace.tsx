@@ -22,7 +22,7 @@ import {
   knockSupported,
   restrictedSupported,
 } from '../../utils/matrix';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { millisecondsToMinutes, replaceSpaceWithDash } from '../../utils/common';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useCapabilities } from '../../hooks/useCapabilities';
@@ -52,7 +52,7 @@ type CreateSpaceFormProps = {
   onCreate?: (roomId: string) => void;
 };
 export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceFormProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const capabilities = useCapabilities();
@@ -88,7 +88,7 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
   };
 
   const [createState, create] = useAsyncCallback<string, Error | MatrixError, [CreateRoomData]>(
-    useCallback((data) => createRoom(mx, data), [mx])
+    useCallback((data) => createRoom(core, data), [core])
   );
   const loading = createState.status === AsyncStatus.Loading;
   const error = createState.status === AsyncStatus.Error ? createState.error : undefined;

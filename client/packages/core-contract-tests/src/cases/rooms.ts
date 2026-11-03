@@ -449,6 +449,42 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('createRoom resolves the created room id', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.rooms.createRoom({
+        version: '10',
+        access: 'private',
+        knock: false,
+        name: 'New Room',
+        allowFederation: true,
+      });
+      expect(result).toEqual({ ok: true, value: '!created:example.org' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('createRoom with restricted parent completes', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!space:example.org', membership: 'join', name: 'Team', space: true }],
+      });
+      const result = await core.rooms.createRoom({
+        version: '12',
+        access: 'restricted',
+        knock: false,
+        name: 'Child Room',
+        allowFederation: true,
+        parent: { roomId: '!space:example.org', via: ['example.org'] },
+      });
+      expect(result.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {

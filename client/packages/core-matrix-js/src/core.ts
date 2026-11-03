@@ -39,6 +39,7 @@ import {
   SyncState,
   User,
   UserEvent,
+  type ICreateRoomStateEvent,
 } from 'matrix-js-sdk';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
@@ -813,6 +814,89 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         try {
           await client.invite(roomId, userId, reason);
           return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async createRoom(params): Promise<CoreResult<string>> {
+        const initialState: ICreateRoomStateEvent[] = [];
+
+        if (params.encryption) {
+          initialState.push({
+            type: 'm.room.encryption',
+            state_key: '',
+            content: { algorithm: 'm.megolm.v1.aes-sha2' },
+          });
+        }
+
+        if (params.parent) {
+          initialState.push({
+            type: 'm.space.parent',
+            state_key: params.parent.roomId,
+            content: { canonical: true, via: [...params.parent.via] },
+          });
+        }
+
+        if (params.type === 'org.matrix.msc3417.call') {
+          initialState.push({
+            type: 'org.matrix.msc3401.call',
+            state_key: '',
+            content: {},
+          });
+        }
+
+        let joinRuleContent: Record<string, unknown>;
+        if (params.access === 'public') {
+          joinRuleContent = { join_rule: 'public' };
+        } else if (params.access === 'restricted' && params.parent) {
+          joinRuleContent = {
+            join_rule: params.knock ? 'knock_restricted' : 'restricted',
+            allow: [{ type: 'm.room_membership', room_id: params.parent.roomId }],
+          };
+        } else {
+          joinRuleContent = { join_rule: params.knock ? 'knock' : 'invite' };
+        }
+        initialState.push({ type: 'm.room.join_rules', state_key: '', content: joinRuleContent });
+
+        const creationContent: Record<string, unknown> = {};
+        if (typeof params.type === 'string') creationContent.type = params.type;
+        if (params.allowFederation === false) creationContent['m.federate'] = false;
+        if (params.additionalCreators) {
+          creationContent.additional_creators = [...params.additionalCreators];
+        }
+
+        let powerLevelContentOverride: Record<string, unknown> | undefined;
+        if (params.type === 'org.matrix.msc3417.call') {
+          powerLevelContentOverride = { events: { 'org.matrix.msc3401.call.member': 0 } };
+        }
+        if (params.type === 'm.space') {
+          powerLevelContentOverride = { events_default: 50 };
+        }
+
+        try {
+          const result = await client.createRoom({
+            room_version: params.version,
+            name: params.name,
+            topic: params.topic,
+            room_alias_name: params.aliasLocalPart,
+            creation_content: creationContent,
+            power_level_content_override: powerLevelContentOverride,
+            initial_state: initialState,
+          });
+
+          if (params.parent) {
+            const userId = client.getUserId() ?? '';
+            const ownServer = userId.slice(userId.indexOf(':') + 1);
+            await client.sendStateEvent(
+              params.parent.roomId,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- m.space.child missing in SDK StateEvents map
+              'm.space.child' as any,
+              { auto_join: false, suggested: false, via: [ownServer] },
+              result.room_id
+            );
+          }
+
+          return { ok: true, value: result.room_id };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

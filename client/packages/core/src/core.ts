@@ -31,6 +31,23 @@ export type AuthModule = {
   logout(): Promise<CoreResult<void>>;
 };
 
+export type CreateRoomParams = {
+  readonly version: string;
+  readonly type?: string;
+  readonly access: 'private' | 'restricted' | 'public';
+  readonly knock: boolean;
+  readonly name: string;
+  readonly topic?: string;
+  readonly aliasLocalPart?: string;
+  readonly encryption?: boolean;
+  readonly allowFederation: boolean;
+  readonly additionalCreators?: readonly string[];
+  readonly parent?: {
+    readonly roomId: RoomId;
+    readonly via: readonly string[];
+  };
+};
+
 export type RoomsModule = {
   readonly all: SnapshotStore<readonly RoomSummaryView[]>;
   readonly list: SnapshotStore<readonly RoomSummaryView[]>;
@@ -44,6 +61,7 @@ export type RoomsModule = {
   join(roomIdOrAlias: string, viaServers?: readonly string[]): Promise<CoreResult<RoomId>>;
   leave(roomId: RoomId): Promise<CoreResult<void>>;
   invite(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
+  createRoom(params: CreateRoomParams): Promise<CoreResult<RoomId>>;
   getState(
     roomId: RoomId,
     eventType: string,
