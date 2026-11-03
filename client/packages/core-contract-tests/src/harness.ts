@@ -53,6 +53,7 @@ export type SyncFixtureRoom = {
     readonly userId: string;
     readonly displayName: string;
     readonly membership?: 'join' | 'invite' | 'leave';
+    readonly avatarUrl?: string;
   }[];
 };
 

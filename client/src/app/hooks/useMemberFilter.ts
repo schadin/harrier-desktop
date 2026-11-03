@@ -1,20 +1,9 @@
 import { useMemo } from 'react';
-import { RoomMember } from 'matrix-js-sdk';
-import { Membership } from '../../types/matrix/room';
+import { MembershipFilter } from '@harrier/core';
+import type { MembershipFilterFn } from '@harrier/core';
 
-export const MembershipFilter = {
-  filterJoined: (m: RoomMember) => m.membership === Membership.Join,
-  filterInvited: (m: RoomMember) => m.membership === Membership.Invite,
-  filterLeaved: (m: RoomMember) =>
-    m.membership === Membership.Leave &&
-    m.events.member?.getStateKey() === m.events.member?.getSender(),
-  filterKicked: (m: RoomMember) =>
-    m.membership === Membership.Leave &&
-    m.events.member?.getStateKey() !== m.events.member?.getSender(),
-  filterBanned: (m: RoomMember) => m.membership === Membership.Ban,
-};
-
-export type MembershipFilterFn = (m: RoomMember) => boolean;
+export { MembershipFilter };
+export type { MembershipFilterFn } from '@harrier/core';
 
 export type MembershipFilterItem = {
   name: string;

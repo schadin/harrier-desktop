@@ -1,7 +1,9 @@
-import React, { useEffect, KeyboardEvent as ReactKeyboardEvent } from 'react';
+import React, { useEffect, useMemo, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Editor } from 'slate';
 import { Avatar, Icon, Icons, MenuItem, Text } from 'folds';
-import { MatrixClient, Room, RoomMember } from 'matrix-js-sdk';
+import { MatrixClient, Room } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
+import { getMemberSearchStr } from '@harrier/core';
 
 import { AutocompleteQuery } from './autocompleteQuery';
 import { AutocompleteMenu } from './AutocompleteMenu';
@@ -16,7 +18,6 @@ import { onTabPress } from '../../../utils/keyboard';
 import { createMentionElement, moveCursor, replaceWithElement } from '../utils';
 import { useKeyDown } from '../../../hooks/useKeyDown';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../../utils/matrix';
-import { getMemberDisplayName, getMemberSearchStr } from '../../../utils/room';
 import { UserAvatar } from '../../user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { Membership } from '../../../../types/matrix/room';
@@ -68,7 +69,7 @@ type UserMentionAutocompleteProps = {
   requestClose: () => void;
 };
 
-const withAllowedMembership = (member: RoomMember): boolean =>
+const withAllowedMembership = (member: MemberView): boolean =>
   member.membership === Membership.Join ||
   member.membership === Membership.Invite ||
   member.membership === Membership.Knock;
@@ -81,7 +82,7 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 };
 
 const mxIdToName = (mxId: string) => getMxIdLocalPart(mxId) ?? mxId;
-const getRoomMemberStr: SearchItemStrGetter<RoomMember> = (m, query) =>
+const getRoomMemberStr: SearchItemStrGetter<MemberView> = (m, query) =>
   getMemberSearchStr(m, query, mxIdToName);
 
 export function UserMentionAutocomplete({
@@ -94,10 +95,15 @@ export function UserMentionAutocomplete({
   const useAuthentication = useMediaAuthentication();
   const roomId: string = room.roomId!;
   const roomAliasOrId = room.getCanonicalAlias() || roomId;
-  const members = useRoomMembers(mx, roomId);
+  const members = useRoomMembers(roomId);
+  const memberList = useMemo(() => [...members], [members]);
 
-  const [result, search, resetSearch] = useAsyncSearch(members, getRoomMemberStr, SEARCH_OPTIONS);
-  const autoCompleteMembers = (result ? result.items.slice(0, 20) : members.slice(0, 20)).filter(
+  const [result, search, resetSearch] = useAsyncSearch(
+    memberList,
+    getRoomMemberStr,
+    SEARCH_OPTIONS
+  );
+  const autoCompleteMembers = (result ? result.items.slice(0, 20) : memberList.slice(0, 20)).filter(
     withAllowedMembership
   );
 
@@ -129,12 +135,14 @@ export function UserMentionAutocomplete({
         return;
       }
       const roomMember = autoCompleteMembers[0];
-      handleAutocomplete(roomMember.userId, roomMember.name);
+      handleAutocomplete(roomMember.userId, roomMember.displayName);
     });
   });
 
-  const getName = (member: RoomMember) =>
-    getMemberDisplayName(room, member.userId) ?? getMxIdLocalPart(member.userId) ?? member.userId;
+  const getName = (member: MemberView) =>
+    member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
+      ? member.rawDisplayName
+      : getMxIdLocalPart(member.userId) ?? member.userId;
 
   return (
     <AutocompleteMenu headerContent={<Text size="L400">Mentions</Text>} requestClose={requestClose}>
@@ -153,7 +161,7 @@ export function UserMentionAutocomplete({
         />
       ) : (
         autoCompleteMembers.map((roomMember) => {
-          const avatarMxcUrl = roomMember.getMxcAvatarUrl();
+          const avatarMxcUrl = roomMember.avatarMxc;
           const avatarUrl = avatarMxcUrl
             ? mx.mxcUrlToHttp(avatarMxcUrl, 32, 32, 'crop', undefined, false, useAuthentication)
             : undefined;

@@ -66,6 +66,7 @@ export type SyncFixtureRoom = {
     readonly userId: string;
     readonly displayName: string;
     readonly membership?: 'join' | 'invite' | 'leave';
+    readonly avatarUrl?: string;
   }[];
 };
 
@@ -243,6 +244,7 @@ export function createSyncDriver(): SyncDriver {
         stateEvent(item.roomId, 'm.room.member', member.userId, {
           membership: member.membership ?? 'join',
           displayname: member.displayName,
+          ...(member.avatarUrl !== undefined ? { avatar_url: member.avatarUrl } : {}),
         })
       );
     });

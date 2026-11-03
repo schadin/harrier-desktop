@@ -26,10 +26,12 @@ import {
   TooltipProvider,
   config,
 } from 'folds';
-import { MatrixClient, Room, RoomMember } from 'matrix-js-sdk';
+import { MatrixClient, Room } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 
+import { getMemberSearchStr } from '@harrier/core';
 import * as css from './MembersDrawer.css';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useUserPresence } from '../../hooks/useUserPresence';
@@ -43,7 +45,6 @@ import {
 } from '../../hooks/useAsyncSearch';
 import { useDebounce } from '../../hooks/useDebounce';
 import { TypingIndicator } from '../../components/typing-indicator';
-import { getMemberDisplayName, getMemberSearchStr } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { useSetSetting, useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
@@ -107,24 +108,17 @@ function MemberDrawerHeader({ room }: MemberDrawerHeaderProps) {
 type MemberItemProps = {
   mx: MatrixClient;
   useAuthentication: boolean;
-  room: Room;
-  member: RoomMember;
+  member: MemberView;
   onClick: MouseEventHandler<HTMLButtonElement>;
   pressed?: boolean;
   typing?: boolean;
 };
-function MemberItem({
-  mx,
-  useAuthentication,
-  room,
-  member,
-  onClick,
-  pressed,
-  typing,
-}: MemberItemProps) {
+function MemberItem({ mx, useAuthentication, member, onClick, pressed, typing }: MemberItemProps) {
   const name =
-    getMemberDisplayName(room, member.userId) ?? getMxIdLocalPart(member.userId) ?? member.userId;
-  const avatarMxcUrl = member.getMxcAvatarUrl();
+    member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
+      ? member.rawDisplayName
+      : getMxIdLocalPart(member.userId) ?? member.userId;
+  const avatarMxcUrl = member.avatarMxc;
   const avatarUrl = avatarMxcUrl
     ? mx.mxcUrlToHttp(avatarMxcUrl, 100, 100, 'crop', undefined, false, useAuthentication)
     : undefined;
@@ -192,12 +186,12 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 };
 
 const mxIdToName = (mxId: string) => getMxIdLocalPart(mxId) ?? mxId;
-const getRoomMemberStr: SearchItemStrGetter<RoomMember> = (m, query) =>
+const getRoomMemberStr: SearchItemStrGetter<MemberView> = (m, query) =>
   getMemberSearchStr(m, query, mxIdToName);
 
 type MembersDrawerProps = {
   room: Room;
-  members: RoomMember[];
+  members: readonly MemberView[];
 };
 export function MembersDrawer({ room, members }: MembersDrawerProps) {
   const mx = useMatrixClient();
@@ -438,7 +432,6 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
                       <MemberItem
                         mx={mx}
                         useAuthentication={useAuthentication}
-                        room={room}
                         member={tagOrMember}
                         onClick={handleMemberClick}
                         pressed={openProfileUserId === tagOrMember.userId}

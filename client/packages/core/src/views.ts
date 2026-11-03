@@ -65,7 +65,12 @@ export type RoomView = RoomSummaryView & {
 export type MemberView = {
   readonly userId: UserId;
   readonly displayName: string;
+  readonly rawDisplayName?: string;
   readonly membership: Membership;
+  readonly avatarMxc?: string;
+  readonly powerLevel: number;
+  readonly joinedAt?: Timestamp;
+  readonly leftBySelf?: boolean;
 };
 
 export type MessageContentView = {

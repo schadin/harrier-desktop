@@ -1,27 +1,28 @@
 import React, { ReactNode } from 'react';
 import { as, Avatar, Box, Icon, Icons, Text } from 'folds';
-import { MatrixClient, Room, RoomMember } from 'matrix-js-sdk';
-import { getMemberDisplayName } from '../../utils/room';
+import { MatrixClient } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../user-avatar';
 import * as css from './style.css';
 
-const getName = (room: Room, member: RoomMember) =>
-  getMemberDisplayName(room, member.userId) ?? getMxIdLocalPart(member.userId) ?? member.userId;
+const getName = (member: MemberView) =>
+  member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
+    ? member.rawDisplayName
+    : getMxIdLocalPart(member.userId) ?? member.userId;
 
 type MemberTileProps = {
   mx: MatrixClient;
-  room: Room;
-  member: RoomMember;
+  member: MemberView;
   useAuthentication: boolean;
   after?: ReactNode;
 };
 export const MemberTile = as<'button', MemberTileProps>(
-  ({ as: AsMemberTile = 'button', mx, room, member, useAuthentication, after, ...props }, ref) => {
-    const name = getName(room, member);
+  ({ as: AsMemberTile = 'button', mx, member, useAuthentication, after, ...props }, ref) => {
+    const name = getName(member);
     const username = getMxIdLocalPart(member.userId);
 
-    const avatarMxcUrl = member.getMxcAvatarUrl();
+    const avatarMxcUrl = member.avatarMxc;
     const avatarUrl = avatarMxcUrl
       ? mx.mxcUrlToHttp(avatarMxcUrl, 100, 100, 'crop', undefined, false, useAuthentication)
       : undefined;

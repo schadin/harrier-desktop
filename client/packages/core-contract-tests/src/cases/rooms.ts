@@ -416,6 +416,39 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('members expose avatar and power level', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            powerLevels: { users: { '@alice:example.org': 50 } },
+            members: [
+              {
+                userId: '@alice:example.org',
+                displayName: 'Alice',
+                avatarUrl: 'mxc://example.org/alice-avatar',
+              },
+              { userId: '@bob:example.org', displayName: 'Bob' },
+            ],
+          },
+        ],
+      });
+      const members = core.rooms.members('!room:example.org').getSnapshot().value;
+      const alice = members.find((member) => member.userId === '@alice:example.org');
+      const bob = members.find((member) => member.userId === '@bob:example.org');
+      expect(alice?.avatarMxc).toBe('mxc://example.org/alice-avatar');
+      expect(alice?.powerLevel).toBe(50);
+      expect(bob?.avatarMxc).toBeUndefined();
+      expect(bob?.powerLevel).toBe(0);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {
@@ -434,8 +467,16 @@ export const roomsCases = [
       });
       const members = core.rooms.members('!room:example.org').getSnapshot().value;
       expect(members).toEqual([
-        { userId: '@alice:example.org', displayName: 'Alice', membership: 'join' },
-        { userId: '@bob:example.org', displayName: 'Bob', membership: 'invite' },
+        expect.objectContaining({
+          userId: '@alice:example.org',
+          displayName: 'Alice',
+          membership: 'join',
+        }),
+        expect.objectContaining({
+          userId: '@bob:example.org',
+          displayName: 'Bob',
+          membership: 'invite',
+        }),
       ]);
     } finally {
       await harness.dispose(core);

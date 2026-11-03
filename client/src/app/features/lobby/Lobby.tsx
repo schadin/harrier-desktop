@@ -160,7 +160,7 @@ export function Lobby() {
   const space = useSpace();
   const spacePowerLevels = usePowerLevels(space);
   const lex = useMemo(() => new ASCIILexicalTable(' '.charCodeAt(0), '~'.charCodeAt(0), 6), []);
-  const members = useRoomMembers(mx, space.roomId);
+  const members = useRoomMembers(space.roomId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const heroSectionRef = useRef<HTMLDivElement>(null);

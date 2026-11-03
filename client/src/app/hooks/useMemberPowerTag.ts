@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { MatrixClient, Room, RoomMember } from 'matrix-js-sdk';
+import { MatrixClient, Room } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
 import { getPowerLevelTag, PowerLevelTags, usePowerLevelTags } from './usePowerLevelTags';
 import { IPowerLevels, readPowerLevel } from './usePowerLevels';
 import { MemberPowerTag, MemberPowerTagIcon } from '../../types/matrix/room';
@@ -66,12 +67,12 @@ export const useAccessiblePowerTagColors = (
 };
 
 export const useFlattenPowerTagMembers = (
-  members: RoomMember[],
+  members: MemberView[],
   getTag: GetMemberPowerTag
-): Array<MemberPowerTag | RoomMember> => {
+): Array<MemberPowerTag | MemberView> => {
   const PLTagOrRoomMember = useMemo(() => {
     let prevTag: MemberPowerTag | undefined;
-    const tagOrMember: Array<MemberPowerTag | RoomMember> = [];
+    const tagOrMember: Array<MemberPowerTag | MemberView> = [];
     members.forEach((member) => {
       const tag = getTag(member.userId);
       if (tag !== prevTag) {

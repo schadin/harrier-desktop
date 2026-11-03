@@ -34,7 +34,7 @@ export function Room() {
   const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
   const screenSize = useScreenSizeContext();
   const powerLevels = usePowerLevels(room);
-  const members = useRoomMembers(mx, room.roomId);
+  const members = useRoomMembers(room.roomId);
   const chat = useAtomValue(callChatAtom);
 
   useKeyDown(

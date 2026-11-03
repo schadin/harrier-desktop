@@ -22,7 +22,8 @@ import {
   toRem,
 } from 'folds';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { RoomMember } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
+import { getMemberSearchStr } from '@harrier/core';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { useRoom } from '../../../hooks/useRoom';
 import { useRoomMembers } from '../../../hooks/useRoomMembers';
@@ -39,7 +40,6 @@ import {
   useAsyncSearch,
   UseAsyncSearchOptions,
 } from '../../../hooks/useAsyncSearch';
-import { getMemberSearchStr } from '../../../utils/room';
 import { useMembershipFilter, useMembershipFilterMenu } from '../../../hooks/useMemberFilter';
 import { useMemberPowerSort, useMemberSort, useMemberSortMenu } from '../../../hooks/useMemberSort';
 import { settingsAtom } from '../../../state/settings';
@@ -68,7 +68,7 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 };
 
 const mxIdToName = (mxId: string) => getMxIdLocalPart(mxId) ?? mxId;
-const getRoomMemberStr: SearchItemStrGetter<RoomMember> = (m, query) =>
+const getRoomMemberStr: SearchItemStrGetter<MemberView> = (m, query) =>
   getMemberSearchStr(m, query, mxIdToName);
 
 type MembersProps = {
@@ -78,7 +78,7 @@ export function Members({ requestClose }: MembersProps) {
   const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
-  const members = useRoomMembers(mx, room.roomId);
+  const members = useRoomMembers(room.roomId);
   const fetchingMembers = members.length < room.getJoinedMemberCount();
   const openProfile = useOpenUserRoomProfile();
   const profileUser = useUserRoomProfileState();
@@ -324,7 +324,6 @@ export function Members({ requestClose }: MembersProps) {
                             onClick={handleMemberClick}
                             aria-pressed={profileUser?.userId === tagOrMember.userId}
                             mx={mx}
-                            room={room}
                             member={tagOrMember}
                             useAuthentication={useAuthentication}
                             after={

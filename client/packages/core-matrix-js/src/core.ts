@@ -22,6 +22,7 @@ import {
   type TimelineItem,
   type TimelineView,
   type WritableSnapshotStore,
+  readPowerLevel,
 } from '@harrier/core';
 import {
   ClientEvent,
@@ -338,7 +339,12 @@ const memberListEqual = (
     (member, index) =>
       member.userId === b[index]?.userId &&
       member.displayName === b[index]?.displayName &&
-      member.membership === b[index]?.membership
+      member.rawDisplayName === b[index]?.rawDisplayName &&
+      member.membership === b[index]?.membership &&
+      member.avatarMxc === b[index]?.avatarMxc &&
+      member.powerLevel === b[index]?.powerLevel &&
+      member.joinedAt === b[index]?.joinedAt &&
+      member.leftBySelf === b[index]?.leftBySelf
   );
 };
 
@@ -456,22 +462,28 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     };
   };
 
-  const buildMembers = (roomId: string): readonly MemberView[] =>
-    client
-      .getRoom(roomId)
-      ?.getMembers()
-      .map((member) => ({
-        userId: member.userId,
-        displayName: member.name,
-        membership: toMembership(member.membership) ?? 'leave',
-      })) ?? [];
-
   const buildPowerLevels = (roomId: string): IPowerLevels => {
     const content = client
       .getRoom(roomId)
       ?.currentState.getStateEvents('m.room.power_levels', '')
       ?.getContent();
     return fillMissingPowers({ ...(content ?? {}) } as IPowerLevels);
+  };
+
+  const buildMembers = (roomId: string): readonly MemberView[] => {
+    const room = client.getRoom(roomId);
+    if (!room) return [];
+    const powerLevels = buildPowerLevels(roomId);
+    return room.getMembers().map((member) => ({
+      userId: member.userId,
+      displayName: member.name,
+      rawDisplayName: member.rawDisplayName,
+      membership: toMembership(member.membership) ?? 'leave',
+      avatarMxc: member.getMxcAvatarUrl(),
+      powerLevel: readPowerLevel.user(powerLevels, member.userId),
+      joinedAt: member.events.member?.getTs(),
+      leftBySelf: member.events.member?.getStateKey() === member.events.member?.getSender(),
+    }));
   };
 
   const CREATORS_UNSUPPORTED_VERSIONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
@@ -739,6 +751,11 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildMembers(roomId));
         memberStores.set(roomId, store);
+        client
+          .getRoom(roomId)
+          ?.loadMembersIfNeeded()
+          .then(() => publishMembers(roomId))
+          .catch(() => undefined);
         return store;
       },
       powerLevels(roomId) {
