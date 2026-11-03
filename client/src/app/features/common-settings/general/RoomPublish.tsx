@@ -10,7 +10,7 @@ import { useRoomDirectoryVisibility } from '../../../hooks/useRoomDirectoryVisib
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useStateEvent } from '../../../hooks/useStateEvent';
+import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { ExtendedJoinRules } from '../../../components/JoinRulesSwitcher';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -25,8 +25,7 @@ export function RoomPublish({ permissions }: RoomPublishProps) {
     StateEvent.RoomCanonicalAlias,
     mx.getSafeUserId()
   );
-  const joinRuleEvent = useStateEvent(room, StateEvent.RoomJoinRules);
-  const content = joinRuleEvent?.getContent<RoomJoinRulesEventContent>();
+  const content = useCoreRoomState<RoomJoinRulesEventContent>(room, StateEvent.RoomJoinRules);
   const rule: ExtendedJoinRules = (content?.join_rule as ExtendedJoinRules) ?? JoinRule.Invite;
 
   const { visibilityState, setVisibility } = useRoomDirectoryVisibility(room.roomId);

@@ -4,15 +4,15 @@ import { RoomCanonicalAliasEventContent } from 'matrix-js-sdk/lib/types';
 import { AsyncState, useAsyncCallback } from './useAsyncCallback';
 import { useMatrixClient } from './useMatrixClient';
 import { useAlive } from './useAlive';
-import { useStateEvent } from './useStateEvent';
+import { useCoreRoomState } from './useCoreRoomState';
 import { StateEvent } from '../../types/matrix/room';
 import { getStateEvent } from '../utils/room';
 
 export const usePublishedAliases = (room: Room): [string | undefined, string[]] => {
-  const aliasContent = useStateEvent(
+  const aliasContent = useCoreRoomState<RoomCanonicalAliasEventContent>(
     room,
     StateEvent.RoomCanonicalAlias
-  )?.getContent<RoomCanonicalAliasEventContent>();
+  );
 
   const canonicalAlias = aliasContent?.alias;
 

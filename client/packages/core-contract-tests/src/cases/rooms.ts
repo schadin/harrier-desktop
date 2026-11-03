@@ -546,6 +546,47 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('state snapshots expose event content and follow updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'Old', topic: 'First' }],
+      });
+      expect(core.rooms.state('!a:example.org', 'm.room.topic').getSnapshot().value).toEqual({
+        topic: 'First',
+      });
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'New', topic: 'Second' }],
+      });
+      expect(core.rooms.state('!a:example.org', 'm.room.topic').getSnapshot().value).toEqual({
+        topic: 'Second',
+      });
+      expect(core.rooms.state('!a:example.org', 'm.room.name').getSnapshot().value).toEqual({
+        name: 'New',
+      });
+      expect(
+        core.rooms.state('!a:example.org', 'm.room.encryption').getSnapshot().value
+      ).toBeNull();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('sendState completes through the fake transport', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      const result = await core.rooms.sendState('!a:example.org', 'm.room.topic', {
+        topic: 'Updated',
+      });
+      expect(result.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {

@@ -86,6 +86,13 @@ export type RoomsModule = {
   createRoom(params: CreateRoomParams): Promise<CoreResult<RoomId>>;
   searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;
   hierarchy(roomId: RoomId, params: HierarchyParams): Promise<CoreResult<PublicRoomsResult>>;
+  state(roomId: RoomId, eventType: string, stateKey?: string): SnapshotStore<JsonObject | null>;
+  sendState(
+    roomId: RoomId,
+    eventType: string,
+    content: JsonObject,
+    stateKey?: string
+  ): Promise<CoreResult<void>>;
   getState(
     roomId: RoomId,
     eventType: string,

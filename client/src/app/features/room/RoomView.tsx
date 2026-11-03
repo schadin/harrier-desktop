@@ -4,7 +4,7 @@ import { EventType } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { useAtomValue } from 'jotai';
-import { useStateEvent } from '../../hooks/useStateEvent';
+import { useCoreRoomState } from '../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../types/matrix/room';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -85,7 +85,10 @@ export function RoomView({ eventId }: { eventId?: string }) {
 
   const mx = useMatrixClient();
 
-  const tombstoneEvent = useStateEvent(room, StateEvent.RoomTombstone);
+  const tombstoneContent = useCoreRoomState<{ body?: string; replacement_room?: string }>(
+    room,
+    StateEvent.RoomTombstone
+  );
   const powerLevels = usePowerLevelsContext();
   const creators = useRoomCreators(room);
 
@@ -148,11 +151,11 @@ export function RoomView({ eventId }: { eventId?: string }) {
       </Box>
       <Box shrink="No" direction="Column">
         <div style={{ padding: `0 ${config.space.S400}` }}>
-          {tombstoneEvent ? (
+          {tombstoneContent ? (
             <RoomTombstone
               roomId={roomId}
-              body={tombstoneEvent.getContent().body}
-              replacementRoomId={tombstoneEvent.getContent().replacement_room}
+              body={tombstoneContent.body}
+              replacementRoomId={tombstoneContent.replacement_room ?? ''}
             />
           ) : (
             <>

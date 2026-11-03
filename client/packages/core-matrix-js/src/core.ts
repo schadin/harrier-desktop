@@ -532,6 +532,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }));
   };
 
+  const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
+  const stateKeyOf = (roomId: string, eventType: string, key: string) =>
+    `${roomId}|${eventType}|${key}`;
+  const buildState = (roomId: string, eventType: string, key: string): JsonObject | null => {
+    const event = client.getRoom(roomId)?.currentState.getStateEvents(eventType, key);
+    return event ? (event.getContent() as JsonObject) : null;
+  };
+  const publishState = (roomId: string, eventType: string, key: string) => {
+    const store = stateStores.get(stateKeyOf(roomId, eventType, key));
+    if (!store) return;
+    const next = buildState(roomId, eventType, key);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+
   const buildRoomToParents = (): Map<string, readonly string[]> => {
     const roomToParents = new Map<string, readonly string[]>();
     const getAllParents = (roomId: string): Set<string> => {
@@ -658,6 +673,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       publishAccountData(roomId);
     });
     parentsStores.forEach((_store, roomId) => publishParents(roomId));
+    stateStores.forEach((_store, key) => {
+      const [roomId, eventType, stateKey] = key.split('|');
+      if (roomId && eventType && stateKey !== undefined) publishState(roomId, eventType, stateKey);
+    });
   };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
@@ -803,6 +822,22 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore(buildParents(roomId));
         parentsStores.set(roomId, store);
         return store;
+      },
+      state(roomId, eventType, stateKey = '') {
+        const key = stateKeyOf(roomId, eventType, stateKey);
+        const existing = stateStores.get(key);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildState(roomId, eventType, stateKey));
+        stateStores.set(key, store);
+        return store;
+      },
+      async sendState(roomId, eventType, content, stateKey = ''): Promise<CoreResult<void>> {
+        try {
+          await client.sendStateEvent(roomId, eventType as never, content as never, stateKey);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
       },
       async join(roomIdOrAlias, viaServers): Promise<CoreResult<string>> {
         try {

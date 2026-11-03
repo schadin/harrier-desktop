@@ -10,5 +10,6 @@ export function useCoreRoomMeta(roomId: string) {
     dmAvatarMxc: room?.dmAvatarMxc,
     joinRule: room?.joinRule,
     roomType: room?.roomType,
+    encrypted: room?.encrypted ?? false,
   };
 }

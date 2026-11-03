@@ -73,7 +73,7 @@ import { UseStateProvider } from '../../../components/UseStateProvider';
 import { LeaveSpacePrompt } from '../../../components/leave-space-prompt';
 import { copyToClipboard } from '../../../utils/dom';
 import { useClosedNavCategoriesAtom } from '../../../state/hooks/closedNavCategories';
-import { useStateEvent } from '../../../hooks/useStateEvent';
+import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { Membership, StateEvent } from '../../../../types/matrix/room';
 import { stopPropagation } from '../../../utils/keyboard';
 import { getMatrixToRoom } from '../../../plugins/matrix-to';
@@ -260,10 +260,7 @@ function SpaceHeader() {
   const sortType = useSpaceRoomSort(space.roomId);
   const setSpaceRoomSort = useSetSpaceRoomSort();
 
-  const joinRules = useStateEvent(
-    space,
-    StateEvent.RoomJoinRules
-  )?.getContent<RoomJoinRulesEventContent>();
+  const joinRules = useCoreRoomState<RoomJoinRulesEventContent>(space, StateEvent.RoomJoinRules);
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const cords = evt.currentTarget.getBoundingClientRect();
@@ -434,7 +431,10 @@ export function Space() {
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
   const notificationPreferences = useRoomsNotificationPreferencesContext();
 
-  const tombstoneEvent = useStateEvent(space, StateEvent.RoomTombstone);
+  const tombstoneContent = useCoreRoomState<{ body?: string; replacement_room?: string }>(
+    space,
+    StateEvent.RoomTombstone
+  );
   const selectedRoomId = useSelectedRoom();
   const lobbySelected = useSpaceLobbySelected(spaceIdOrAlias);
   const searchSelected = useSpaceSearchSelected(spaceIdOrAlias);
@@ -505,10 +505,10 @@ export function Space() {
       <SpaceHeader />
       <PageNavContent scrollRef={scrollRef}>
         <Box direction="Column" gap="300">
-          {tombstoneEvent && (
+          {tombstoneContent && (
             <SpaceTombstone
               roomId={space.roomId}
-              replacementRoomId={tombstoneEvent.getContent().replacement_room}
+              replacementRoomId={tombstoneContent.replacement_room ?? ''}
             />
           )}
           <NavCategory>

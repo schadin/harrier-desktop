@@ -25,7 +25,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useRoom } from '../../../hooks/useRoom';
-import { useStateEvent } from '../../../hooks/useStateEvent';
+import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -39,9 +39,7 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
   const room = useRoom();
 
   const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, mx.getSafeUserId());
-  const content = useStateEvent(room, StateEvent.RoomEncryption)?.getContent<{
-    algorithm: string;
-  }>();
+  const content = useCoreRoomState(room, StateEvent.RoomEncryption);
   const enabled = content?.algorithm === ROOM_ENC_ALGO;
 
   const [enableState, enable] = useAsyncCallback(

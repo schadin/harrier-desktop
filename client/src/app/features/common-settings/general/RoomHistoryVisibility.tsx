@@ -22,7 +22,7 @@ import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useRoom } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useStateEvent } from '../../../hooks/useStateEvent';
+import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -57,10 +57,12 @@ export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProp
 
   const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, mx.getSafeUserId());
 
-  const visibilityEvent = useStateEvent(room, StateEvent.RoomHistoryVisibility);
+  const visibilityContent = useCoreRoomState<RoomHistoryVisibilityEventContent>(
+    room,
+    StateEvent.RoomHistoryVisibility
+  );
   const historyVisibility: HistoryVisibility =
-    visibilityEvent?.getContent<RoomHistoryVisibilityEventContent>().history_visibility ??
-    HistoryVisibility.Shared;
+    visibilityContent?.history_visibility ?? HistoryVisibility.Shared;
   const visibilityMenu = useVisibilityMenu();
   const visibilityStr = useVisibilityStr();
 

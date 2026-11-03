@@ -25,7 +25,7 @@ import {
 } from 'folds';
 import { useNavigate } from 'react-router-dom';
 import { Room } from 'matrix-js-sdk';
-import { useStateEvent } from '../../hooks/useStateEvent';
+
 import { PageHeader } from '../../components/page';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -412,9 +412,13 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const direct = useIsDirectRoom();
 
   const pinnedEvents = useRoomPinnedEvents(room);
-  const encryptionEvent = useStateEvent(room, StateEvent.RoomEncryption);
-  const encryptedRoom = !!encryptionEvent;
-  const { name, topic, avatarMxc: roomAvatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
+  const {
+    name,
+    topic,
+    avatarMxc: roomAvatarMxc,
+    dmAvatarMxc,
+    encrypted: encryptedRoom,
+  } = useCoreRoomMeta(room.roomId);
   const avatarMxc = direct ? dmAvatarMxc : roomAvatarMxc;
   const dmUserId = direct ? guessDmRoomUserId(room, mx.getUserId()!) : undefined;
   const dmStatus = useCustomStatus(dmUserId ?? '');
