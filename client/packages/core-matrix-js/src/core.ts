@@ -1,8 +1,10 @@
 import {
   createSnapshotStore,
+  fillMissingPowers,
   toCoreError,
   type CoreResult,
   type HarrierCore,
+  type IPowerLevels,
   type JsonObject,
   type MemberView,
   type Membership,
@@ -289,8 +291,15 @@ const isNotificationEvent = (event: MatrixEvent): boolean => {
   return true;
 };
 
-const arrayEqual = (a: readonly unknown[] | undefined, b: readonly unknown[] | undefined): boolean =>
-  a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((item, index) => item === b[index]));
+const arrayEqual = (
+  a: readonly unknown[] | undefined,
+  b: readonly unknown[] | undefined
+): boolean =>
+  a === b ||
+  (a !== undefined &&
+    b !== undefined &&
+    a.length === b.length &&
+    a.every((item, index) => item === b[index]));
 
 const roomViewEqual = (a: RoomView | null, b: RoomView | null): boolean => {
   if (Object.is(a, b)) return true;
@@ -412,79 +421,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return [...unreads].map(([roomId, unread]) => ({ roomId, unread }));
   };
 
-  const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
-  const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
-  const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
-  const roomStores = new Map<string, WritableSnapshotStore<RoomView | null>>();
-  const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
-  const publishRoomView = (roomId: string) => {
-    const store = roomStores.get(roomId);
-    if (!store) return;
-    const next = buildRoomView(roomId);
-    if (roomViewEqual(next, store.getSnapshot().value)) return;
-    store.publish(next);
-  };
-  const publishMembers = (roomId: string) => {
-    const store = memberStores.get(roomId);
-    if (!store) return;
-    const next = buildMembers(roomId);
-    if (memberListEqual(next, store.getSnapshot().value)) return;
-    store.publish(next);
-  };
-  const refresh = () => {
-    allRoomsStore.publish(allRooms());
-    roomsStore.publish(joined());
-    unreadsStore.publish(buildUnreads());
-    roomStores.forEach((_store, roomId) => publishRoomView(roomId));
-    memberStores.forEach((_store, roomId) => publishMembers(roomId));
-  };
-  client.on(ClientEvent.Room, refresh);
-  client.on(RoomEvent.MyMembership, refresh);
-  client.on(ClientEvent.AccountData, refresh);
-
-  const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
-  const buildTimeline = (roomId: string) => {
-    const room = client.getRoom(roomId) ?? undefined;
-    return toTimelineView(roomId, room?.getLiveTimeline().getEvents() ?? [], room);
-  };
-  const republish = (_event: MatrixEvent, room: Room | undefined) => {
-    refresh();
-    if (!room) return;
-    publishRoomView(room.roomId);
-    publishMembers(room.roomId);
-    timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
-  };
-  client.on(RoomEvent.Timeline, republish);
-  client.on(RoomEvent.Receipt, republish);
-
-  const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
-  const buildPresence = (userId: string): PresenceView | null => {
-    const user = client.getUser(userId);
-    if (!user) return null;
-    const status =
-      user.presence === 'online' || user.presence === 'unavailable' ? user.presence : 'offline';
-    return { userId, status };
-  };
-  client.on(UserEvent.Presence, (_event: MatrixEvent | undefined, user: User) => {
-    presenceStores.get(user.userId)?.publish(buildPresence(user.userId));
-  });
-
-  const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
-  const buildTyping = (roomId: string): readonly string[] =>
-    client
-      .getRoom(roomId)
-      ?.getMembers()
-      .filter((member) => member.typing)
-      .map((member) => member.userId) ?? [];
-  client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member) => {
-    typingStores.get(member.roomId)?.publish(buildTyping(member.roomId));
-  });
-
-  const sessionStore = createSnapshotStore<SessionView | null>({
-    userId: client.getSafeUserId(),
-    deviceId: client.getDeviceId() ?? '',
-    ready: false,
-  });
   const buildRoomView = (roomId: string): RoomView | null => {
     const room = client.getRoom(roomId);
     if (!room) return null;
@@ -529,7 +465,133 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         membership: toMembership(member.membership) ?? 'leave',
       })) ?? [];
 
+  const buildPowerLevels = (roomId: string): IPowerLevels => {
+    const content = client
+      .getRoom(roomId)
+      ?.currentState.getStateEvents('m.room.power_levels', '')
+      ?.getContent();
+    return fillMissingPowers({ ...(content ?? {}) } as IPowerLevels);
+  };
+
+  const CREATORS_UNSUPPORTED_VERSIONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
+  const buildCreators = (roomId: string): readonly string[] => {
+    const createEvent = client.getRoom(roomId)?.currentState.getStateEvents('m.room.create', '');
+    if (!createEvent) return [];
+    const content = createEvent.getContent<{
+      room_version?: string;
+      additional_creators?: unknown;
+    }>();
+    if (CREATORS_UNSUPPORTED_VERSIONS.includes(content.room_version ?? '')) return [];
+    const creators = new Set<string>();
+    const sender = createEvent.getSender();
+    if (sender) creators.add(sender);
+    if (Array.isArray(content.additional_creators)) {
+      content.additional_creators.forEach((creator) => {
+        if (typeof creator === 'string') creators.add(creator);
+      });
+    }
+    return [...creators];
+  };
+
+  const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
+  const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
+  const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
+  const roomStores = new Map<string, WritableSnapshotStore<RoomView | null>>();
+  const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
+  const powerLevelsStores = new Map<string, WritableSnapshotStore<IPowerLevels>>();
+  const creatorStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
+  const publishRoomView = (roomId: string) => {
+    const store = roomStores.get(roomId);
+    if (!store) return;
+    const next = buildRoomView(roomId);
+    if (roomViewEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const publishMembers = (roomId: string) => {
+    const store = memberStores.get(roomId);
+    if (!store) return;
+    const next = buildMembers(roomId);
+    if (memberListEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const publishPowerLevels = (roomId: string) => {
+    const store = powerLevelsStores.get(roomId);
+    if (!store) return;
+    const next = buildPowerLevels(roomId);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const publishCreators = (roomId: string) => {
+    const store = creatorStores.get(roomId);
+    if (!store) return;
+    const next = buildCreators(roomId);
+    if (arrayEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const publishRoomProjections = (roomId: string) => {
+    publishRoomView(roomId);
+    publishMembers(roomId);
+    publishPowerLevels(roomId);
+    publishCreators(roomId);
+  };
+  const refresh = () => {
+    allRoomsStore.publish(allRooms());
+    roomsStore.publish(joined());
+    unreadsStore.publish(buildUnreads());
+    roomStores.forEach((_store, roomId) => publishRoomView(roomId));
+    memberStores.forEach((_store, roomId) => publishMembers(roomId));
+    powerLevelsStores.forEach((_store, roomId) => publishPowerLevels(roomId));
+    creatorStores.forEach((_store, roomId) => publishCreators(roomId));
+  };
+  client.on(ClientEvent.Room, refresh);
+  client.on(RoomEvent.MyMembership, refresh);
+  client.on(ClientEvent.AccountData, refresh);
+
+  const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
+  const buildTimeline = (roomId: string) => {
+    const room = client.getRoom(roomId) ?? undefined;
+    return toTimelineView(roomId, room?.getLiveTimeline().getEvents() ?? [], room);
+  };
+  const republish = (_event: MatrixEvent, room: Room | undefined) => {
+    refresh();
+    if (!room) return;
+    publishRoomProjections(room.roomId);
+    timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
+  };
+  client.on(RoomEvent.Timeline, republish);
+  client.on(RoomEvent.Receipt, republish);
+
+  const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
+  const buildPresence = (userId: string): PresenceView | null => {
+    const user = client.getUser(userId);
+    if (!user) return null;
+    const status =
+      user.presence === 'online' || user.presence === 'unavailable' ? user.presence : 'offline';
+    return { userId, status };
+  };
+  client.on(UserEvent.Presence, (_event: MatrixEvent | undefined, user: User) => {
+    presenceStores.get(user.userId)?.publish(buildPresence(user.userId));
+  });
+
+  const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
+  const buildTyping = (roomId: string): readonly string[] =>
+    client
+      .getRoom(roomId)
+      ?.getMembers()
+      .filter((member) => member.typing)
+      .map((member) => member.userId) ?? [];
+  client.on(RoomMemberEvent.Typing, (_event: MatrixEvent, member) => {
+    typingStores.get(member.roomId)?.publish(buildTyping(member.roomId));
+  });
+
+  const sessionStore = createSnapshotStore<SessionView | null>({
+    userId: client.getSafeUserId(),
+    deviceId: client.getDeviceId() ?? '',
+    ready: false,
+  });
+
   const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
+
   client.on(ClientEvent.Sync, (state: SyncState) => {
     let phase: SyncView['phase'] = 'syncing';
     if (state === SyncState.Prepared) phase = 'prepared';
@@ -590,6 +652,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildMembers(roomId));
         memberStores.set(roomId, store);
+        return store;
+      },
+      powerLevels(roomId) {
+        const existing = powerLevelsStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildPowerLevels(roomId));
+        powerLevelsStores.set(roomId, store);
+        return store;
+      },
+      creators(roomId) {
+        const existing = creatorStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildCreators(roomId));
+        creatorStores.set(roomId, store);
         return store;
       },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {

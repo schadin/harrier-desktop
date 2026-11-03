@@ -45,6 +45,9 @@ export type SyncFixtureRoom = {
   readonly notificationMode?: 'all' | 'mentions' | 'mute';
   readonly topic?: string;
   readonly encrypted?: boolean;
+  readonly powerLevels?: Record<string, unknown>;
+  readonly roomVersion?: string;
+  readonly additionalCreators?: readonly string[];
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;

@@ -1,4 +1,5 @@
 import type { CoreError } from './error';
+import type { IPowerLevels } from './permissions';
 import type { SnapshotStore } from './snapshot';
 import type {
   JsonObject,
@@ -34,6 +35,8 @@ export type RoomsModule = {
   readonly unreads: SnapshotStore<readonly UnreadMapEntry[]>;
   room(roomId: RoomId): SnapshotStore<RoomView | null>;
   members(roomId: RoomId): SnapshotStore<readonly MemberView[]>;
+  powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
+  creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   getState(
     roomId: RoomId,
     eventType: string,

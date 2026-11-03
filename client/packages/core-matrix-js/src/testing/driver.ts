@@ -58,6 +58,9 @@ export type SyncFixtureRoom = {
   readonly notificationMode?: 'all' | 'mentions' | 'mute';
   readonly topic?: string;
   readonly encrypted?: boolean;
+  readonly powerLevels?: Record<string, unknown>;
+  readonly roomVersion?: string;
+  readonly additionalCreators?: readonly string[];
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;
@@ -207,8 +210,19 @@ export function createSyncDriver(): SyncDriver {
     if (item.name !== undefined) {
       states.push(stateEvent(item.roomId, 'm.room.name', '', { name: item.name }));
     }
-    if (item.space) {
-      states.push(stateEvent(item.roomId, 'm.room.create', '', { type: 'm.space' }));
+    if (item.space || item.roomVersion !== undefined || item.additionalCreators !== undefined) {
+      states.push(
+        stateEvent(item.roomId, 'm.room.create', '', {
+          ...(item.space ? { type: 'm.space' } : {}),
+          ...(item.roomVersion !== undefined ? { room_version: item.roomVersion } : {}),
+          ...(item.additionalCreators !== undefined
+            ? { additional_creators: [...item.additionalCreators] }
+            : {}),
+        })
+      );
+    }
+    if (item.powerLevels !== undefined) {
+      states.push(stateEvent(item.roomId, 'm.room.power_levels', '', item.powerLevels));
     }
     if (item.topic !== undefined) {
       states.push(stateEvent(item.roomId, 'm.room.topic', '', { topic: item.topic }));

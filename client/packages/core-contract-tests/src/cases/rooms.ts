@@ -209,6 +209,79 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('power levels are exposed with defaults when no event exists', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      const powerLevels = core.rooms.powerLevels('!a:example.org').getSnapshot().value;
+      expect(powerLevels).toMatchObject({
+        users_default: 0,
+        state_default: 50,
+        events_default: 0,
+        invite: 0,
+        redact: 50,
+        kick: 50,
+        ban: 50,
+        notifications: { room: 50 },
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('power levels follow room updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      expect(core.rooms.powerLevels('!a:example.org').getSnapshot().value.invite).toBe(0);
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            powerLevels: { invite: 100, users: { '@alice:example.org': 50 } },
+          },
+        ],
+      });
+      const powerLevels = core.rooms.powerLevels('!a:example.org').getSnapshot().value;
+      expect(powerLevels.invite).toBe(100);
+      expect(powerLevels.users?.['@alice:example.org']).toBe(50);
+      expect(powerLevels.state_default).toBe(50);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('creators are exposed for versioned rooms', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            roomVersion: '12',
+            additionalCreators: ['@bob:example.org'],
+          },
+          { roomId: '!old:example.org', membership: 'join', name: 'Old', roomVersion: '9' },
+        ],
+      });
+      expect(core.rooms.creators('!a:example.org').getSnapshot().value).toEqual([
+        '@tester:example.org',
+        '@bob:example.org',
+      ]);
+      expect(core.rooms.creators('!old:example.org').getSnapshot().value).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {
