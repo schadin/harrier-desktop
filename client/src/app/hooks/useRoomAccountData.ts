@@ -1,29 +1,12 @@
-import { Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
-import { useCallback, useEffect, useState } from 'react';
+import { Room } from 'matrix-js-sdk';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
 export const useRoomAccountData = (room: Room): Map<string, object> => {
-  const getAccountData = useCallback((): Map<string, object> => {
-    const accountData = new Map<string, object>();
+  const core = useCore();
+  const store = useMemo(() => core.rooms.accountData(room.roomId), [core, room.roomId]);
+  const getSnapshot = useCallback(() => store.getSnapshot().value, [store]);
+  const entries = useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 
-    Array.from(room.accountData.entries()).forEach(([type, mEvent]) => {
-      const content = mEvent.getContent();
-      accountData.set(type, content);
-    });
-
-    return accountData;
-  }, [room]);
-
-  const [accountData, setAccountData] = useState<Map<string, object>>(getAccountData);
-
-  useEffect(() => {
-    const handleEvent: RoomEventHandlerMap[RoomEvent.AccountData] = () => {
-      setAccountData(getAccountData());
-    };
-    room.on(RoomEvent.AccountData, handleEvent);
-    return () => {
-      room.removeListener(RoomEvent.AccountData, handleEvent);
-    };
-  }, [room, getAccountData]);
-
-  return accountData;
+  return useMemo(() => new Map(entries.map((entry) => [entry.type, entry.content])), [entries]);
 };

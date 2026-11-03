@@ -124,6 +124,11 @@ export type UnreadMapEntry = {
   readonly unread: UnreadCountView;
 };
 
+export type RoomAccountDataEntry = {
+  readonly type: string;
+  readonly content: JsonObject;
+};
+
 export type SendStatusView = {
   readonly localId: string;
   readonly roomId: RoomId;

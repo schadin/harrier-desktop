@@ -61,6 +61,7 @@ export type SyncFixtureRoom = {
   readonly powerLevels?: Record<string, unknown>;
   readonly roomVersion?: string;
   readonly additionalCreators?: readonly string[];
+  readonly accountData?: Record<string, Record<string, unknown>>;
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;
@@ -252,6 +253,20 @@ export function createSyncDriver(): SyncDriver {
       );
     });
     if (states.length > 0) room.currentState.setStateEvents(states);
+    if (item.accountData) {
+      Object.entries(item.accountData).forEach(([type, content]) => {
+        eventCounter += 1;
+        const event = new MatrixEvent({
+          type,
+          room_id: item.roomId,
+          event_id: `$accountData${eventCounter}`,
+          origin_server_ts: 1_700_000_000_000 + eventCounter,
+          content,
+        });
+        room.accountData.set(type, event);
+        client.emit(RoomEvent.AccountData, event, room, undefined);
+      });
+    }
     if (item.direct) directRooms.add(item.roomId);
     room.recalculate();
     client.emit(ClientEvent.Room, room);

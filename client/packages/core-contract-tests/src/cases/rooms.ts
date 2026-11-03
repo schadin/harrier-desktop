@@ -282,6 +282,49 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('room account data is exposed by type and follows updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            accountData: { 'm.fully_read': { event_id: '$read:example.org' } },
+          },
+        ],
+      });
+      expect(core.rooms.accountData('!a:example.org').getSnapshot().value).toEqual([
+        { type: 'm.fully_read', content: { event_id: '$read:example.org' } },
+      ]);
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            accountData: {
+              'm.fully_read': { event_id: '$read2:example.org' },
+              'com.example.flag': { enabled: true },
+            },
+          },
+        ],
+      });
+      const entries = core.rooms.accountData('!a:example.org').getSnapshot().value;
+      expect(entries).toContainEqual({
+        type: 'm.fully_read',
+        content: { event_id: '$read2:example.org' },
+      });
+      expect(entries).toContainEqual({
+        type: 'com.example.flag',
+        content: { enabled: true },
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {

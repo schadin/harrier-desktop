@@ -4,6 +4,7 @@ import type { SnapshotStore } from './snapshot';
 import type {
   JsonObject,
   MemberView,
+  RoomAccountDataEntry,
   RoomId,
   RoomSummaryView,
   RoomView,
@@ -37,6 +38,7 @@ export type RoomsModule = {
   members(roomId: RoomId): SnapshotStore<readonly MemberView[]>;
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
+  accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
   getState(
     roomId: RoomId,
     eventType: string,

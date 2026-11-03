@@ -11,6 +11,7 @@ import {
   type NotificationMode,
   type PresenceView,
   type ReactionCountView,
+  type RoomAccountDataEntry,
   type RoomSummaryView,
   type RoomView,
   type SendStatus,
@@ -493,6 +494,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return [...creators];
   };
 
+  const buildAccountData = (roomId: string): readonly RoomAccountDataEntry[] => {
+    const room = client.getRoom(roomId);
+    if (!room) return [];
+    return Array.from(room.accountData.entries()).map(([type, event]) => ({
+      type,
+      content: event.getContent() as JsonObject,
+    }));
+  };
+
   const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
   const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
   const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
@@ -500,6 +510,36 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
   const powerLevelsStores = new Map<string, WritableSnapshotStore<IPowerLevels>>();
   const creatorStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
+  const accountDataStores = new Map<
+    string,
+    WritableSnapshotStore<readonly RoomAccountDataEntry[]>
+  >();
+  const accountDataListeners = new Map<
+    string,
+    { room: Room; listener: (event: MatrixEvent) => void }
+  >();
+  const publishAccountData = (roomId: string) => {
+    const store = accountDataStores.get(roomId);
+    if (!store) return;
+    const next = buildAccountData(roomId);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const ensureAccountDataListener = (roomId: string) => {
+    const tracked = accountDataListeners.get(roomId);
+    const room = client.getRoom(roomId);
+    if (tracked) {
+      if (!room || tracked.room === room) return;
+      tracked.room.removeListener(RoomEvent.AccountData, tracked.listener);
+      accountDataListeners.delete(roomId);
+    }
+    if (!room) return;
+    const listener = (event: MatrixEvent) => {
+      if (event.getRoomId() === roomId) publishAccountData(roomId);
+    };
+    room.on(RoomEvent.AccountData, listener);
+    accountDataListeners.set(roomId, { room, listener });
+  };
   const publishRoomView = (roomId: string) => {
     const store = roomStores.get(roomId);
     if (!store) return;
@@ -542,6 +582,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     memberStores.forEach((_store, roomId) => publishMembers(roomId));
     powerLevelsStores.forEach((_store, roomId) => publishPowerLevels(roomId));
     creatorStores.forEach((_store, roomId) => publishCreators(roomId));
+    accountDataStores.forEach((_store, roomId) => {
+      ensureAccountDataListener(roomId);
+      publishAccountData(roomId);
+    });
   };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
@@ -666,6 +710,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildCreators(roomId));
         creatorStores.set(roomId, store);
+        return store;
+      },
+      accountData(roomId) {
+        const existing = accountDataStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildAccountData(roomId));
+        accountDataStores.set(roomId, store);
+        ensureAccountDataListener(roomId);
         return store;
       },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
