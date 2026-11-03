@@ -289,6 +289,49 @@ const isNotificationEvent = (event: MatrixEvent): boolean => {
   return true;
 };
 
+const arrayEqual = (a: readonly unknown[] | undefined, b: readonly unknown[] | undefined): boolean =>
+  a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((item, index) => item === b[index]));
+
+const roomViewEqual = (a: RoomView | null, b: RoomView | null): boolean => {
+  if (Object.is(a, b)) return true;
+  if (!a || !b) return false;
+  return (
+    a.roomId === b.roomId &&
+    a.name === b.name &&
+    a.membership === b.membership &&
+    a.isDirect === b.isDirect &&
+    a.isSpace === b.isSpace &&
+    a.unread?.total === b.unread?.total &&
+    a.unread?.highlight === b.unread?.highlight &&
+    a.notificationMode === b.notificationMode &&
+    a.topic === b.topic &&
+    a.encrypted === b.encrypted &&
+    a.joinRule === b.joinRule &&
+    JSON.stringify(a.joinRuleContent) === JSON.stringify(b.joinRuleContent) &&
+    a.roomType === b.roomType &&
+    a.canonicalAlias === b.canonicalAlias &&
+    a.dmUserId === b.dmUserId &&
+    a.avatarMxc === b.avatarMxc &&
+    a.dmAvatarMxc === b.dmAvatarMxc &&
+    arrayEqual(a.viaServers, b.viaServers) &&
+    arrayEqual(a.spaceChildren, b.spaceChildren)
+  );
+};
+
+const memberListEqual = (
+  a: readonly MemberView[] | undefined,
+  b: readonly MemberView[] | undefined
+): boolean => {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every(
+    (member, index) =>
+      member.userId === b[index]?.userId &&
+      member.displayName === b[index]?.displayName &&
+      member.membership === b[index]?.membership
+  );
+};
+
 const unreadCountOf = (room: Room) => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
@@ -372,10 +415,28 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
   const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
   const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
+  const roomStores = new Map<string, WritableSnapshotStore<RoomView | null>>();
+  const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
+  const publishRoomView = (roomId: string) => {
+    const store = roomStores.get(roomId);
+    if (!store) return;
+    const next = buildRoomView(roomId);
+    if (roomViewEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+  const publishMembers = (roomId: string) => {
+    const store = memberStores.get(roomId);
+    if (!store) return;
+    const next = buildMembers(roomId);
+    if (memberListEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
   const refresh = () => {
     allRoomsStore.publish(allRooms());
     roomsStore.publish(joined());
     unreadsStore.publish(buildUnreads());
+    roomStores.forEach((_store, roomId) => publishRoomView(roomId));
+    memberStores.forEach((_store, roomId) => publishMembers(roomId));
   };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
@@ -389,6 +450,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const republish = (_event: MatrixEvent, room: Room | undefined) => {
     refresh();
     if (!room) return;
+    publishRoomView(room.roomId);
+    publishMembers(room.roomId);
     timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
   };
   client.on(RoomEvent.Timeline, republish);
@@ -422,7 +485,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     deviceId: client.getDeviceId() ?? '',
     ready: false,
   });
-  const roomStores = new Map<string, WritableSnapshotStore<RoomView | null>>();
   const buildRoomView = (roomId: string): RoomView | null => {
     const room = client.getRoom(roomId);
     if (!room) return null;
@@ -457,7 +519,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     };
   };
 
-  const memberStores = new Map<string, WritableSnapshotStore<readonly MemberView[]>>();
   const buildMembers = (roomId: string): readonly MemberView[] =>
     client
       .getRoom(roomId)

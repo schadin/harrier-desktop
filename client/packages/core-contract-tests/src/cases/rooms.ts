@@ -156,6 +156,59 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('room view follows live name updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'Old' }],
+      });
+      expect(core.rooms.room('!a:example.org').getSnapshot().value?.name).toBe('Old');
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'New' }],
+      });
+      expect(core.rooms.room('!a:example.org').getSnapshot().value?.name).toBe('New');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('members snapshot follows membership updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            members: [{ userId: '@alice:example.org', displayName: 'Alice' }],
+          },
+        ],
+      });
+      expect(core.rooms.members('!a:example.org').getSnapshot().value).toHaveLength(1);
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'A',
+            members: [
+              { userId: '@alice:example.org', displayName: 'Alice' },
+              { userId: '@bob:example.org', displayName: 'Bob' },
+            ],
+          },
+        ],
+      });
+      const members = core.rooms.members('!a:example.org').getSnapshot().value;
+      expect(members.map((member) => member.userId)).toEqual([
+        '@alice:example.org',
+        '@bob:example.org',
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {
