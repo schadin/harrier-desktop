@@ -31,6 +31,7 @@ import {
 } from 'folds';
 import { Room } from 'matrix-js-sdk';
 import { isKeyHotkey } from 'is-hotkey';
+import { CoreError } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '../../utils/keyboard';
 import { useDirectUsers } from '../../hooks/useDirectUsers';
@@ -39,7 +40,7 @@ import { Membership } from '../../../types/matrix/room';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
 import { highlightText, makeHighlightRegex } from '../../plugins/react-custom-html-parser';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { BreakWord } from '../../styles/Text.css';
 import { useAlive } from '../../hooks/useAlive';
 
@@ -56,7 +57,7 @@ type InviteUserProps = {
   requestClose: () => void;
 };
 export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,12 +81,13 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
     ? makeHighlightRegex(result.query.split(' '))
     : undefined;
 
-  const [inviteState, invite] = useAsyncCallback<void, Error, [string, string | undefined]>(
+  const [inviteState, invite] = useAsyncCallback<void, CoreError, [string, string | undefined]>(
     useCallback(
       async (userId, reason) => {
-        await mx.invite(room.roomId, userId, reason);
+        const inviteResult = await core.rooms.invite(room.roomId, userId, reason);
+        if (!inviteResult.ok) throw inviteResult.error;
       },
-      [mx, room]
+      [core, room]
     )
   );
 

@@ -181,6 +181,11 @@ export function createSyncDriver(): SyncDriver {
 
   client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
     if (path.endsWith('/logout')) return {};
+    if (path.includes('/join/')) {
+      return { room_id: decodeURIComponent(path.split('/join/')[1]?.split('/')[0] ?? '') };
+    }
+    if (path.endsWith('/leave')) return {};
+    if (path.endsWith('/invite')) return {};
     if (path.endsWith('/messages')) {
       const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
       const history = historyByRoom.get(roomId);

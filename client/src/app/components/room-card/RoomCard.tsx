@@ -1,5 +1,5 @@
 import React, { ReactNode, useCallback, useRef, useState } from 'react';
-import { MatrixError, Room } from 'matrix-js-sdk';
+import { CoreError } from '@harrier/core';
 import {
   Avatar,
   Badge,
@@ -33,6 +33,7 @@ import { useElementSizeObserver } from '../../hooks/useElementSizeObserver';
 import { getRoomAvatarUrl, getStateEvent } from '../../utils/room';
 import { useStateEventCallback } from '../../hooks/useStateEventCallback';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { useCore } from '../../hooks/useCore';
 
 type GridColumnCount = '1' | '2' | '3';
 const getGridColumnCount = (gridWidth: number): GridColumnCount => {
@@ -164,6 +165,7 @@ export const RoomCard = as<'div', RoomCardProps>(
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
     const joinedRoomId = useJoinedRoomId(allRooms, roomIdOrAlias);
+    const core = useCore();
     const joinedRoom = mx.getRoom(joinedRoomId);
     const [topicEvent, setTopicEvent] = useState(() =>
       joinedRoom ? getStateEvent(joinedRoom, StateEvent.RoomTopic) : undefined
@@ -197,8 +199,12 @@ export const RoomCard = as<'div', RoomCardProps>(
       )
     );
 
-    const [joinState, join] = useAsyncCallback<Room, MatrixError, []>(
-      useCallback(() => mx.joinRoom(roomIdOrAlias, { viaServers }), [mx, roomIdOrAlias, viaServers])
+    const [joinState, join] = useAsyncCallback<string, CoreError, []>(
+      useCallback(async () => {
+        const result = await core.rooms.join(roomIdOrAlias, viaServers);
+        if (!result.ok) throw result.error;
+        return result.value;
+      }, [core, roomIdOrAlias, viaServers])
     );
     const joining =
       joinState.status === AsyncStatus.Loading || joinState.status === AsyncStatus.Success;

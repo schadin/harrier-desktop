@@ -13,6 +13,7 @@ import type {
   SyncView,
   TimelineView,
   UnreadMapEntry,
+  UserId,
 } from './views';
 
 export type CoreCapabilities = {
@@ -40,6 +41,9 @@ export type RoomsModule = {
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
   parents(roomId: RoomId): SnapshotStore<readonly RoomId[]>;
+  join(roomIdOrAlias: string, viaServers?: readonly string[]): Promise<CoreResult<RoomId>>;
+  leave(roomId: RoomId): Promise<CoreResult<void>>;
+  invite(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
   getState(
     roomId: RoomId,
     eventType: string,

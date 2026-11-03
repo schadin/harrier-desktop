@@ -770,6 +770,36 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         parentsStores.set(roomId, store);
         return store;
       },
+      async join(roomIdOrAlias, viaServers): Promise<CoreResult<string>> {
+        try {
+          const result: unknown = await client.joinRoom(roomIdOrAlias, {
+            viaServers: viaServers ? [...viaServers] : undefined,
+          });
+          const response = result as { roomId?: unknown; room_id?: unknown };
+          let roomId = roomIdOrAlias;
+          if (typeof response.roomId === 'string') roomId = response.roomId;
+          else if (typeof response.room_id === 'string') roomId = response.room_id;
+          return { ok: true, value: roomId };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async leave(roomId): Promise<CoreResult<void>> {
+        try {
+          await client.leave(roomId);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async invite(roomId, userId, reason): Promise<CoreResult<void>> {
+        try {
+          await client.invite(roomId, userId, reason);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
         const room = client.getRoom(roomId);
         const event = room?.currentState.getStateEvents(eventType, stateKey) ?? null;

@@ -378,6 +378,44 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('join resolves the joined room id', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.rooms.join('!room:example.org', ['example.org']);
+      expect(result).toEqual({ ok: true, value: '!room:example.org' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('leave completes for a joined room', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      const result = await core.rooms.leave('!a:example.org');
+      expect(result.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('invite completes with and without reason', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      expect((await core.rooms.invite('!a:example.org', '@alice:example.org')).ok).toBe(true);
+      expect((await core.rooms.invite('!a:example.org', '@bob:example.org', 'Join us')).ok).toBe(
+        true
+      );
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {

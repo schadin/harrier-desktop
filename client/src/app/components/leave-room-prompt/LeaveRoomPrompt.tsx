@@ -16,8 +16,8 @@ import {
   Button,
   Spinner,
 } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { CoreError } from '@harrier/core';
+import { useCore } from '../../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../utils/keyboard';
 
@@ -27,12 +27,13 @@ type LeaveRoomPromptProps = {
   onCancel: () => void;
 };
 export function LeaveRoomPrompt({ roomId, onDone, onCancel }: LeaveRoomPromptProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
-  const [leaveState, leaveRoom] = useAsyncCallback<undefined, MatrixError, []>(
+  const [leaveState, leaveRoom] = useAsyncCallback<undefined, CoreError, []>(
     useCallback(async () => {
-      mx.leave(roomId);
-    }, [mx, roomId])
+      const result = await core.rooms.leave(roomId);
+      if (!result.ok) throw result.error;
+    }, [core, roomId])
   );
 
   const handleLeave = () => {
