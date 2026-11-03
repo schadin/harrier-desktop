@@ -10,6 +10,8 @@ import {
   type Membership,
   type NotificationMode,
   type PresenceView,
+  type PublicRoomView,
+  type PublicRoomsResult,
   type ReactionCountView,
   type RoomAccountDataEntry,
   type RoomSummaryView,
@@ -39,6 +41,7 @@ import {
   SyncState,
   User,
   UserEvent,
+  Method,
   type ICreateRoomStateEvent,
 } from 'matrix-js-sdk';
 
@@ -348,6 +351,19 @@ const memberListEqual = (
       member.leftBySelf === b[index]?.leftBySelf
   );
 };
+
+const toPublicRoomView = (room: Record<string, unknown>): PublicRoomView => ({
+  roomId: typeof room.room_id === 'string' ? room.room_id : '',
+  name: typeof room.name === 'string' ? room.name : undefined,
+  topic: typeof room.topic === 'string' ? room.topic : undefined,
+  avatarMxc: typeof room.avatar_url === 'string' ? room.avatar_url : undefined,
+  canonicalAlias: typeof room.canonical_alias === 'string' ? room.canonical_alias : undefined,
+  joinRule: typeof room.join_rule === 'string' ? room.join_rule : undefined,
+  roomType: typeof room.room_type === 'string' ? room.room_type : undefined,
+  joinedMembers: typeof room.num_joined_members === 'number' ? room.num_joined_members : 0,
+  worldReadable: room.world_readable === true,
+  guestCanJoin: room.guest_can_join === true,
+});
 
 const unreadCountOf = (room: Room) => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
@@ -897,6 +913,62 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
 
           return { ok: true, value: result.room_id };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async searchDirectory(params): Promise<CoreResult<PublicRoomsResult>> {
+        try {
+          const response = await client.http.authedRequest<{
+            chunk?: Array<Record<string, unknown>>;
+            next_batch?: string;
+          }>(
+            Method.Post,
+            '/publicRooms',
+            { server: params.server },
+            {
+              limit: params.limit,
+              since: params.since,
+              filter: {
+                generic_search_term: params.searchTerm,
+                room_types: params.roomTypes ? [...params.roomTypes] : undefined,
+              },
+              third_party_instance_id: params.thirdPartyInstanceId,
+            }
+          );
+          return {
+            ok: true,
+            value: {
+              rooms: (response.chunk ?? []).map((room) => toPublicRoomView(room)),
+              ...(typeof response.next_batch === 'string'
+                ? { nextBatch: response.next_batch }
+                : {}),
+            },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async hierarchy(roomId, params): Promise<CoreResult<PublicRoomsResult>> {
+        try {
+          const response = await client.getRoomHierarchy(
+            roomId,
+            params.limit,
+            params.maxDepth ?? 1,
+            params.suggestedOnly ?? false,
+            params.from
+          );
+          return {
+            ok: true,
+            value: {
+              rooms: (response.rooms ?? []).map((room) =>
+                toPublicRoomView(room as unknown as Record<string, unknown>)
+              ),
+              ...(typeof response.next_batch === 'string'
+                ? { nextBatch: response.next_batch }
+                : {}),
+            },
+          };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

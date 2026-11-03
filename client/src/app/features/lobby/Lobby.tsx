@@ -5,7 +5,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import { JoinRule, RestrictedAllowType, Room } from 'matrix-js-sdk';
 import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
-import { IHierarchyRoom } from 'matrix-js-sdk/lib/@types/spaces';
+import type { PublicRoomView } from '@harrier/core';
 import produce from 'immer';
 import { useSpace } from '../../hooks/useSpace';
 import { Page, PageContent, PageContentCenter, PageHeroSection } from '../../components/page';
@@ -182,7 +182,7 @@ export function Lobby() {
     return new Set(sideSpaces);
   }, [sidebarItems]);
 
-  const [spacesItems, setSpacesItem] = useState<Map<string, IHierarchyRoom>>(() => new Map());
+  const [spacesItems, setSpacesItem] = useState<Map<string, PublicRoomView>>(() => new Map());
 
   useElementSizeObserver(
     useCallback(() => heroSectionRef.current, []),
@@ -417,11 +417,11 @@ export function Lobby() {
   );
 
   const handleSpacesFound = useCallback(
-    (sItems: IHierarchyRoom[]) => {
-      setSpaceRooms({ type: 'PUT', roomIds: sItems.map((i) => i.room_id) });
+    (sItems: PublicRoomView[]) => {
+      setSpaceRooms({ type: 'PUT', roomIds: sItems.map((i) => i.roomId) });
       setSpacesItem((current) => {
         const newItems = produce(current, (draft) => {
-          sItems.forEach((item) => draft.set(item.room_id, item));
+          sItems.forEach((item) => draft.set(item.roomId, item));
         });
         return current.size === newItems.size ? current : newItems;
       });

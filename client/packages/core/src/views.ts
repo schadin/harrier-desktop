@@ -134,6 +134,19 @@ export type RoomAccountDataEntry = {
   readonly content: JsonObject;
 };
 
+export type PublicRoomView = {
+  readonly roomId: RoomId;
+  readonly name?: string;
+  readonly topic?: string;
+  readonly avatarMxc?: string;
+  readonly canonicalAlias?: string;
+  readonly joinRule?: string;
+  readonly roomType?: string;
+  readonly joinedMembers: number;
+  readonly worldReadable: boolean;
+  readonly guestCanJoin: boolean;
+};
+
 export type SendStatusView = {
   readonly localId: string;
   readonly roomId: RoomId;

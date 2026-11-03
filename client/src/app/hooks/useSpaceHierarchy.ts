@@ -1,8 +1,9 @@
 import { atom, useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MatrixError, Room } from 'matrix-js-sdk';
-import { IHierarchyRoom } from 'matrix-js-sdk/lib/@types/spaces';
+import type { PublicRoomView, PublicRoomsResult } from '@harrier/core';
 import { QueryFunction, useInfiniteQuery } from '@tanstack/react-query';
+import { useCore } from './useCore';
 import { useMatrixClient } from './useMatrixClient';
 import { roomToParentsAtom } from '../state/room/roomToParents';
 import { MSpaceChildContent, StateEvent } from '../../types/matrix/room';
@@ -270,22 +271,27 @@ const MAX_AUTO_PAGE_COUNT = 50;
 export type FetchSpaceHierarchyLevelData = {
   fetching: boolean;
   error: Error | null;
-  rooms: Map<string, IHierarchyRoom>;
+  rooms: Map<string, PublicRoomView>;
 };
 export const useFetchSpaceHierarchyLevel = (
   roomId: string,
   enable: boolean
 ): FetchSpaceHierarchyLevelData => {
-  const mx = useMatrixClient();
+  const core = useCore();
   const pageNoRef = useRef(0);
 
-  const fetchLevel: QueryFunction<
-    Awaited<ReturnType<typeof mx.getRoomHierarchy>>,
-    string[],
-    string | undefined
-  > = useCallback(
-    ({ pageParam }) => mx.getRoomHierarchy(roomId, PER_PAGE_COUNT, 1, false, pageParam),
-    [roomId, mx]
+  const fetchLevel: QueryFunction<PublicRoomsResult, string[], string | undefined> = useCallback(
+    async ({ pageParam }) => {
+      const result = await core.rooms.hierarchy(roomId, {
+        limit: PER_PAGE_COUNT,
+        maxDepth: 1,
+        suggestedOnly: false,
+        from: pageParam,
+      });
+      if (!result.ok) throw result.error;
+      return result.value;
+    },
+    [roomId, core]
   );
 
   const queryResponse = useInfiniteQuery({
@@ -294,7 +300,7 @@ export const useFetchSpaceHierarchyLevel = (
     initialPageParam: undefined,
     queryFn: fetchLevel,
     getNextPageParam: (result) => {
-      if (result.next_batch) return result.next_batch;
+      if (result.nextBatch) return result.nextBatch;
       return undefined;
     },
     retry: 5,
@@ -325,13 +331,13 @@ export const useFetchSpaceHierarchyLevel = (
     }
   }, [fetchNextPage, hasNextPage, data, error]);
 
-  const rooms: Map<string, IHierarchyRoom> = useMemo(() => {
-    const roomsMap: Map<string, IHierarchyRoom> = new Map();
+  const rooms: Map<string, PublicRoomView> = useMemo(() => {
+    const roomsMap: Map<string, PublicRoomView> = new Map();
     if (!data) return roomsMap;
 
     const rms = data.pages.flatMap((result) => result.rooms);
     rms.forEach((r) => {
-      roomsMap.set(r.room_id, r);
+      roomsMap.set(r.roomId, r);
     });
 
     return roomsMap;

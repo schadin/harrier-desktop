@@ -4,6 +4,7 @@ import type { SnapshotStore } from './snapshot';
 import type {
   JsonObject,
   MemberView,
+  PublicRoomView,
   RoomAccountDataEntry,
   RoomId,
   RoomSummaryView,
@@ -29,6 +30,27 @@ export type AuthModule = {
   start(): Promise<CoreResult<void>>;
   stop(): Promise<void>;
   logout(): Promise<CoreResult<void>>;
+};
+
+export type DirectorySearchParams = {
+  readonly server?: string;
+  readonly limit: number;
+  readonly since?: string;
+  readonly searchTerm?: string;
+  readonly roomTypes?: readonly string[];
+  readonly thirdPartyInstanceId?: string;
+};
+
+export type HierarchyParams = {
+  readonly limit: number;
+  readonly maxDepth?: number;
+  readonly suggestedOnly?: boolean;
+  readonly from?: string;
+};
+
+export type PublicRoomsResult = {
+  readonly rooms: readonly PublicRoomView[];
+  readonly nextBatch?: string;
 };
 
 export type CreateRoomParams = {
@@ -62,6 +84,8 @@ export type RoomsModule = {
   leave(roomId: RoomId): Promise<CoreResult<void>>;
   invite(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
   createRoom(params: CreateRoomParams): Promise<CoreResult<RoomId>>;
+  searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;
+  hierarchy(roomId: RoomId, params: HierarchyParams): Promise<CoreResult<PublicRoomsResult>>;
   getState(
     roomId: RoomId,
     eventType: string,

@@ -189,6 +189,42 @@ export function createSyncDriver(): SyncDriver {
     if (path.endsWith('/invite')) return {};
     if (path.endsWith('/createRoom')) return { room_id: '!created:example.org' };
     if (path.includes('/state/')) return {};
+    if (path.endsWith('/publicRooms')) {
+      return {
+        chunk: [
+          {
+            room_id: '!public:example.org',
+            name: 'Public Room',
+            topic: 'A public room',
+            avatar_url: 'mxc://example.org/public-avatar',
+            canonical_alias: '#public:example.org',
+            num_joined_members: 42,
+            room_type: undefined,
+            world_readable: true,
+            guest_can_join: false,
+          },
+        ],
+        next_batch: 'page-2',
+      };
+    }
+    if (path.endsWith('/hierarchy')) {
+      return {
+        rooms: [
+          {
+            room_id: '!child:example.org',
+            name: 'Child Room',
+            topic: undefined,
+            avatar_url: undefined,
+            canonical_alias: undefined,
+            num_joined_members: 7,
+            children_state: [],
+            guest_can_join: true,
+            world_readable: false,
+          },
+        ],
+        next_batch: undefined,
+      };
+    }
     if (path.endsWith('/messages')) {
       const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
       const history = historyByRoom.get(roomId);

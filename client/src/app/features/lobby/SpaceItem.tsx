@@ -19,7 +19,7 @@ import {
 import FocusTrap from 'focus-trap-react';
 import classNames from 'classnames';
 import { MatrixError, Room } from 'matrix-js-sdk';
-import { IHierarchyRoom } from 'matrix-js-sdk/lib/@types/spaces';
+import type { PublicRoomView } from '@harrier/core';
 import { HierarchyItem } from '../../hooks/useSpaceHierarchy';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomAvatar } from '../../components/room-avatar';
@@ -388,7 +388,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
 }
 
 type SpaceItemCardProps = {
-  summary: IHierarchyRoom | undefined;
+  summary: PublicRoomView | undefined;
   loading?: boolean;
   item: HierarchyItem;
   joined?: boolean;
@@ -481,10 +481,10 @@ export const SpaceItemCard = as<'div', SpaceItemCardProps>(
                   <UnjoinedSpaceProfile
                     roomId={roomId}
                     via={item.content.via}
-                    name={summary.name || summary.canonical_alias || roomId}
+                    name={summary.name || summary.canonicalAlias || roomId}
                     avatarUrl={
-                      summary?.avatar_url
-                        ? mxcUrlToHttp(mx, summary.avatar_url, useAuthentication, 96, 96, 'crop') ??
+                      summary?.avatarMxc
+                        ? mxcUrlToHttp(mx, summary.avatarMxc, useAuthentication, 96, 96, 'crop') ??
                           undefined
                         : undefined
                     }

@@ -20,7 +20,7 @@ import {
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { JoinRule, MatrixError, Room } from 'matrix-js-sdk';
-import { IHierarchyRoom } from 'matrix-js-sdk/lib/@types/spaces';
+import type { PublicRoomView } from '@harrier/core';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { SequenceCard } from '../../components/sequence-card';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -280,7 +280,7 @@ type RoomItemCardProps = {
   item: HierarchyItem;
   loading: boolean;
   error: Error | null;
-  summary: IHierarchyRoom | undefined;
+  summary: PublicRoomView | undefined;
   dm?: boolean;
   firstChild?: boolean;
   lastChild?: boolean;
@@ -397,18 +397,18 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
               {summary && (
                 <RoomProfile
                   roomId={roomId}
-                  roomType={summary.room_type}
-                  name={summary.name || summary.canonical_alias || roomId}
+                  roomType={summary.roomType}
+                  name={summary.name || summary.canonicalAlias || roomId}
                   topic={summary.topic}
                   avatarUrl={
-                    summary?.avatar_url
-                      ? mxcUrlToHttp(mx, summary.avatar_url, useAuthentication, 96, 96, 'crop') ??
+                    summary?.avatarMxc
+                      ? mxcUrlToHttp(mx, summary.avatarMxc, useAuthentication, 96, 96, 'crop') ??
                         undefined
                       : undefined
                   }
-                  memberCount={summary.num_joined_members}
+                  memberCount={summary.joinedMembers}
                   suggested={content.suggested}
-                  joinRule={summary.join_rule}
+                  joinRule={summary.joinRule as JoinRule | undefined}
                   options={<RoomJoinButton roomId={roomId} via={content.via} />}
                 />
               )}

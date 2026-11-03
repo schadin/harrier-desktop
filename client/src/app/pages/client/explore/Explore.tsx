@@ -32,6 +32,7 @@ import {
   useExploreServer,
 } from '../../../hooks/router/useExploreSelected';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { getMxIdServer } from '../../../utils/matrix';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
@@ -39,13 +40,20 @@ import { PageNav, PageNavContent, PageNavHeader } from '../../../components/page
 import { stopPropagation } from '../../../utils/keyboard';
 
 export function AddServer() {
-  const mx = useMatrixClient();
   const navigate = useNavigate();
+  const core = useCore();
   const [dialog, setDialog] = useState(false);
   const serverInputRef = useRef<HTMLInputElement>(null);
 
   const [exploreState] = useAsyncCallback(
-    useCallback((server: string) => mx.publicRooms({ server, limit: 1 }), [mx])
+    useCallback(
+      async (server: string) => {
+        const result = await core.rooms.searchDirectory({ server, limit: 1 });
+        if (!result.ok) throw result.error;
+        return result.value;
+      },
+      [core]
+    )
   );
 
   const getInputServer = (): string | undefined => {

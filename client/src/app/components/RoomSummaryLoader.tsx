@@ -1,7 +1,8 @@
 import { ReactNode, useCallback, useState } from 'react';
 import { MatrixClient, Room } from 'matrix-js-sdk';
+import type { PublicRoomView } from '@harrier/core';
 import { useQuery } from '@tanstack/react-query';
-import { IHierarchyRoom } from 'matrix-js-sdk/lib/@types/spaces';
+import { useCore } from '../hooks/useCore';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import { LocalRoomSummary, useLocalRoomSummary } from '../hooks/useLocalRoomSummary';
 import { AsyncState, AsyncStatus } from '../hooks/useAsyncCallback';
@@ -12,7 +13,6 @@ type RoomSummaryLoaderProps = {
   roomIdOrAlias: string;
   children: (roomSummary?: IRoomSummary) => ReactNode;
 };
-
 export function RoomSummaryLoader({ roomIdOrAlias, children }: RoomSummaryLoaderProps) {
   const mx = useMatrixClient();
 
@@ -43,11 +43,15 @@ export function HierarchyRoomSummaryLoader({
   children,
 }: {
   roomId: string;
-  children: (state: AsyncState<IHierarchyRoom, Error>) => ReactNode;
+  children: (state: AsyncState<PublicRoomView, Error>) => ReactNode;
 }) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
-  const fetchSummary = useCallback(() => mx.getRoomHierarchy(roomId, 1, 1), [mx, roomId]);
+  const fetchSummary = useCallback(async () => {
+    const result = await core.rooms.hierarchy(roomId, { limit: 1 });
+    if (!result.ok) throw result.error;
+    return result.value;
+  }, [core, roomId]);
   const [errorMemo, setError] = useState<Error>();
 
   const { data, error } = useQuery({
@@ -62,7 +66,7 @@ export function HierarchyRoomSummaryLoader({
     },
   });
 
-  let state: AsyncState<IHierarchyRoom, Error> = {
+  let state: AsyncState<PublicRoomView, Error> = {
     status: AsyncStatus.Loading,
   };
   if (error) {

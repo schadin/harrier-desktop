@@ -31,9 +31,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue } from 'jotai';
 import { useQuery } from '@tanstack/react-query';
-import { MatrixClient, Method, RoomType } from 'matrix-js-sdk';
+import { RoomType } from 'matrix-js-sdk';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { RoomTopicViewer } from '../../../components/room-topic-viewer';
 import { RoomCard, RoomCardBase, RoomCardGrid } from '../../../components/room-card';
 import { ExploreServerPathSearchParams } from '../../paths';
@@ -343,6 +344,7 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
 export function PublicRooms() {
   const { server } = useParams();
   const mx = useMatrixClient();
+  const core = useCore();
   const userId = mx.getUserId();
   const userServer = userId && getMxIdServer(userId);
   const allRooms = useAtomValue(allRoomsAtom);
@@ -368,7 +370,7 @@ export function PublicRooms() {
     if (scroll) scroll.scrollTop = 0;
   }, []);
 
-  const fetchPublicRooms = useCallback(() => {
+  const fetchPublicRooms = useCallback(async () => {
     const limit =
       typeof serverSearchParams.limit === 'string'
         ? parseInt(serverSearchParams.limit, 10)
@@ -376,23 +378,17 @@ export function PublicRooms() {
     const roomType: string | null | undefined =
       serverSearchParams.type === 'null' ? null : serverSearchParams.type;
 
-    return mx.http.authedRequest<Awaited<ReturnType<MatrixClient['publicRooms']>>>(
-      Method.Post,
-      '/publicRooms',
-      {
-        server,
-      },
-      {
-        limit,
-        since: serverSearchParams.since,
-        filter: {
-          generic_search_term: serverSearchParams.term,
-          room_types: roomType !== undefined ? [roomType] : undefined,
-        },
-        third_party_instance_id: serverSearchParams.instance,
-      }
-    );
-  }, [mx, server, serverSearchParams]);
+    const result = await core.rooms.searchDirectory({
+      server,
+      limit,
+      since: serverSearchParams.since,
+      searchTerm: serverSearchParams.term,
+      roomTypes: roomType !== undefined && roomType !== null ? [roomType] : undefined,
+      thirdPartyInstanceId: serverSearchParams.instance,
+    });
+    if (!result.ok) throw result.error;
+    return result.value;
+  }, [core, server, serverSearchParams]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: [
@@ -425,13 +421,8 @@ export function PublicRooms() {
     navigate(path);
   };
 
-  const paginateBack = () => {
-    const token = data?.prev_batch;
-    explore({ since: token });
-  };
-
   const paginateFront = () => {
-    const token = data?.next_batch;
+    const token = data?.nextBatch;
     explore({ since: token });
   };
 
@@ -586,21 +577,21 @@ export function PublicRooms() {
                     </Box>
                   )}
                   {data &&
-                    (data.chunk.length > 0 ? (
+                    (data.rooms.length > 0 ? (
                       <>
                         <RoomCardGrid>
-                          {data?.chunk.map((chunkRoom) => (
+                          {data.rooms.map((publicRoom) => (
                             <RoomCard
-                              key={chunkRoom.room_id}
-                              roomIdOrAlias={chunkRoom.canonical_alias ?? chunkRoom.room_id}
+                              key={publicRoom.roomId}
+                              roomIdOrAlias={publicRoom.canonicalAlias ?? publicRoom.roomId}
                               allRooms={allRooms}
-                              avatarUrl={chunkRoom.avatar_url}
-                              name={chunkRoom.name}
-                              topic={chunkRoom.topic}
-                              memberCount={chunkRoom.num_joined_members}
-                              roomType={chunkRoom.room_type}
+                              avatarUrl={publicRoom.avatarMxc}
+                              name={publicRoom.name}
+                              topic={publicRoom.topic}
+                              memberCount={publicRoom.joinedMembers}
+                              roomType={publicRoom.roomType}
                               onView={
-                                chunkRoom.room_type === RoomType.Space
+                                publicRoom.roomType === RoomType.Space
                                   ? navigateSpace
                                   : navigateRoom
                               }
@@ -615,24 +606,14 @@ export function PublicRooms() {
                           ))}
                         </RoomCardGrid>
 
-                        {(data.prev_batch || data.next_batch) && (
+                        {(data.nextBatch || undefined) && (
                           <Box justifyContent="Center" gap="200">
-                            <Button
-                              onClick={paginateBack}
-                              size="300"
-                              fill="Soft"
-                              disabled={!data.prev_batch}
-                            >
-                              <Text size="B300" truncate>
-                                Previous Page
-                              </Text>
-                            </Button>
                             <Box data-spacing-node grow="Yes" />
                             <Button
                               onClick={paginateFront}
                               size="300"
                               fill="Solid"
-                              disabled={!data.next_batch}
+                              disabled={!data.nextBatch}
                             >
                               <Text size="B300" truncate>
                                 Next Page

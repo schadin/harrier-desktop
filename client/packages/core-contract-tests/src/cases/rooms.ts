@@ -485,6 +485,67 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('searchDirectory maps directory rooms with pagination', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.rooms.searchDirectory({
+        server: 'matrix.example.org',
+        limit: 10,
+        searchTerm: 'public',
+        roomTypes: ['m.space'],
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.nextBatch).toBe('page-2');
+        expect(result.value.rooms).toEqual([
+          {
+            roomId: '!public:example.org',
+            name: 'Public Room',
+            topic: 'A public room',
+            avatarMxc: 'mxc://example.org/public-avatar',
+            canonicalAlias: '#public:example.org',
+            joinRule: undefined,
+            roomType: undefined,
+            joinedMembers: 42,
+            worldReadable: true,
+            guestCanJoin: false,
+          },
+        ]);
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('hierarchy maps federated hierarchy rooms', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!space:example.org', membership: 'join', name: 'Team', space: true }],
+      });
+      const result = await core.rooms.hierarchy('!space:example.org', { limit: 20 });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.rooms).toEqual([
+          {
+            roomId: '!child:example.org',
+            name: 'Child Room',
+            topic: undefined,
+            avatarMxc: undefined,
+            canonicalAlias: undefined,
+            joinRule: undefined,
+            roomType: undefined,
+            joinedMembers: 7,
+            worldReadable: false,
+            guestCanJoin: true,
+          },
+        ]);
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {
