@@ -19,12 +19,7 @@ import { JoinRule, MatrixError } from 'matrix-js-sdk';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { useRoom } from '../../../hooks/useRoom';
-import {
-  useRoomAvatar,
-  useRoomJoinRule,
-  useRoomName,
-  useRoomTopic,
-} from '../../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { BreakWord, LineClamp3 } from '../../../styles/Text.css';
 import { LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
@@ -63,7 +58,7 @@ export function RoomProfileEdit({
   const mx = useMatrixClient();
   const alive = useAlive();
   const useAuthentication = useMediaAuthentication();
-  const joinRule = useRoomJoinRule(room);
+  const { joinRule } = useCoreRoomMeta(room.roomId);
   const [roomAvatar, setRoomAvatar] = useState(avatar);
 
   const avatarUrl = roomAvatar
@@ -201,7 +196,7 @@ export function RoomProfileEdit({
                 <RoomIcon
                   roomType={room.getType()}
                   size="400"
-                  joinRule={joinRule?.join_rule ?? JoinRule.Invite}
+                  joinRule={(joinRule as JoinRule | undefined) ?? JoinRule.Invite}
                   filled
                 />
               )}
@@ -269,10 +264,8 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
   const room = useRoom();
   const directs = useAtomValue(mDirectAtom);
 
-  const avatar = useRoomAvatar(room, directs.has(room.roomId));
-  const name = useRoomName(room);
-  const topic = useRoomTopic(room);
-  const joinRule = useRoomJoinRule(room);
+  const { name, topic, joinRule, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
+  const avatar = directs.has(room.roomId) ? dmAvatarMxc : avatarMxc;
 
   const canEditAvatar = permissions.stateEvent(StateEvent.RoomAvatar, mx.getSafeUserId());
   const canEditName = permissions.stateEvent(StateEvent.RoomName, mx.getSafeUserId());
@@ -344,7 +337,7 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
                     <RoomIcon
                       roomType={room.getType()}
                       size="400"
-                      joinRule={joinRule?.join_rule ?? JoinRule.Invite}
+                      joinRule={(joinRule as JoinRule | undefined) ?? JoinRule.Invite}
                       filled
                     />
                   )}

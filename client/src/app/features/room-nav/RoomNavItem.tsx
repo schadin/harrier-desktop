@@ -55,7 +55,7 @@ import { RoomNotificationModeSwitcher } from '../../components/RoomNotificationS
 import { getRoomCreatorsForRoomId, useRoomCreators } from '../../hooks/useRoomCreators';
 import { getRoomPermissionsAPI, useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
-import { useRoomName } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { useCallMembers, useCallSession } from '../../hooks/useCall';
 import { useCallEmbed, useCallStart } from '../../hooks/useCallEmbed';
 import { callChatAtom } from '../../state/callEmbed';
@@ -267,7 +267,7 @@ export function RoomNavItem({
     (receipt) => receipt.userId !== mx.getUserId()
   );
 
-  const roomName = useRoomName(room);
+  const { name: roomName } = useCoreRoomMeta(room.roomId);
   const dmUserId = direct ? guessDmRoomUserId(room, mx.getUserId()!) : undefined;
   const dmStatus = useCustomStatus(dmUserId ?? '');
   const dmPresence = useUserPresence(dmUserId ?? '');

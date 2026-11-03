@@ -42,7 +42,7 @@ import { ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import CallSound from '../../../public/sound/call.ogg';
 import { useCallMembersChange, useCallSession } from '../hooks/useCall';
-import { useRoomAvatar, useRoomName } from '../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../state/mDirectList';
 import { useMediaAuthentication } from '../hooks/useMediaAuthentication';
 import { mxcUrlToHttp } from '../utils/matrix';
@@ -83,8 +83,8 @@ function IncomingCall({ dm, info, onIgnore, onAnswer, onReject }: IncomingCallPr
 
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const roomName = useRoomName(room);
-  const roomAvatar = useRoomAvatar(room, dm);
+  const { name: roomName, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
+  const roomAvatar = dm ? dmAvatarMxc : avatarMxc;
   const avatarUrl = roomAvatar
     ? mxcUrlToHttp(mx, roomAvatar, useAuthentication, 96, 96, 'crop') ?? undefined
     : undefined;

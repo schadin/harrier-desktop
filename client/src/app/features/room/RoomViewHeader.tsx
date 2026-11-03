@@ -52,7 +52,7 @@ import { markAsRead } from '../../utils/notifications';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
 import { copyToClipboard } from '../../utils/dom';
 import { LeaveRoomPrompt } from '../../components/leave-room-prompt';
-import { useRoomAvatar, useRoomName, useRoomTopic } from '../../hooks/useRoomMeta';
+import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { stopPropagation } from '../../utils/keyboard';
 import { getMatrixToRoom } from '../../plugins/matrix-to';
@@ -414,11 +414,10 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const pinnedEvents = useRoomPinnedEvents(room);
   const encryptionEvent = useStateEvent(room, StateEvent.RoomEncryption);
   const encryptedRoom = !!encryptionEvent;
-  const avatarMxc = useRoomAvatar(room, direct);
-  const name = useRoomName(room);
+  const { name, topic, avatarMxc: roomAvatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
+  const avatarMxc = direct ? dmAvatarMxc : roomAvatarMxc;
   const dmUserId = direct ? guessDmRoomUserId(room, mx.getUserId()!) : undefined;
   const dmStatus = useCustomStatus(dmUserId ?? '');
-  const topic = useRoomTopic(room);
   const avatarUrl = avatarMxc
     ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
     : undefined;
