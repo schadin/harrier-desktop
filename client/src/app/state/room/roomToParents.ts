@@ -62,13 +62,10 @@ export const useBindRoomToParentsAtom = (roomToParents: typeof roomToParentsAtom
     const store = core.rooms.all;
     const update = () => {
       const next: RoomToParents = new Map();
-      store
-        .getSnapshot()
-        .value.filter((room) => room.isSpace && room.membership !== 'invite')
-        .forEach((room) => {
-          const view = core.rooms.room(room.roomId).getSnapshot().value;
-          mapParentWithChildren(next, room.roomId, [...(view?.spaceChildren ?? [])]);
-        });
+      store.getSnapshot().value.forEach((room) => {
+        const parents = core.rooms.parents(room.roomId).getSnapshot().value;
+        if (parents.length > 0) next.set(room.roomId, new Set(parents));
+      });
       setRoomToParents({ type: 'INITIALIZE', roomToParents: next });
     };
 

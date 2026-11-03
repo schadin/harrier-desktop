@@ -325,6 +325,59 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('parents are resolved through space children', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!space:example.org',
+            membership: 'join',
+            name: 'Team',
+            space: true,
+            children: ['!a:example.org', '!b:example.org'],
+          },
+          { roomId: '!a:example.org', membership: 'join', name: 'A' },
+          { roomId: '!b:example.org', membership: 'join', name: 'B' },
+        ],
+      });
+      expect(core.rooms.parents('!a:example.org').getSnapshot().value).toEqual([
+        '!space:example.org',
+      ]);
+      expect(core.rooms.parents('!space:example.org').getSnapshot().value).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('space cycles are broken while resolving parents', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!a:example.org',
+            membership: 'join',
+            name: 'Space A',
+            space: true,
+            children: ['!b:example.org'],
+          },
+          {
+            roomId: '!b:example.org',
+            membership: 'join',
+            name: 'Space B',
+            space: true,
+            children: ['!a:example.org'],
+          },
+        ],
+      });
+      expect(core.rooms.parents('!b:example.org').getSnapshot().value).toEqual(['!a:example.org']);
+      expect(core.rooms.parents('!a:example.org').getSnapshot().value).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('members are exposed with display names and membership', async (harness) => {
     const core = await harness.create();
     try {

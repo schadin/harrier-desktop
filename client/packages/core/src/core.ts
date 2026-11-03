@@ -39,6 +39,7 @@ export type RoomsModule = {
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
+  parents(roomId: RoomId): SnapshotStore<readonly RoomId[]>;
   getState(
     roomId: RoomId,
     eventType: string,

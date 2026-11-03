@@ -503,6 +503,39 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }));
   };
 
+  const buildRoomToParents = (): Map<string, readonly string[]> => {
+    const roomToParents = new Map<string, readonly string[]>();
+    const getAllParents = (roomId: string): Set<string> => {
+      const allParents = new Set<string>();
+      const addAllParentIds = (id: string) => {
+        if (allParents.has(id)) return;
+        allParents.add(id);
+        roomToParents.get(id)?.forEach((parentId) => addAllParentIds(parentId));
+      };
+      addAllParentIds(roomId);
+      allParents.delete(roomId);
+      return allParents;
+    };
+
+    client.getRooms().forEach((room) => {
+      if (!room.isSpaceRoom()) return;
+      const membership = toMembership(room.getMyMembership());
+      if (!membership || membership === 'invite') return;
+      const allParents = getAllParents(room.roomId);
+      spaceChildrenOf(room).forEach((childId) => {
+        if (allParents.has(childId)) return;
+        roomToParents.set(childId, [...(roomToParents.get(childId) ?? []), room.roomId]);
+      });
+    });
+    return roomToParents;
+  };
+  let roomToParentsCache: Map<string, readonly string[]> | undefined;
+  const roomToParentsMap = () => {
+    if (!roomToParentsCache) roomToParentsCache = buildRoomToParents();
+    return roomToParentsCache;
+  };
+  const buildParents = (roomId: string): readonly string[] => roomToParentsMap().get(roomId) ?? [];
+
   const allRoomsStore = createSnapshotStore<readonly RoomSummaryView[]>(allRooms());
   const roomsStore = createSnapshotStore<readonly RoomSummaryView[]>(joined());
   const unreadsStore = createSnapshotStore<readonly UnreadMapEntry[]>(buildUnreads());
@@ -518,6 +551,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     string,
     { room: Room; listener: (event: MatrixEvent) => void }
   >();
+  const parentsStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
+  const publishParents = (roomId: string) => {
+    const store = parentsStores.get(roomId);
+    if (!store) return;
+    const next = buildParents(roomId);
+    if (arrayEqual(next, store.getSnapshot().value)) return;
+    store.publish(next);
+  };
   const publishAccountData = (roomId: string) => {
     const store = accountDataStores.get(roomId);
     if (!store) return;
@@ -575,6 +616,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     publishCreators(roomId);
   };
   const refresh = () => {
+    roomToParentsCache = undefined;
     allRoomsStore.publish(allRooms());
     roomsStore.publish(joined());
     unreadsStore.publish(buildUnreads());
@@ -586,6 +628,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       ensureAccountDataListener(roomId);
       publishAccountData(roomId);
     });
+    parentsStores.forEach((_store, roomId) => publishParents(roomId));
   };
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
@@ -718,6 +761,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore(buildAccountData(roomId));
         accountDataStores.set(roomId, store);
         ensureAccountDataListener(roomId);
+        return store;
+      },
+      parents(roomId) {
+        const existing = parentsStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildParents(roomId));
+        parentsStores.set(roomId, store);
         return store;
       },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
