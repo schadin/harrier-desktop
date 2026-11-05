@@ -181,8 +181,10 @@ export function createSyncDriver(): SyncDriver {
     baseUrl: 'https://matrix.example.org',
     userId: TEST_USER_ID,
     accessToken: 'test-token',
+    timelineSupport: true,
   });
   const directRooms = new Set<string>();
+  const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
 
   client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
@@ -232,6 +234,23 @@ export function createSyncDriver(): SyncDriver {
         next_batch: undefined,
       };
     }
+    if (path.includes('/context/')) {
+      const eventId = decodeURIComponent(path.split('/context/')[1]?.split('/')[0] ?? '');
+      const raw = knownEvents.get(eventId);
+      if (!raw) {
+        const error = new Error('Event not found') as Error & { httpStatus: number };
+        error.httpStatus = 404;
+        throw error;
+      }
+      return {
+        start: 'ctx-start',
+        end: 'ctx-end',
+        event: raw,
+        events_before: [],
+        events_after: [],
+        state: [],
+      };
+    }
     if (path.endsWith('/messages')) {
       const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
       const history = historyByRoom.get(roomId);
@@ -255,7 +274,7 @@ export function createSyncDriver(): SyncDriver {
   };
 
   const applyRoom = async (item: SyncFixtureRoom) => {
-    const room = new Room(item.roomId, client, TEST_USER_ID);
+    const room = new Room(item.roomId, client, TEST_USER_ID, { timelineSupport: true });
     client.store.storeRoom(room);
     room.updateMyMembership(item.membership);
     const states: MatrixEvent[] = [];
@@ -337,6 +356,13 @@ export function createSyncDriver(): SyncDriver {
       ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),
       ...(item.reactions ?? []).map((reaction) => reactionEvent(item.roomId, reaction)),
     ];
+    events.forEach((event) => {
+      const eventId = event.getId();
+      if (eventId) knownEvents.set(eventId, event.event);
+    });
+    (item.history?.messages ?? []).forEach((message) => {
+      knownEvents.set(message.eventId, messageEvent(item.roomId, message).event);
+    });
     (item.receipts ?? []).forEach((receipt) => {
       room.addReceiptToStructure(
         receipt.eventId,

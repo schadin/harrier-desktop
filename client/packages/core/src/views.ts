@@ -115,6 +115,7 @@ export type TimelineView = {
   readonly items: readonly TimelineItem[];
   readonly hasBackwardHistory: boolean;
   readonly readUpTo?: EventId;
+  readonly focusedEventId?: EventId;
 };
 
 export type PresenceStatus = 'online' | 'offline' | 'unavailable';

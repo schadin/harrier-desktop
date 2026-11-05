@@ -2,6 +2,7 @@ import type { CoreError } from './error';
 import type { IPowerLevels } from './permissions';
 import type { SnapshotStore } from './snapshot';
 import type {
+  EventId,
   JsonObject,
   MemberView,
   PublicRoomView,
@@ -113,6 +114,8 @@ export type RoomsModule = {
 export type TimelineModule = {
   timeline(roomId: RoomId): SnapshotStore<TimelineView>;
   paginateBackward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
+  focusEvent(roomId: RoomId, eventId: EventId): Promise<CoreResult<number>>;
+  clearFocus(roomId: RoomId): void;
 };
 
 export type PresenceModule = {

@@ -29,6 +29,7 @@ import {
 } from '@harrier/core';
 import {
   ClientEvent,
+  Direction,
   EventType,
   EventStatus,
   EventTimeline,
@@ -223,7 +224,9 @@ const toItem = (
 const toTimelineView = (
   roomId: string,
   events: readonly MatrixEvent[],
-  room: Room | undefined
+  room: Room | undefined,
+  hasBackwardHistory: boolean,
+  focusedEventId?: string
 ): TimelineView => {
   const latestEdit = new Map<string, string>();
   events.forEach((event) => {
@@ -266,15 +269,36 @@ const toTimelineView = (
       return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
     });
 
-  const hasBackwardHistory =
-    room?.getLiveTimeline().getPaginationToken(EventTimeline.BACKWARDS) != null;
   const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
   return {
     roomId,
     items,
     hasBackwardHistory,
     ...(ownReadUpTo !== null && ownReadUpTo !== undefined ? { readUpTo: ownReadUpTo } : {}),
+    ...(focusedEventId !== undefined ? { focusedEventId } : {}),
   };
+};
+
+const firstLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
+  let first = timeline;
+  let previous = first.getNeighbouringTimeline(Direction.Backward);
+  while (previous) {
+    first = previous;
+    previous = first.getNeighbouringTimeline(Direction.Backward);
+  }
+  return first;
+};
+
+const collectLinkedEvents = (timeline: EventTimeline): MatrixEvent[] => {
+  const events: MatrixEvent[] = [];
+  for (
+    let current: EventTimeline | null = firstLinkedTimeline(timeline);
+    current;
+    current = current.getNeighbouringTimeline(Direction.Forward)
+  ) {
+    events.push(...current.getEvents());
+  }
+  return events;
 };
 
 const spaceChildrenOf = (room: Room | null | undefined): readonly string[] =>
@@ -706,9 +730,16 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(ClientEvent.AccountData, refresh);
 
   const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
+  const focusedTimelines = new Map<string, { timeline: EventTimeline; eventId: string }>();
   const buildTimeline = (roomId: string) => {
     const room = client.getRoom(roomId) ?? undefined;
-    return toTimelineView(roomId, room?.getLiveTimeline().getEvents() ?? [], room);
+    const focus = focusedTimelines.get(roomId);
+    const anchor = focus?.timeline ?? room?.getLiveTimeline();
+    const events = anchor ? collectLinkedEvents(anchor) : [];
+    const hasBackwardHistory = anchor
+      ? firstLinkedTimeline(anchor).getPaginationToken(EventTimeline.BACKWARDS) != null
+      : false;
+    return toTimelineView(roomId, events, room, hasBackwardHistory, focus?.eventId);
   };
   const republish = (_event: MatrixEvent, room: Room | undefined) => {
     refresh();
@@ -1092,7 +1123,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const room = client.getRoom(roomId);
         if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
         try {
-          await client.paginateEventTimeline(room.getLiveTimeline(), {
+          const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
+          await client.paginateEventTimeline(firstLinkedTimeline(anchor), {
             backwards: true,
             limit,
           });
@@ -1101,6 +1133,41 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }
+      },
+      async focusEvent(roomId, eventId): Promise<CoreResult<number>> {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        try {
+          const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
+          if (!timeline) {
+            return {
+              ok: false,
+              error: toCoreError(new Error(`Event ${eventId} not found in ${roomId}`)),
+            };
+          }
+          for (let attempt = 0; attempt < 10; attempt += 1) {
+            const events = collectLinkedEvents(timeline);
+            const index = events.findIndex((event) => event.getId() === eventId);
+            if (index >= 0) {
+              focusedTimelines.set(roomId, { timeline, eventId });
+              timelines.get(roomId)?.publish(buildTimeline(roomId));
+              return { ok: true, value: index };
+            }
+            const first = firstLinkedTimeline(timeline);
+            if (first.getPaginationToken(EventTimeline.BACKWARDS) == null) break;
+            // eslint-disable-next-line no-await-in-loop -- sequential pagination until the event is loaded
+            await client.paginateEventTimeline(first, { backwards: true, limit: 30 });
+          }
+          return {
+            ok: false,
+            error: toCoreError(new Error(`Event ${eventId} not found in ${roomId}`)),
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      clearFocus(roomId) {
+        if (focusedTimelines.delete(roomId)) timelines.get(roomId)?.publish(buildTimeline(roomId));
       },
     },
     presence: {

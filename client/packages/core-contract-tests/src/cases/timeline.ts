@@ -365,4 +365,110 @@ export const timelineCases = [
       }
     }
   ),
+
+  contractTest(
+    'focusEvent returns absolute index and exposes the focused chain',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              messages: [
+                { eventId: '$1', sender: '@alice:example.org', body: 'first' },
+                { eventId: '$2', sender: '@alice:example.org', body: 'second' },
+                { eventId: '$3', sender: '@alice:example.org', body: 'third' },
+              ],
+            },
+          ],
+        });
+        const result = await core.timeline.focusEvent('!room:example.org', '$2');
+        expect(result).toEqual({ ok: true, value: 1 });
+        const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        expect(timeline.focusedEventId).toBe('$2');
+        expect(timeline.items.map((item) => item.eventId)).toEqual(['$1', '$2', '$3']);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'focusEvent loads a missing event through the context transport',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              backwardToken: 't1',
+              messages: [{ eventId: '$recent', sender: '@alice:example.org', body: 'recent' }],
+              history: {
+                messages: [{ eventId: '$older', sender: '@alice:example.org', body: 'older' }],
+              },
+            },
+          ],
+        });
+        const result = await core.timeline.focusEvent('!room:example.org', '$older');
+        expect(result.ok).toBe(true);
+        if (result.ok) expect(result.value).toBe(0);
+        const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        expect(timeline.focusedEventId).toBe('$older');
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('clearFocus returns the timeline to the live chain', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              { eventId: '$1', sender: '@alice:example.org', body: 'first' },
+              { eventId: '$2', sender: '@alice:example.org', body: 'second' },
+            ],
+          },
+        ],
+      });
+      await core.timeline.focusEvent('!room:example.org', '$1');
+      core.timeline.clearFocus('!room:example.org');
+      const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+      expect(timeline.focusedEventId).toBeUndefined();
+      expect(timeline.items.map((item) => item.eventId)).toEqual(['$1', '$2']);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('focusEvent fails for an unknown event', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'only' }],
+          },
+        ],
+      });
+      const result = await core.timeline.focusEvent('!room:example.org', '$unknown');
+      expect(result.ok).toBe(false);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];
