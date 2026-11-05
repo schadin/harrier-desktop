@@ -1,6 +1,7 @@
 import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import type { RoomStateEntry } from '@harrier/core';
 import { ImagePack } from './ImagePack';
-import { EmoteRoomsContent, ImageUsage } from './types';
+import { PackContent, EmoteRoomsContent, ImageUsage } from './types';
 import { StateEvent } from '../../../types/matrix/room';
 import { getAccountData, getStateEvent, getStateEvents } from '../../utils/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
@@ -41,6 +42,20 @@ export function getRoomImagePack(room: Room, stateKey: string): ImagePack | unde
   const packId = packEvent.getId();
   if (!packId) return undefined;
   return ImagePack.fromMatrixEvent(packId, packEvent);
+}
+
+export function makeImagePacksFromState(
+  roomId: string,
+  entries: readonly RoomStateEntry[]
+): ImagePack[] {
+  return entries.map(
+    (entry) =>
+      new ImagePack(
+        entry.eventId ?? `${roomId}|${entry.stateKey}`,
+        entry.content as PackContent,
+        new PackAddress(roomId, entry.stateKey)
+      )
+  );
 }
 
 export function getRoomImagePacks(room: Room): ImagePack[] {

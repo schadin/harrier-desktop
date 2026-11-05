@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { RoomAccountDataEvents } from 'matrix-js-sdk';
+import type { JsonObject } from '@harrier/core';
 import {
   Box,
   Text,
@@ -30,14 +30,14 @@ import {
   AccountDataEditor,
   AccountDataSubmitCallback,
 } from '../../../components/AccountDataEditor';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 
 type DeveloperToolsProps = {
   requestClose: () => void;
 };
 export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
   const [developerTools, setDeveloperTools] = useSetting(settingsAtom, 'developerTools');
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
 
   const roomState = useRoomState(room);
@@ -59,13 +59,10 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      await mx.setRoomAccountData(
-        room.roomId,
-        type as keyof RoomAccountDataEvents,
-        content as RoomAccountDataEvents[keyof RoomAccountDataEvents]
-      );
+      const result = await core.rooms.setAccountData(room.roomId, type, content as JsonObject);
+      if (!result.ok) throw result.error;
     },
-    [mx, room.roomId]
+    [core, room.roomId]
   );
 
   if (accountDataType !== undefined) {

@@ -62,6 +62,11 @@ export type SyncFixtureRoom = {
   readonly roomVersion?: string;
   readonly additionalCreators?: readonly string[];
   readonly accountData?: Record<string, Record<string, unknown>>;
+  readonly stateEvents?: readonly {
+    readonly type: string;
+    readonly stateKey: string;
+    readonly content: Record<string, unknown>;
+  }[];
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;
@@ -188,7 +193,9 @@ export function createSyncDriver(): SyncDriver {
     if (path.endsWith('/leave')) return {};
     if (path.endsWith('/invite')) return {};
     if (path.endsWith('/createRoom')) return { room_id: '!created:example.org' };
+    if (path.endsWith('/upgrade')) return { replacement_room: '!upgraded:example.org' };
     if (path.includes('/state/')) return {};
+    if (path.includes('/account_data/')) return {};
     if (path.endsWith('/publicRooms')) {
       return {
         chunk: [
@@ -277,6 +284,16 @@ export function createSyncDriver(): SyncDriver {
         stateEvent(item.roomId, 'm.room.encryption', '', { algorithm: 'm.megolm.v1.aes-sha2' })
       );
     }
+    (item.stateEvents ?? []).forEach((stateEventItem) => {
+      states.push(
+        stateEvent(
+          item.roomId,
+          stateEventItem.type,
+          stateEventItem.stateKey,
+          stateEventItem.content
+        )
+      );
+    });
     (item.members ?? []).forEach((member) => {
       states.push(
         stateEvent(item.roomId, 'm.room.member', member.userId, {

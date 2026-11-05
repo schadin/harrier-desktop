@@ -465,6 +465,19 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('upgrade resolves the replacement room id', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.rooms.upgrade('!room:example.org', {
+        newVersion: '10',
+        additionalCreators: ['@alice:example.org'],
+      });
+      expect(result).toEqual({ ok: true, value: '!upgraded:example.org' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('createRoom with restricted parent completes', async (harness) => {
     const core = await harness.create();
     try {
@@ -572,6 +585,73 @@ export const roomsCases = [
     }
   }),
 
+  contractTest(
+    'stateList exposes all state keys of a type and follows updates',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!a:example.org',
+              membership: 'join',
+              name: 'A',
+              stateEvents: [
+                {
+                  type: 'im.ponies.room_emotes',
+                  stateKey: 'pack1',
+                  content: { pack: { display_name: 'Pack One' } },
+                },
+                {
+                  type: 'im.ponies.room_emotes',
+                  stateKey: 'pack2',
+                  content: { pack: { display_name: 'Pack Two' } },
+                },
+              ],
+            },
+          ],
+        });
+        expect(
+          core.rooms.stateList('!a:example.org', 'im.ponies.room_emotes').getSnapshot().value
+        ).toEqual([
+          {
+            stateKey: 'pack1',
+            content: { pack: { display_name: 'Pack One' } },
+            eventId: expect.any(String),
+          },
+          {
+            stateKey: 'pack2',
+            content: { pack: { display_name: 'Pack Two' } },
+            eventId: expect.any(String),
+          },
+        ]);
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!a:example.org',
+              membership: 'join',
+              name: 'A',
+              stateEvents: [
+                {
+                  type: 'im.ponies.room_emotes',
+                  stateKey: 'pack1',
+                  content: { pack: { display_name: 'Pack One v2' } },
+                },
+              ],
+            },
+          ],
+        });
+        const entries = core.rooms
+          .stateList('!a:example.org', 'im.ponies.room_emotes')
+          .getSnapshot().value;
+        expect(entries).toHaveLength(1);
+        expect(entries[0]?.content).toEqual({ pack: { display_name: 'Pack One v2' } });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('sendState completes through the fake transport', async (harness) => {
     const core = await harness.create();
     try {
@@ -580,6 +660,21 @@ export const roomsCases = [
       });
       const result = await core.rooms.sendState('!a:example.org', 'm.room.topic', {
         topic: 'Updated',
+      });
+      expect(result.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('setAccountData completes through the fake transport', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'A' }],
+      });
+      const result = await core.rooms.setAccountData('!a:example.org', 'com.example.flag', {
+        enabled: true,
       });
       expect(result.ok).toBe(true);
     } finally {

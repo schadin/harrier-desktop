@@ -134,6 +134,12 @@ export type RoomAccountDataEntry = {
   readonly content: JsonObject;
 };
 
+export type RoomStateEntry = {
+  readonly stateKey: string;
+  readonly content: JsonObject;
+  readonly eventId?: string;
+};
+
 export type PublicRoomView = {
   readonly roomId: RoomId;
   readonly name?: string;

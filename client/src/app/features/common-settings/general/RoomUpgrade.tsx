@@ -16,7 +16,6 @@ import {
   Icons,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { MatrixError, Method } from 'matrix-js-sdk';
 import { RoomTombstoneEventContent } from 'matrix-js-sdk/lib/types';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
@@ -25,7 +24,8 @@ import { useRoom } from '../../../hooks/useRoom';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { IRoomCreateContent, StateEvent } from '../../../../types/matrix/room';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useStateEvent } from '../../../hooks/useStateEvent';
+import { useCore } from '../../../hooks/useCore';
+import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { useCapabilities } from '../../../hooks/useCapabilities';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -41,7 +41,7 @@ import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { BreakWord } from '../../../styles/Text.css';
 
 function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const alive = useAlive();
   const creators = useRoomCreators(room);
@@ -61,12 +61,13 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
   const [upgradeState, upgrade] = useAsyncCallback(
     useCallback(
       async (version: string, newAdditionalCreators?: string[]) => {
-        await mx.http.authedRequest(Method.Post, `/rooms/${room.roomId}/upgrade`, undefined, {
-          new_version: version,
-          additional_creators: newAdditionalCreators,
+        const result = await core.rooms.upgrade(room.roomId, {
+          newVersion: version,
+          additionalCreators: newAdditionalCreators,
         });
+        if (!result.ok) throw result.error;
       },
-      [mx, room]
+      [core, room]
     )
   );
 
@@ -139,7 +140,7 @@ function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
               </Box>
               {upgradeState.status === AsyncStatus.Error && (
                 <Text className={BreakWord} style={{ color: color.Critical.Main }} size="T200">
-                  {(upgradeState.error as MatrixError).message}
+                  {(upgradeState.error as Error).message}
                 </Text>
               )}
               <Button
@@ -166,17 +167,14 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
   const mx = useMatrixClient();
   const room = useRoom();
   const { navigateRoom, navigateSpace } = useRoomNavigate();
-  const createContent = useStateEvent(
-    room,
-    StateEvent.RoomCreate
-  )?.getContent<IRoomCreateContent>();
+  const createContent = useCoreRoomState<IRoomCreateContent>(room, StateEvent.RoomCreate);
   const roomVersion = createContent?.room_version ?? '1';
   const predecessorRoomId = createContent?.predecessor?.room_id;
 
-  const tombstoneContent = useStateEvent(
+  const tombstoneContent = useCoreRoomState<RoomTombstoneEventContent>(
     room,
     StateEvent.RoomTombstone
-  )?.getContent<RoomTombstoneEventContent>();
+  );
   const replacementRoom = tombstoneContent?.replacement_room;
 
   const canUpgrade = permissions.stateEvent(StateEvent.RoomTombstone, mx.getSafeUserId());

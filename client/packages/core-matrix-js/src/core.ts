@@ -14,6 +14,7 @@ import {
   type PublicRoomsResult,
   type ReactionCountView,
   type RoomAccountDataEntry,
+  type RoomStateEntry,
   type RoomSummaryView,
   type RoomView,
   type SendStatus,
@@ -547,6 +548,24 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
 
+  const stateListStores = new Map<string, WritableSnapshotStore<readonly RoomStateEntry[]>>();
+  const stateListKeyOf = (roomId: string, eventType: string) => `${roomId}|${eventType}`;
+  const buildStateList = (roomId: string, eventType: string): readonly RoomStateEntry[] => {
+    const events = client.getRoom(roomId)?.currentState.getStateEvents(eventType) ?? [];
+    return events.map((event) => ({
+      stateKey: event.getStateKey() ?? '',
+      content: event.getContent() as JsonObject,
+      eventId: event.getId() ?? undefined,
+    }));
+  };
+  const publishStateList = (roomId: string, eventType: string) => {
+    const store = stateListStores.get(stateListKeyOf(roomId, eventType));
+    if (!store) return;
+    const next = buildStateList(roomId, eventType);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+
   const buildRoomToParents = (): Map<string, readonly string[]> => {
     const roomToParents = new Map<string, readonly string[]>();
     const getAllParents = (roomId: string): Set<string> => {
@@ -676,6 +695,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     stateStores.forEach((_store, key) => {
       const [roomId, eventType, stateKey] = key.split('|');
       if (roomId && eventType && stateKey !== undefined) publishState(roomId, eventType, stateKey);
+    });
+    stateListStores.forEach((_store, key) => {
+      const [roomId, eventType] = key.split('|');
+      if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
   client.on(ClientEvent.Room, refresh);
@@ -816,6 +839,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         ensureAccountDataListener(roomId);
         return store;
       },
+      async setAccountData(roomId, type, content): Promise<CoreResult<void>> {
+        try {
+          await client.setRoomAccountData(roomId, type as never, content as never);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       parents(roomId) {
         const existing = parentsStores.get(roomId);
         if (existing) return existing;
@@ -829,6 +860,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildState(roomId, eventType, stateKey));
         stateStores.set(key, store);
+        return store;
+      },
+      stateList(roomId, eventType) {
+        const key = stateListKeyOf(roomId, eventType);
+        const existing = stateListStores.get(key);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildStateList(roomId, eventType));
+        stateListStores.set(key, store);
         return store;
       },
       async sendState(roomId, eventType, content, stateKey = ''): Promise<CoreResult<void>> {
@@ -948,6 +987,24 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
 
           return { ok: true, value: result.room_id };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async upgrade(roomId, params): Promise<CoreResult<string>> {
+        try {
+          const response = await client.http.authedRequest<{ replacement_room?: string }>(
+            Method.Post,
+            `/rooms/${roomId}/upgrade`,
+            undefined,
+            {
+              new_version: params.newVersion,
+              additional_creators: params.additionalCreators
+                ? [...params.additionalCreators]
+                : undefined,
+            }
+          );
+          return { ok: true, value: response.replacement_room ?? '' };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

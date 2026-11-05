@@ -6,6 +6,7 @@ import type {
   MemberView,
   PublicRoomView,
   RoomAccountDataEntry,
+  RoomStateEntry,
   RoomId,
   RoomSummaryView,
   RoomView,
@@ -70,6 +71,11 @@ export type CreateRoomParams = {
   };
 };
 
+export type RoomUpgradeParams = {
+  readonly newVersion: string;
+  readonly additionalCreators?: readonly string[];
+};
+
 export type RoomsModule = {
   readonly all: SnapshotStore<readonly RoomSummaryView[]>;
   readonly list: SnapshotStore<readonly RoomSummaryView[]>;
@@ -79,14 +85,17 @@ export type RoomsModule = {
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
+  setAccountData(roomId: RoomId, type: string, content: JsonObject): Promise<CoreResult<void>>;
   parents(roomId: RoomId): SnapshotStore<readonly RoomId[]>;
   join(roomIdOrAlias: string, viaServers?: readonly string[]): Promise<CoreResult<RoomId>>;
   leave(roomId: RoomId): Promise<CoreResult<void>>;
   invite(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
   createRoom(params: CreateRoomParams): Promise<CoreResult<RoomId>>;
+  upgrade(roomId: RoomId, params: RoomUpgradeParams): Promise<CoreResult<RoomId>>;
   searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;
   hierarchy(roomId: RoomId, params: HierarchyParams): Promise<CoreResult<PublicRoomsResult>>;
   state(roomId: RoomId, eventType: string, stateKey?: string): SnapshotStore<JsonObject | null>;
+  stateList(roomId: RoomId, eventType: string): SnapshotStore<readonly RoomStateEntry[]>;
   sendState(
     roomId: RoomId,
     eventType: string,

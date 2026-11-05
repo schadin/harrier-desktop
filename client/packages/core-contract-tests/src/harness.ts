@@ -49,6 +49,11 @@ export type SyncFixtureRoom = {
   readonly roomVersion?: string;
   readonly additionalCreators?: readonly string[];
   readonly accountData?: Record<string, Record<string, unknown>>;
+  readonly stateEvents?: readonly {
+    readonly type: string;
+    readonly stateKey: string;
+    readonly content: Record<string, unknown>;
+  }[];
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;
