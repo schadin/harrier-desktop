@@ -1,5 +1,6 @@
 import { useSetAtom, WritableAtom } from 'jotai';
 import { useEffect } from 'react';
+import { compareRoomIdsEqual } from '@harrier/core';
 import { Membership } from '../../../types/matrix/room';
 import { useCore } from '../../hooks/useCore';
 
@@ -37,7 +38,4 @@ export const useBindRoomsWithMembershipsAtom = (
   }, [core, memberships, setRoomsAtom]);
 };
 
-export const compareRoomsEqual = (a: string[], b: string[]) => {
-  if (a.length !== b.length) return false;
-  return a.every((roomId, roomIdIndex) => roomId === b[roomIdIndex]);
-};
+export const compareRoomsEqual = compareRoomIdsEqual;
