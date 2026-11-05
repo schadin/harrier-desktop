@@ -38,6 +38,8 @@ import { mDirectAtom } from '../../state/mDirectList';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
 import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
+import { useCore } from '../../hooks/useCore';
+import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { VirtualTile } from '../../components/virtualizer';
 import { mxcUrlToHttp, rateLimitedActions } from '../../utils/matrix';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
@@ -71,6 +73,7 @@ type AddExistingModalProps = {
 };
 export function AddExistingModal({ parentId, space, requestClose }: AddExistingModalProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const alive = useAlive();
 
@@ -133,19 +136,20 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
         await rateLimitedActions(selectedRooms, async (room) => {
           const via = room.viaServers;
 
-          await mx.sendStateEvent(
+          await sendRoomState(
+            core,
             parentId,
-            StateEvent.SpaceChild as any,
+            StateEvent.SpaceChild,
             {
               auto_join: false,
               suggested: false,
-              via,
+              via: [...via],
             },
             room.roomId
           );
         });
       },
-      [mx, parentId]
+      [core, parentId]
     )
   );
   const applyingChanges = applyState.status === AsyncStatus.Loading;

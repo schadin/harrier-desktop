@@ -36,6 +36,8 @@ import { mDirectAtom } from '../../state/mDirectList';
 import { makeLobbyCategoryId } from '../../state/closedLobbyCategories';
 import { useCategoryHandler } from '../../hooks/useCategoryHandler';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
+import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { getCanonicalAliasOrRoomId, rateLimitedActions } from '../../utils/matrix';
 import { getSpaceRoomPath } from '../../pages/pathUtils';
@@ -154,6 +156,7 @@ const useCanDropLobbyItem = (
 export function Lobby() {
   const navigate = useNavigate();
   const mx = useMatrixClient();
+  const core = useCore();
   const mDirects = useAtomValue(mDirectAtom);
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
@@ -296,16 +299,17 @@ export function Lobby() {
         if (reorders) {
           await rateLimitedActions(reorders, async (reorder) => {
             if (!reorder.item.parentId) return;
-            await mx.sendStateEvent(
+            await sendRoomState(
+              core,
               reorder.item.parentId,
-              StateEvent.SpaceChild as any,
+              StateEvent.SpaceChild,
               { ...reorder.item.content, order: reorder.orderKey },
               reorder.item.roomId
             );
           });
         }
       },
-      [mx, hierarchy, lex, roomsPowerLevels]
+      [core, mx, hierarchy, lex, roomsPowerLevels]
     )
   );
   const reorderingSpace = reorderSpaceState.status === AsyncStatus.Loading;
@@ -323,7 +327,7 @@ export function Lobby() {
 
         // remove from current space
         if (item.parentId !== containerParentId) {
-          mx.sendStateEvent(item.parentId, StateEvent.SpaceChild as any, {}, item.roomId);
+          sendRoomState(core, item.parentId, StateEvent.SpaceChild, {}, item.roomId);
         }
 
         if (
@@ -343,7 +347,7 @@ export function Lobby() {
               joinRuleContent.allow?.filter((allowRule) => allowRule.room_id !== item.parentId) ??
               [];
             allow.push({ type: RestrictedAllowType.RoomMembership, room_id: containerParentId });
-            mx.sendStateEvent(itemRoom.roomId, StateEvent.RoomJoinRules as any, {
+            sendRoomState(core, itemRoom.roomId, StateEvent.RoomJoinRules, {
               ...joinRuleContent,
               allow,
             });
@@ -383,16 +387,17 @@ export function Lobby() {
 
         if (reorders) {
           await rateLimitedActions(reorders, async (reorder) => {
-            await mx.sendStateEvent(
+            await sendRoomState(
+              core,
               containerParentId,
-              StateEvent.SpaceChild as any,
+              StateEvent.SpaceChild,
               { ...reorder.item.content, order: reorder.orderKey },
               reorder.item.roomId
             );
           });
         }
       },
-      [mx, hierarchy, lex]
+      [core, mx, hierarchy, lex]
     )
   );
   const reorderingRoom = reorderRoomState.status === AsyncStatus.Loading;

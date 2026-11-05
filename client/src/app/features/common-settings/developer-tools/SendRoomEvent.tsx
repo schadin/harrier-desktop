@@ -14,8 +14,11 @@ import {
   TextArea as TextAreaComponent,
   Input,
 } from 'folds';
+import type { JsonObject } from '@harrier/core';
 import { Page, PageHeader } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoom } from '../../../hooks/useRoom';
 import { useAlive } from '../../../hooks/useAlive';
 import { useTextAreaCodeEditor } from '../../../hooks/useTextAreaCodeEditor';
@@ -32,6 +35,7 @@ export type SendRoomEventProps = {
 };
 export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const alive = useAlive();
   const composeStateEvent = typeof stateKey === 'string';
@@ -49,13 +53,14 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
     [string, string | undefined, object]
   >(
     useCallback(
-      (evtType, evtStateKey, evtContent) => {
+      async (evtType, evtStateKey, evtContent) => {
         if (typeof evtStateKey === 'string') {
-          return mx.sendStateEvent(room.roomId, evtType as any, evtContent, evtStateKey);
+          await sendRoomState(core, room.roomId, evtType, evtContent as JsonObject, evtStateKey);
+          return evtContent;
         }
         return mx.sendEvent(room.roomId, evtType as any, evtContent);
       },
-      [mx, room]
+      [core, mx, room]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

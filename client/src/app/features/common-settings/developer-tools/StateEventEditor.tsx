@@ -14,6 +14,7 @@ import {
   Button,
 } from 'folds';
 import { MatrixError } from 'matrix-js-sdk';
+import type { JsonObject } from '@harrier/core';
 import { Page, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { TextViewerContent } from '../../../components/text-viewer';
@@ -21,6 +22,8 @@ import { useStateEvent } from '../../../hooks/useStateEvent';
 import { useRoom } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useAlive } from '../../../hooks/useAlive';
 import { Cursor } from '../../../plugins/text-area';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -41,7 +44,7 @@ type StateEventEditProps = {
   requestClose: () => void;
 };
 function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEditProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const alive = useAlive();
 
@@ -59,8 +62,11 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
 
   const [submitState, submit] = useAsyncCallback<object, MatrixError, [object]>(
     useCallback(
-      (c) => mx.sendStateEvent(room.roomId, type as any, c, stateKey),
-      [mx, room, type, stateKey]
+      async (c) => {
+        await sendRoomState(core, room.roomId, type, c as JsonObject, stateKey);
+        return c;
+      },
+      [core, room, type, stateKey]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

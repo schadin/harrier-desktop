@@ -19,10 +19,11 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoom } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -53,6 +54,7 @@ type RoomHistoryVisibilityProps = {
 };
 export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
 
   const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, mx.getSafeUserId());
@@ -78,9 +80,9 @@ export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProp
         const content: RoomHistoryVisibilityEventContent = {
           history_visibility: visibility,
         };
-        await mx.sendStateEvent(room.roomId, StateEvent.RoomHistoryVisibility as any, content);
+        await sendRoomState(core, room.roomId, StateEvent.RoomHistoryVisibility, content);
       },
-      [mx, room.roomId]
+      [core, room.roomId]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

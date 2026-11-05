@@ -14,7 +14,8 @@ import {
 import { PermissionGroup } from './types';
 import { getPowerLevelTag, getPowers, usePowerLevelTags } from '../../../hooks/usePowerLevelTags';
 import { useRoom } from '../../../hooks/useRoom';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../../types/matrix/room';
 import { PowerSwitcher } from '../../../components/power';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -34,7 +35,7 @@ export function PermissionGroups({
   permissionGroups,
   canEdit,
 }: PermissionGroupsProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const alive = useAlive();
 
@@ -85,8 +86,8 @@ export function PermissionGroups({
 
         return draftPowerLevels;
       });
-      await mx.sendStateEvent(room.roomId, StateEvent.RoomPowerLevels as any, editedPowerLevels);
-    }, [mx, room, powerLevels, permissionUpdate, permissionGroups])
+      await sendRoomState(core, room.roomId, StateEvent.RoomPowerLevels, editedPowerLevels);
+    }, [core, room, powerLevels, permissionUpdate, permissionGroups])
   );
 
   const resetChanges = useCallback(() => {

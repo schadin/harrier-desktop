@@ -31,6 +31,8 @@ import { LineClamp2 } from '../../../styles/Text.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
@@ -46,7 +48,7 @@ type CreatePackTileProps = {
   roomId: string;
 };
 function CreatePackTile({ packs, roomId }: CreatePackTileProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const [addState, addPack] = useAsyncCallback<void, MatrixError, [string, string]>(
@@ -57,9 +59,9 @@ function CreatePackTile({ packs, roomId }: CreatePackTileProps) {
             display_name: name,
           },
         };
-        await mx.sendStateEvent(roomId, StateEvent.PoniesRoomEmotes as any, content, stateKey);
+        await sendRoomState(core, roomId, StateEvent.PoniesRoomEmotes, content, stateKey);
       },
-      [mx, roomId]
+      [core, roomId]
     )
   );
 
@@ -143,6 +145,7 @@ type RoomPacksProps = {
 };
 export function RoomPacks({ onViewPack }: RoomPacksProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const alive = useAlive();
@@ -164,9 +167,9 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
       for (let i = 0; i < removedPacks.length; i += 1) {
         const addr = removedPacks[i];
         // eslint-disable-next-line no-await-in-loop
-        await mx.sendStateEvent(room.roomId, StateEvent.PoniesRoomEmotes as any, {}, addr.stateKey);
+        await sendRoomState(core, room.roomId, StateEvent.PoniesRoomEmotes, {}, addr.stateKey);
       }
-    }, [mx, room, removedPacks])
+    }, [core, room, removedPacks])
   );
   const applyingChanges = applyState.status === AsyncStatus.Loading;
 

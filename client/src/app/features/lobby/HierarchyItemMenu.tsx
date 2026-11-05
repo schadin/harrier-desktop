@@ -17,6 +17,8 @@ import {
 } from 'folds';
 import { HierarchyItem } from '../../hooks/useSpaceHierarchy';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
+import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { MSpaceChildContent, StateEvent } from '../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -42,14 +44,14 @@ function SuggestMenuItem({
   item: HierarchyItemWithParent;
   requestClose: () => void;
 }) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const { roomId, parentId, content } = item;
 
   const [toggleState, handleToggleSuggested] = useAsyncCallback(
     useCallback(() => {
       const newContent: MSpaceChildContent = { ...content, suggested: !content.suggested };
-      return mx.sendStateEvent(parentId, StateEvent.SpaceChild as any, newContent, roomId);
-    }, [mx, parentId, roomId, content])
+      return sendRoomState(core, parentId, StateEvent.SpaceChild, newContent, roomId);
+    }, [core, parentId, roomId, content])
   );
 
   useEffect(() => {
@@ -80,13 +82,13 @@ function RemoveMenuItem({
   item: HierarchyItemWithParent;
   requestClose: () => void;
 }) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const { roomId, parentId } = item;
 
   const [removeState, handleRemove] = useAsyncCallback(
     useCallback(
-      () => mx.sendStateEvent(parentId, StateEvent.SpaceChild as any, {}, roomId),
-      [mx, parentId, roomId]
+      () => sendRoomState(core, parentId, StateEvent.SpaceChild, {}, roomId),
+      [core, parentId, roomId]
     )
   );
 

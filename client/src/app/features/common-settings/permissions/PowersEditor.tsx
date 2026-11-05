@@ -40,6 +40,8 @@ import { useImagePackRooms } from '../../../hooks/useImagePackRooms';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useFilePicker } from '../../../hooks/useFilePicker';
 import { CompactUploadCardRenderer } from '../../../components/upload-card';
 import { createUploadAtom, UploadSuccess } from '../../../state/upload';
@@ -290,6 +292,7 @@ type PowersEditorProps = {
 };
 export function PowersEditor({ powerLevels, requestClose }: PowersEditorProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const alive = useAlive();
@@ -333,8 +336,8 @@ export function PowersEditor({ powerLevels, requestClose }: PowersEditorProps) {
       deleted.forEach((power) => {
         delete content[power];
       });
-      await mx.sendStateEvent(room.roomId, StateEvent.PowerLevelTags as any, content);
-    }, [mx, room, powerLevelTags, editedPowerTags, deleted])
+      await sendRoomState(core, room.roomId, StateEvent.PowerLevelTags, content);
+    }, [core, room, powerLevelTags, editedPowerTags, deleted])
   );
 
   const resetChanges = useCallback(() => {

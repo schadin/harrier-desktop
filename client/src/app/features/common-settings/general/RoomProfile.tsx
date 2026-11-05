@@ -26,6 +26,8 @@ import { LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
 import { RoomAvatar, RoomIcon } from '../../../components/room-avatar';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { StateEvent } from '../../../../types/matrix/room';
 import { CompactUploadCardRenderer } from '../../../components/upload-card';
@@ -56,6 +58,7 @@ export function RoomProfileEdit({
 }: RoomProfileEditProps) {
   const room = useRoom();
   const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
   const useAuthentication = useMediaAuthentication();
   const { joinRule } = useCoreRoomMeta(room.roomId);
@@ -88,18 +91,18 @@ export function RoomProfileEdit({
     useCallback(
       async (roomAvatarMxc?: string | null, roomName?: string, roomTopic?: string) => {
         if (roomAvatarMxc !== undefined) {
-          await mx.sendStateEvent(room.roomId, StateEvent.RoomAvatar as any, {
+          await sendRoomState(core, room.roomId, StateEvent.RoomAvatar, {
             url: roomAvatarMxc,
           });
         }
         if (roomName !== undefined) {
-          await mx.sendStateEvent(room.roomId, StateEvent.RoomName as any, { name: roomName });
+          await sendRoomState(core, room.roomId, StateEvent.RoomName, { name: roomName });
         }
         if (roomTopic !== undefined) {
-          await mx.sendStateEvent(room.roomId, StateEvent.RoomTopic as any, { topic: roomTopic });
+          await sendRoomState(core, room.roomId, StateEvent.RoomTopic, { topic: roomTopic });
         }
       },
-      [mx, room.roomId]
+      [core, room.roomId]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

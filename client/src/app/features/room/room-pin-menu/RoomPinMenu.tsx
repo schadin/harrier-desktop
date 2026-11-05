@@ -43,6 +43,8 @@ import {
 import { UserAvatar } from '../../../components/user-avatar';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import {
   getEditedEvent,
   getMemberAvatarMxc,
@@ -115,6 +117,7 @@ function PinnedMessage({
   const pinnedEvent = useRoomEvent(room, eventId);
   const useAuthentication = useMediaAuthentication();
   const mx = useMatrixClient();
+  const core = useCore();
 
   const [unpinState, unpin] = useAsyncCallback(
     useCallback(() => {
@@ -124,8 +127,10 @@ function PinnedMessage({
         pinned: content.pinned.filter((id) => id !== eventId),
       };
 
-      return mx.sendStateEvent(room.roomId, StateEvent.RoomPinnedEvents as any, newContent);
-    }, [room, eventId, mx])
+      return sendRoomState(core, room.roomId, StateEvent.RoomPinnedEvents, newContent).then(
+        () => newContent
+      );
+    }, [core, room, eventId])
   );
 
   const handleOpenClick: MouseEventHandler = (evt) => {

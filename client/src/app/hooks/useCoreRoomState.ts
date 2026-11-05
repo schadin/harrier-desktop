@@ -1,7 +1,18 @@
-import type { JsonObject } from '@harrier/core';
+import type { HarrierCore, JsonObject } from '@harrier/core';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { Room } from 'matrix-js-sdk';
 import { useCore } from './useCore';
+
+export const sendRoomState = async (
+  core: HarrierCore,
+  roomId: string,
+  eventType: string,
+  content: object,
+  stateKey?: string
+): Promise<void> => {
+  const result = await core.rooms.sendState(roomId, eventType, content as JsonObject, stateKey);
+  if (!result.ok) throw result.error;
+};
 
 export function useCoreRoomState<T = JsonObject>(
   room: Room,

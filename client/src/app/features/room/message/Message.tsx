@@ -57,6 +57,8 @@ import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { timeDayMonthYear, timeHourMinute } from '../../../utils/time';
 import { MessageLayout, MessageSpacing } from '../../../state/settings';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
 import * as css from './styles.css';
 import { EventReaders } from '../../../components/event-readers';
@@ -420,7 +422,7 @@ export const MessagePinItem = as<
     onClose?: () => void;
   }
 >(({ room, mEvent, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
+  const core = useCore();
   const pinnedEvents = useRoomPinnedEvents(room);
   const isPinned = pinnedEvents.includes(mEvent.getId() ?? '');
 
@@ -432,7 +434,7 @@ export const MessagePinItem = as<
     if (!isPinned && eventId) {
       pinContent.pinned.push(eventId);
     }
-    mx.sendStateEvent(room.roomId, StateEvent.RoomPinnedEvents as any, pinContent);
+    sendRoomState(core, room.roomId, StateEvent.RoomPinnedEvents, pinContent);
     onClose?.();
   };
 

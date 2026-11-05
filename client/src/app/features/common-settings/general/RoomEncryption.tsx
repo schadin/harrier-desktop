@@ -22,10 +22,11 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useRoom } from '../../../hooks/useRoom';
-import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -36,6 +37,7 @@ type RoomEncryptionProps = {
 };
 export function RoomEncryption({ permissions }: RoomEncryptionProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
 
   const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, mx.getSafeUserId());
@@ -44,10 +46,10 @@ export function RoomEncryption({ permissions }: RoomEncryptionProps) {
 
   const [enableState, enable] = useAsyncCallback(
     useCallback(async () => {
-      await mx.sendStateEvent(room.roomId, StateEvent.RoomEncryption as any, {
+      await sendRoomState(core, room.roomId, StateEvent.RoomEncryption, {
         algorithm: ROOM_ENC_ALGO,
       });
-    }, [mx, room.roomId])
+    }, [core, room.roomId])
   );
 
   const enabling = enableState.status === AsyncStatus.Loading;

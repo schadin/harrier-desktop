@@ -13,6 +13,8 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoom } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useStateEvent } from '../../../hooks/useStateEvent';
@@ -42,6 +44,7 @@ type RoomJoinRulesProps = {
 };
 export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const allowKnockRestricted = knockRestrictedSupported(room.getVersion());
   const allowRestricted = restrictedSupported(room.getVersion());
@@ -111,9 +114,9 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
           join_rule: joinRule as JoinRule,
         };
         if (allow.length > 0) c.allow = allow;
-        await mx.sendStateEvent(room.roomId, StateEvent.RoomJoinRules as any, c);
+        await sendRoomState(core, room.roomId, StateEvent.RoomJoinRules, c);
       },
-      [mx, room, space, subspaces, roomIdToParents]
+      [core, room, space, subspaces, roomIdToParents]
     )
   );
 

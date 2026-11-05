@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { Room } from 'matrix-js-sdk';
-import type { StateEvents } from 'matrix-js-sdk/lib/@types/event';
+import type { JsonObject } from '@harrier/core';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
+import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { ImagePackContent } from './ImagePackContent';
 import { ImagePack, PackContent } from '../../plugins/custom-emoji';
 import { StateEvent } from '../../../types/matrix/room';
@@ -18,6 +20,7 @@ type RoomImagePackProps = {
 
 export function RoomImagePack({ room, stateKey }: RoomImagePackProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const userId = mx.getUserId()!;
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
@@ -43,14 +46,15 @@ export function RoomImagePack({ room, stateKey }: RoomImagePackProps) {
       const { address } = imagePack;
       if (!address) return;
 
-      await mx.sendStateEvent(
+      await sendRoomState(
+        core,
         address.roomId,
-        StateEvent.PoniesRoomEmotes as unknown as keyof StateEvents,
-        packContent as unknown as StateEvents[keyof StateEvents],
+        StateEvent.PoniesRoomEmotes,
+        packContent as unknown as JsonObject,
         address.stateKey
       );
     },
-    [mx, imagePack]
+    [core, imagePack]
   );
 
   return (
