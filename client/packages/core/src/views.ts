@@ -102,11 +102,19 @@ export type TimelineItem =
       readonly threadRoot?: EventId;
     })
   | (TimelineBase & {
+      readonly kind: 'sticker';
+      readonly content: JsonObject;
+    })
+  | (TimelineBase & {
       readonly kind: 'state';
       readonly eventType: string;
       readonly stateKey: string;
+      readonly content: JsonObject;
     })
-  | (TimelineBase & { readonly kind: 'encrypted'; readonly failure?: DecryptionFailureReason })
+  | (TimelineBase & {
+      readonly kind: 'encrypted';
+      readonly failure?: DecryptionFailureReason;
+    })
   | (TimelineBase & { readonly kind: 'redacted' })
   | (TimelineBase & { readonly kind: 'unsupported'; readonly eventType: string });
 

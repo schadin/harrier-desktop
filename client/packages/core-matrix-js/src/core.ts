@@ -177,6 +177,8 @@ const dmUserIdOf = (room: Room): string => {
   );
 };
 
+const isReaction = (event: MatrixEvent): boolean => event.getType() === 'm.reaction';
+
 const toItem = (
   roomId: string,
   event: MatrixEvent,
@@ -192,8 +194,9 @@ const toItem = (
   };
   if (event.isRedacted()) return { ...base, kind: 'redacted', preview: 'Message deleted' };
 
-  const content = event.getContent<{ msgtype?: string; body?: string }>();
-  if (event.getType() === 'm.room.encrypted') {
+  const eventType = event.getType();
+  if (eventType === 'm.room.encrypted') {
+    const content = event.getContent<{ msgtype?: string }>();
     return {
       ...base,
       kind: 'encrypted',
@@ -202,6 +205,31 @@ const toItem = (
     };
   }
 
+  if (eventType === 'm.sticker') {
+    return {
+      ...base,
+      kind: 'sticker',
+      preview: previewText(event.getContent<{ body?: string }>().body ?? ''),
+      content: event.getContent() as JsonObject,
+    };
+  }
+
+  if (typeof event.getStateKey() === 'string') {
+    return {
+      ...base,
+      kind: 'state',
+      eventType,
+      stateKey: event.getStateKey() ?? '',
+      preview: eventType,
+      content: event.getContent() as JsonObject,
+    };
+  }
+
+  if (eventType !== 'm.room.message') {
+    return { ...base, kind: 'unsupported', eventType, preview: eventType };
+  }
+
+  const content = event.getContent<{ msgtype?: string; body?: string }>();
   const body = latestEdit.get(eventId) ?? content.body ?? '';
   const replyTo = replyTargetOf(event);
   const relation = event.getRelation();
@@ -220,6 +248,9 @@ const toItem = (
     ...(reactions.length > 0 ? { reactions } : {}),
   };
 };
+
+const renderableEvents = (events: readonly MatrixEvent[]): MatrixEvent[] =>
+  events.filter((event) => !isEdit(event) && !isReaction(event));
 
 const toTimelineView = (
   roomId: string,
@@ -251,12 +282,7 @@ const toTimelineView = (
     countsByTarget.set(target, counts);
   });
 
-  const items = events
-    .filter(
-      (event) =>
-        !isEdit(event) &&
-        (event.getType() === 'm.room.message' || event.getType() === 'm.room.encrypted')
-    )
+  const items = renderableEvents(events)
     .map((event) => {
       const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
       const reactions = [...counts].map(([key, count]) => ({ key, count }));
@@ -287,6 +313,16 @@ const firstLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
     previous = first.getNeighbouringTimeline(Direction.Backward);
   }
   return first;
+};
+
+const lastLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
+  let last = timeline;
+  let next = last.getNeighbouringTimeline(Direction.Forward);
+  while (next) {
+    last = next;
+    next = last.getNeighbouringTimeline(Direction.Forward);
+  }
+  return last;
 };
 
 const collectLinkedEvents = (timeline: EventTimeline): MatrixEvent[] => {
@@ -1134,6 +1170,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: false, error: toCoreError(error) };
         }
       },
+      async paginateForward(roomId, limit): Promise<CoreResult<void>> {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        try {
+          const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
+          const last = lastLinkedTimeline(anchor);
+          if (last.getPaginationToken(EventTimeline.FORWARDS) != null) {
+            await client.paginateEventTimeline(last, { backwards: false, limit });
+            timelines.get(roomId)?.publish(buildTimeline(roomId));
+          }
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async focusEvent(roomId, eventId): Promise<CoreResult<number>> {
         const room = client.getRoom(roomId);
         if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
@@ -1146,8 +1197,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             };
           }
           for (let attempt = 0; attempt < 10; attempt += 1) {
-            const events = collectLinkedEvents(timeline);
-            const index = events.findIndex((event) => event.getId() === eventId);
+            const renderable = renderableEvents(collectLinkedEvents(timeline));
+            const index = renderable.findIndex((event) => event.getId() === eventId);
             if (index >= 0) {
               focusedTimelines.set(roomId, { timeline, eventId });
               timelines.get(roomId)?.publish(buildTimeline(roomId));

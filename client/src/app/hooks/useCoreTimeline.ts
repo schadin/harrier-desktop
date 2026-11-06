@@ -18,6 +18,15 @@ export const paginateCoreTimelineBackward = async (
   if (!result.ok) throw result.error;
 };
 
+export const paginateCoreTimelineForward = async (
+  core: HarrierCore,
+  roomId: string,
+  limit: number
+): Promise<void> => {
+  const result = await core.timeline.paginateForward(roomId, limit);
+  if (!result.ok) throw result.error;
+};
+
 export const focusCoreEvent = async (
   core: HarrierCore,
   roomId: string,

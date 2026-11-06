@@ -5,7 +5,7 @@ describe('public contract consumer', () => {
   it('exposes the root interface and timeline item union without SDK types', () => {
     expectTypeOf<HarrierCore['capabilities']>().toMatchTypeOf<{ calls: boolean }>();
     expectTypeOf<TimelineItem['kind']>().toEqualTypeOf<
-      'message' | 'state' | 'encrypted' | 'redacted' | 'unsupported'
+      'message' | 'sticker' | 'state' | 'encrypted' | 'redacted' | 'unsupported'
     >();
   });
 });

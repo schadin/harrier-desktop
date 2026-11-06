@@ -114,6 +114,7 @@ export type RoomsModule = {
 export type TimelineModule = {
   timeline(roomId: RoomId): SnapshotStore<TimelineView>;
   paginateBackward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
+  paginateForward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
   focusEvent(roomId: RoomId, eventId: EventId): Promise<CoreResult<number>>;
   clearFocus(roomId: RoomId): void;
 };

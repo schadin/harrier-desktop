@@ -452,6 +452,28 @@ export const timelineCases = [
     }
   }),
 
+  contractTest('paginateForward is a no-op on the live chain', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'only' }],
+          },
+        ],
+      });
+      const result = await core.timeline.paginateForward('!room:example.org', 10);
+      expect(result.ok).toBe(true);
+      const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+      expect(timeline.items.map((item) => item.eventId)).toEqual(['$1']);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('focusEvent fails for an unknown event', async (harness) => {
     const core = await harness.create();
     try {
