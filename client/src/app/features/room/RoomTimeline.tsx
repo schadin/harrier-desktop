@@ -124,7 +124,6 @@ import { useAccessiblePowerTagColors, useGetMemberPowerTag } from '../../hooks/u
 import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
-import { useRoomReadMarkers } from '../../hooks/useRoomReadMarkers';
 import { useCore } from '../../hooks/useCore';
 import {
   clearCoreTimelineFocus,
@@ -166,6 +165,14 @@ type RoomTimelineProps = {
 
 const PAGINATION_LIMIT = 80;
 
+const itemTimelineType = (item: TimelineItem): string => {
+  if (item.kind === 'state' || item.kind === 'unsupported') return item.eventType;
+  if (item.kind === 'sticker') return 'm.sticker';
+  if (item.kind === 'encrypted') return 'm.room.encrypted';
+  if (item.kind === 'redacted') return 'm.room.message';
+  return 'm.room.message';
+};
+
 const isEditableItem = (item: TimelineItem, myUserId: string | null | undefined): boolean =>
   item.kind === 'message' &&
   item.sender === myUserId &&
@@ -189,12 +196,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   );
   const [roomReadReceipts] = useSetting(settingsAtom, 'roomReadReceipts');
   const [directReadReceipts] = useSetting(settingsAtom, 'directReadReceipts');
-  const readMarkers = useRoomReadMarkers(room);
   const showReadReceiptAvatars = direct
     ? directReadReceipts === 'avatars'
     : roomReadReceipts === 'avatars';
-  const getReadReceiptUsers = (mEventId?: string): string[] | undefined =>
-    showReadReceiptAvatars && mEventId ? readMarkers.get(mEventId) : undefined;
+  const itemReactions = (timelineItem: TimelineItem) =>
+    timelineItem.kind === 'message' ? timelineItem.reactions : undefined;
+  const getReadReceiptUsers = (timelineItem: TimelineItem): string[] | undefined => {
+    if (!showReadReceiptAvatars || timelineItem.kind !== 'message') return undefined;
+    return timelineItem.readBy ? [...timelineItem.readBy] : undefined;
+  };
   const [hideMembershipEvents] = useSetting(settingsAtom, 'hideMembershipEvents');
   const [hideNickAvatarEvents] = useSetting(settingsAtom, 'hideNickAvatarEvents');
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
@@ -811,13 +821,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const { t } = useTranslation();
 
   const renderMatrixEvent = useMatrixEventRenderer<
-    [string, MatrixEvent, number, EventTimelineSet, boolean]
+    [string, MatrixEvent, number, EventTimelineSet, boolean, TimelineItem]
   >(
     {
-      [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse) => {
+      [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
-        const hasReactions = reactions && reactions.length > 0;
+        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
         const { replyEventId, threadRootId } = mEvent;
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
@@ -886,7 +895,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(senderId)}
             accessibleTagColors={accessiblePowerTagColors}
@@ -942,10 +951,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Message>
         );
       },
-      [MessageEvent.RoomMessageEncrypted]: (mEventId, mEvent, item, timelineSet, collapse) => {
+      [MessageEvent.RoomMessageEncrypted]: (
+        mEventId,
+        mEvent,
+        item,
+        timelineSet,
+        collapse,
+        timelineItem
+      ) => {
         const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
-        const hasReactions = reactions && reactions.length > 0;
+        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
         const { replyEventId, threadRootId } = mEvent;
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
@@ -1001,7 +1016,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
             accessibleTagColors={accessiblePowerTagColors}
@@ -1069,10 +1084,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Message>
         );
       },
-      [MessageEvent.Sticker]: (mEventId, mEvent, item, timelineSet, collapse) => {
+      [MessageEvent.Sticker]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const reactions = reactionRelations && reactionRelations.getSortedAnnotationsByKey();
-        const hasReactions = reactions && reactions.length > 0;
+        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
         return (
@@ -1108,7 +1122,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
             memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
             accessibleTagColors={accessiblePowerTagColors}
@@ -1134,7 +1148,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Message>
         );
       },
-      [StateEvent.RoomMember]: (mEventId, mEvent, item) => {
+      [StateEvent.RoomMember]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const membershipChanged = isMembershipChanged(mEvent);
         if (membershipChanged && hideMembershipEvents) return null;
         if (!membershipChanged && hideNickAvatarEvents) return null;
@@ -1162,7 +1176,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1180,7 +1194,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Event>
         );
       },
-      [StateEvent.RoomName]: (mEventId, mEvent, item) => {
+      [StateEvent.RoomName]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
@@ -1205,7 +1219,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1224,7 +1238,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Event>
         );
       },
-      [StateEvent.RoomTopic]: (mEventId, mEvent, item) => {
+      [StateEvent.RoomTopic]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
@@ -1249,7 +1263,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1268,7 +1282,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Event>
         );
       },
-      [StateEvent.RoomAvatar]: (mEventId, mEvent, item) => {
+      [StateEvent.RoomAvatar]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
@@ -1293,7 +1307,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1312,7 +1326,14 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           </Event>
         );
       },
-      [StateEvent.GroupCallMemberPrefix]: (mEventId, mEvent, item) => {
+      [StateEvent.GroupCallMemberPrefix]: (
+        mEventId,
+        mEvent,
+        item,
+        timelineSet,
+        collapse,
+        timelineItem
+      ) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const senderId = mEvent.getSender() ?? '';
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
@@ -1345,7 +1366,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageSpacing={messageSpacing}
             canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
             hideReadReceipts={hideActivity}
-            readReceiptUsers={getReadReceiptUsers(mEventId)}
+            readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
           >
             <EventContent
@@ -1365,7 +1386,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         );
       },
     },
-    (mEventId, mEvent, item) => {
+    (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
       if (!showHiddenEvents) return null;
       const highlighted = focusItem?.index === item && focusItem.highlight;
       const senderId = mEvent.getSender() ?? '';
@@ -1391,7 +1412,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           messageSpacing={messageSpacing}
           canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
           hideReadReceipts={hideActivity}
-          readReceiptUsers={getReadReceiptUsers(mEventId)}
+          readReceiptUsers={getReadReceiptUsers(timelineItem)}
           showDeveloperTools={showDeveloperTools}
         >
           <EventContent
@@ -1412,7 +1433,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         </Event>
       );
     },
-    (mEventId, mEvent, item) => {
+    (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
       if (!showHiddenEvents) return null;
       if (Object.keys(mEvent.getContent()).length === 0) return null;
       if (mEvent.getRelation()) return null;
@@ -1442,7 +1463,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           messageSpacing={messageSpacing}
           canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
           hideReadReceipts={hideActivity}
-          readReceiptUsers={getReadReceiptUsers(mEventId)}
+          readReceiptUsers={getReadReceiptUsers(timelineItem)}
           showDeveloperTools={showDeveloperTools}
         >
           <EventContent
@@ -1465,7 +1486,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
   );
 
-  let prevEvent: MatrixEvent | undefined;
+  let prevItem: TimelineItem | undefined;
   let isPrevRendered = false;
   let newDivider = false;
   let dayDivider = false;
@@ -1478,7 +1499,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     if (!mEvent || !mEventId) return null;
 
-    const eventSender = mEvent.getSender();
+    const eventSender = timelineItem.sender;
     if (
       !isVisibleTimelineEvent(mEvent, {
         hideMembershipEvents,
@@ -1491,20 +1512,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     }
 
     if (!newDivider && readUptoEventIdRef.current) {
-      newDivider = prevEvent?.getId() === readUptoEventIdRef.current;
+      newDivider = prevItem?.eventId === readUptoEventIdRef.current;
     }
     if (!dayDivider) {
-      dayDivider = prevEvent ? !inSameDay(prevEvent.getTs(), mEvent.getTs()) : false;
+      dayDivider = prevItem ? !inSameDay(prevItem.timestamp, timelineItem.timestamp) : false;
     }
 
     const collapsed =
       isPrevRendered &&
       !dayDivider &&
       (!newDivider || eventSender === mx.getUserId()) &&
-      prevEvent !== undefined &&
-      prevEvent.getSender() === eventSender &&
-      prevEvent.getType() === mEvent.getType() &&
-      minuteDifference(prevEvent.getTs(), mEvent.getTs()) < 2;
+      prevItem !== undefined &&
+      prevItem.sender === eventSender &&
+      itemTimelineType(prevItem) === itemTimelineType(timelineItem) &&
+      minuteDifference(prevItem.timestamp, timelineItem.timestamp) < 2;
 
     const collapseBotCommand =
       botCollapseAllowed &&
@@ -1536,16 +1557,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       );
     } else {
       eventJSX = renderMatrixEvent(
-        mEvent.getType(),
-        typeof mEvent.getStateKey() === 'string',
+        itemTimelineType(timelineItem),
+        timelineItem.kind === 'state',
         mEventId,
         mEvent,
         item,
         timelineSet,
-        collapsed
+        collapsed,
+        timelineItem
       );
     }
-    prevEvent = mEvent;
+    prevItem = timelineItem;
     isPrevRendered = !!eventJSX;
 
     const newDividerJSX =
