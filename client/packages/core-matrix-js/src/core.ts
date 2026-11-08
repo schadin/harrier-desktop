@@ -8,6 +8,8 @@ import {
   type JsonObject,
   type MemberView,
   type Membership,
+  type MessageAttachmentKind,
+  type MessageAttachmentView,
   type NotificationMode,
   type PresenceView,
   type PublicRoomView,
@@ -115,6 +117,63 @@ const previewText = (body: string): string => {
   return cleaned.length <= 100 ? cleaned : `${cleaned.slice(0, 100).trimEnd()}…`;
 };
 
+const stringOrUndefined = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const numberOrUndefined = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const attachmentKind = (msgtype: string): MessageAttachmentKind | undefined => {
+  switch (msgtype) {
+    case 'm.image':
+      return 'image';
+    case 'm.video':
+      return 'video';
+    case 'm.audio':
+      return 'audio';
+    case 'm.file':
+      return 'file';
+    case 'm.location':
+      return 'location';
+    default:
+      return undefined;
+  }
+};
+
+const attachmentOf = (content: JsonObject): MessageAttachmentView | undefined => {
+  const msgtype = stringOrUndefined(content.msgtype) ?? '';
+  const kind = attachmentKind(msgtype);
+  if (!kind) return undefined;
+  const info = (content.info ?? {}) as JsonObject;
+  const mxcUrl = stringOrUndefined(content.url);
+  const filename =
+    stringOrUndefined(content.filename) ??
+    (kind === 'location' ? undefined : stringOrUndefined(content.body));
+  const mimetype = stringOrUndefined(info.mimetype);
+  const size = numberOrUndefined(info.size);
+  const width = numberOrUndefined(info.w);
+  const height = numberOrUndefined(info.h);
+  const duration = numberOrUndefined(info.duration);
+  const geoUri = stringOrUndefined(content.geo_uri);
+  return {
+    kind,
+    ...(mxcUrl !== undefined ? { mxcUrl } : {}),
+    ...(filename !== undefined ? { filename } : {}),
+    ...(mimetype !== undefined ? { mimetype } : {}),
+    ...(size !== undefined ? { size } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(duration !== undefined ? { duration } : {}),
+    ...(geoUri !== undefined ? { geoUri } : {}),
+  };
+};
+
+type EditedMessage = {
+  readonly body: string;
+  readonly formattedBody?: string;
+  readonly format?: string;
+};
+
 const viaServersOf = (room: Room): readonly string[] => {
   const serverOf = (userId: string) => {
     const separator = userId.indexOf(':');
@@ -182,7 +241,7 @@ const isReaction = (event: MatrixEvent): boolean => event.getType() === 'm.react
 const toItem = (
   roomId: string,
   event: MatrixEvent,
-  latestEdit: ReadonlyMap<string, string>,
+  latestEdit: ReadonlyMap<string, EditedMessage>,
   reactions: readonly ReactionCountView[]
 ): TimelineItem => {
   const eventId = event.getId() ?? '';
@@ -229,8 +288,18 @@ const toItem = (
     return { ...base, kind: 'unsupported', eventType, preview: eventType };
   }
 
-  const content = event.getContent<{ msgtype?: string; body?: string }>();
-  const body = latestEdit.get(eventId) ?? content.body ?? '';
+  const rawContent = event.getContent() as JsonObject;
+  const content = event.getContent<{
+    msgtype?: string;
+    body?: string;
+    formatted_body?: string;
+    format?: string;
+  }>();
+  const edit = latestEdit.get(eventId);
+  const body = edit?.body ?? content.body ?? '';
+  const formattedBody = edit?.formattedBody ?? content.formatted_body;
+  const format = edit?.format ?? content.format;
+  const attachment = attachmentOf(rawContent);
   const replyTo = replyTargetOf(event);
   const relation = event.getRelation();
   const threadRoot = relation?.rel_type === 'm.thread' ? relation.event_id : undefined;
@@ -241,8 +310,11 @@ const toItem = (
     content: {
       msgtype: content.msgtype ?? 'm.text',
       body,
+      ...(formattedBody !== undefined && format !== undefined ? { formattedBody, format } : {}),
+      ...(attachment !== undefined ? { attachment } : {}),
     },
     status: toSendStatus(event.status),
+    ...(edit !== undefined ? { edited: true } : {}),
     ...(replyTo !== undefined ? { replyTo } : {}),
     ...(threadRoot !== undefined ? { threadRoot } : {}),
     ...(reactions.length > 0 ? { reactions } : {}),
@@ -259,13 +331,21 @@ const toTimelineView = (
   hasBackwardHistory: boolean,
   focusedEventId?: string
 ): TimelineView => {
-  const latestEdit = new Map<string, string>();
+  const latestEdit = new Map<string, EditedMessage>();
   events.forEach((event) => {
     if (!isEdit(event)) return;
     const target = event.getRelation()?.event_id;
-    const body = event.getContent<{ 'm.new_content'?: { body?: unknown } }>()['m.new_content']
-      ?.body;
-    if (target && typeof body === 'string') latestEdit.set(target, body);
+    const newContent = event.getContent<{
+      'm.new_content'?: { body?: unknown; formatted_body?: unknown; format?: unknown };
+    }>()['m.new_content'];
+    const body = newContent?.body;
+    if (!target || typeof body !== 'string') return;
+    latestEdit.set(target, {
+      body,
+      ...(typeof newContent?.formatted_body === 'string' && typeof newContent?.format === 'string'
+        ? { formattedBody: newContent.formatted_body, format: newContent.format }
+        : {}),
+    });
   });
 
   const countsByTarget = new Map<string, Map<string, number>>();
@@ -282,18 +362,17 @@ const toTimelineView = (
     countsByTarget.set(target, counts);
   });
 
-  const items = renderableEvents(events)
-    .map((event) => {
-      const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
-      const reactions = [...counts].map(([key, count]) => ({ key, count }));
-      const item = toItem(roomId, event, latestEdit, reactions);
-      const readers = room
-        ? room
-            .getUsersReadUpTo(event)
-            .filter((userId) => userId !== room.myUserId && userId !== event.getSender())
-        : [];
-      return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
-    });
+  const items = renderableEvents(events).map((event) => {
+    const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
+    const reactions = [...counts].map(([key, count]) => ({ key, count }));
+    const item = toItem(roomId, event, latestEdit, reactions);
+    const readers = room
+      ? room
+          .getUsersReadUpTo(event)
+          .filter((userId) => userId !== room.myUserId && userId !== event.getSender())
+      : [];
+    return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
+  });
 
   const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
   return {
@@ -785,6 +864,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
   client.on(RoomEvent.Timeline, republish);
   client.on(RoomEvent.Receipt, republish);
+  client.on(RoomEvent.LocalEchoUpdated, republish);
 
   const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
   const buildPresence = (userId: string): PresenceView | null => {

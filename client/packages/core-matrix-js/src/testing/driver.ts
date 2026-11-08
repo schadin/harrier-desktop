@@ -29,6 +29,11 @@ export type SyncFixtureMessage = {
   readonly eventId: string;
   readonly sender: string;
   readonly body: string;
+  readonly msgtype?: string;
+  readonly formattedBody?: string;
+  readonly url?: string;
+  readonly filename?: string;
+  readonly info?: Record<string, unknown>;
   readonly replaces?: string;
   readonly replyTo?: string;
   readonly redacted?: boolean;
@@ -123,11 +128,27 @@ function redactionEvent(roomId: string, sender: string): IEvent {
 
 function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent {
   const content: Record<string, unknown> = {
-    msgtype: message.encrypted ? 'm.bad.encrypted' : 'm.text',
+    msgtype: message.encrypted ? 'm.bad.encrypted' : message.msgtype ?? 'm.text',
     body: message.body,
   };
+  if (message.formattedBody !== undefined) {
+    content.formatted_body = message.formattedBody;
+    content.format = 'org.matrix.custom.html';
+  }
+  if (message.url !== undefined) content.url = message.url;
+  if (message.filename !== undefined) content.filename = message.filename;
+  if (message.info !== undefined) content.info = message.info;
   if (message.replaces !== undefined) {
-    content['m.new_content'] = { msgtype: 'm.text', body: message.body };
+    content['m.new_content'] = {
+      msgtype: message.msgtype ?? 'm.text',
+      body: message.body,
+      ...(message.formattedBody !== undefined
+        ? {
+            formatted_body: message.formattedBody,
+            format: 'org.matrix.custom.html',
+          }
+        : {}),
+    };
     content['m.relates_to'] = { rel_type: 'm.replace', event_id: message.replaces };
   }
   if (message.replyTo !== undefined) {

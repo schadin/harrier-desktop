@@ -4,6 +4,11 @@ export type SyncFixtureMessage = {
   readonly eventId: string;
   readonly sender: string;
   readonly body: string;
+  readonly msgtype?: string;
+  readonly formattedBody?: string;
+  readonly url?: string;
+  readonly filename?: string;
+  readonly info?: Record<string, unknown>;
   readonly replaces?: string;
   readonly replyTo?: string;
   readonly redacted?: boolean;

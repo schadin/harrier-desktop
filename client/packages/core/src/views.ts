@@ -73,9 +73,26 @@ export type MemberView = {
   readonly leftBySelf?: boolean;
 };
 
+export type MessageAttachmentKind = 'image' | 'video' | 'audio' | 'file' | 'location';
+
+export type MessageAttachmentView = {
+  readonly kind: MessageAttachmentKind;
+  readonly mxcUrl?: string;
+  readonly filename?: string;
+  readonly mimetype?: string;
+  readonly size?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly duration?: number;
+  readonly geoUri?: string;
+};
+
 export type MessageContentView = {
   readonly msgtype: string;
   readonly body: string;
+  readonly formattedBody?: string;
+  readonly format?: string;
+  readonly attachment?: MessageAttachmentView;
 };
 
 export type ReactionCountView = {
@@ -96,6 +113,7 @@ export type TimelineItem =
       readonly kind: 'message';
       readonly content: MessageContentView;
       readonly status: SendStatus;
+      readonly edited?: boolean;
       readonly replyTo?: EventId;
       readonly reactions?: readonly ReactionCountView[];
       readonly readBy?: readonly UserId[];

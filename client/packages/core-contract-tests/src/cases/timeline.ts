@@ -34,6 +34,129 @@ export const timelineCases = [
     }
   }),
 
+  contractTest('message content exposes formatted body and format', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$1',
+                sender: '@alice:example.org',
+                body: 'bold',
+                formattedBody: '<b>bold</b>',
+              },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind === 'message' && item.content).toEqual({
+        msgtype: 'm.text',
+        body: 'bold',
+        formattedBody: '<b>bold</b>',
+        format: 'org.matrix.custom.html',
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('an edit replaces the formatted body too', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$1',
+                sender: '@alice:example.org',
+                body: 'plain',
+                formattedBody: '<i>plain</i>',
+              },
+              {
+                eventId: '$2',
+                sender: '@alice:example.org',
+                body: 'fixed',
+                formattedBody: '<i>fixed</i>',
+                replaces: '$1',
+              },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind === 'message' && item.content).toEqual({
+        msgtype: 'm.text',
+        body: 'fixed',
+        formattedBody: '<i>fixed</i>',
+        format: 'org.matrix.custom.html',
+      });
+      expect(item?.kind === 'message' && item.edited).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('media messages expose attachment metadata', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$1',
+                sender: '@alice:example.org',
+                body: 'cat.png',
+                msgtype: 'm.image',
+                url: 'mxc://example.org/cat',
+                filename: 'cat.png',
+                info: { mimetype: 'image/png', size: 1024, w: 320, h: 240 },
+              },
+              {
+                eventId: '$2',
+                sender: '@alice:example.org',
+                body: 'Berlin',
+                msgtype: 'm.location',
+                info: { thumbnail_url: 'mxc://example.org/thumb' },
+                url: 'mxc://example.org/geo',
+              },
+            ],
+          },
+        ],
+      });
+      const [image, location] = core.timeline.timeline('!room:example.org').getSnapshot()
+        .value.items;
+      expect(image?.kind === 'message' && image.content.attachment).toEqual({
+        kind: 'image',
+        mxcUrl: 'mxc://example.org/cat',
+        filename: 'cat.png',
+        mimetype: 'image/png',
+        size: 1024,
+        width: 320,
+        height: 240,
+      });
+      expect(location?.kind === 'message' && location.content.attachment).toEqual({
+        kind: 'location',
+        mxcUrl: 'mxc://example.org/geo',
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('an edit replaces the body and is not listed as its own item', async (harness) => {
     const core = await harness.create();
     try {

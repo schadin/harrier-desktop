@@ -32,10 +32,11 @@ import React, {
 } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
-import { EventStatus, MatrixEvent, Room } from 'matrix-js-sdk';
+import { MatrixEvent, Room } from 'matrix-js-sdk';
 import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
+import type { TimelineItem } from '@harrier/core';
 import {
   AvatarBase,
   BubbleLayout,
@@ -720,6 +721,7 @@ export const MessageReportItem = as<
 export type MessageProps = {
   room: Room;
   mEvent: MatrixEvent;
+  timelineItem: TimelineItem;
   collapse: boolean;
   highlight: boolean;
   edit?: boolean;
@@ -757,6 +759,7 @@ export const Message = as<'div', MessageProps>(
       className,
       room,
       mEvent,
+      timelineItem,
       collapse,
       highlight,
       edit,
@@ -790,7 +793,9 @@ export const Message = as<'div', MessageProps>(
   ) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
-    const senderId = mEvent.getSender() ?? '';
+    const senderId = timelineItem.sender;
+    const messageStatus = timelineItem.kind === 'message' ? timelineItem.status : 'sent';
+    const readBy = timelineItem.kind === 'message' ? timelineItem.readBy : undefined;
 
     const [hover, setHover] = useState(false);
     const { hoverProps } = useHover({ onHoverChange: setHover });
@@ -851,12 +856,12 @@ export const Message = as<'div', MessageProps>(
           {messageLayout !== MessageLayout.Bubble && (
             <>
               <Time
-                ts={mEvent.getTs()}
+                ts={timelineItem.timestamp}
                 compact={messageLayout === MessageLayout.Compact}
                 hour24Clock={hour24Clock}
                 dateFormatString={dateFormatString}
               />
-              <MessageStatus room={room} mEvent={mEvent} />
+              <MessageStatus room={room} sender={senderId} status={messageStatus} readBy={readBy} />
             </>
           )}
         </Box>
@@ -898,16 +903,16 @@ export const Message = as<'div', MessageProps>(
       >
         {edited && <Icon size="100" src={Icons.Pencil} />}
         <Time
-          ts={mEvent.getTs()}
+          ts={timelineItem.timestamp}
           compact
           hour24Clock={hour24Clock}
           dateFormatString={dateFormatString}
-          title={`${timeDayMonthYear(mEvent.getTs())}, ${timeHourMinute(
-            mEvent.getTs(),
+          title={`${timeDayMonthYear(timelineItem.timestamp)}, ${timeHourMinute(
+            timelineItem.timestamp,
             hour24Clock
           )}`}
         />
-        <MessageStatus room={room} mEvent={mEvent} />
+        <MessageStatus room={room} sender={senderId} status={messageStatus} readBy={readBy} />
       </Box>
     );
 
@@ -971,12 +976,10 @@ export const Message = as<'div', MessageProps>(
       }, 100);
     };
 
-    const isThreadedMessage = mEvent.threadRootId !== undefined;
+    const isThreadedMessage =
+      timelineItem.kind === 'message' && timelineItem.threadRoot !== undefined;
 
-    const sendStatus = mEvent.getAssociatedStatus();
-    const isFailedSend =
-      mEvent.getSender() === mx.getUserId() &&
-      (sendStatus === EventStatus.NOT_SENT || sendStatus === EventStatus.CANCELLED);
+    const isFailedSend = senderId === mx.getUserId() && messageStatus === 'failed';
 
     return (
       <MessageBase
@@ -1203,8 +1206,7 @@ export const Message = as<'div', MessageProps>(
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
                         </Box>
-                        {((!mEvent.isRedacted() && canDelete) ||
-                          mEvent.getSender() !== mx.getUserId()) && (
+                        {((!mEvent.isRedacted() && canDelete) || senderId !== mx.getUserId()) && (
                           <>
                             <Line size="300" />
                             <Box direction="Column" gap="100" className={css.MessageMenuGroup}>
@@ -1215,7 +1217,7 @@ export const Message = as<'div', MessageProps>(
                                   onClose={closeMenu}
                                 />
                               )}
-                              {mEvent.getSender() !== mx.getUserId() && (
+                              {senderId !== mx.getUserId() && (
                                 <MessageReportItem
                                   room={room}
                                   mEvent={mEvent}

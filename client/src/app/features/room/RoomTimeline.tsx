@@ -835,7 +835,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const getContent = (() =>
           editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent()) as GetContentCallback;
 
-        const senderId = mEvent.getSender() ?? '';
+        const senderId = timelineItem.sender;
         const senderDisplayName =
           getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
 
@@ -852,12 +852,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
             highlight={highlighted}
             edit={editId === mEventId}
-            edited={!!editedEvent}
+            edited={timelineItem.kind === 'message' && timelineItem.edited === true}
             canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
@@ -913,7 +914,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 <RenderMessageContent
                   displayName={senderDisplayName}
                   msgType={mEvent.getContent().msgtype ?? ''}
-                  ts={mEvent.getTs()}
+                  ts={timelineItem.timestamp}
                   edited={showEditedInline}
                   getContent={getContent}
                   mediaAutoLoad={mediaAutoLoad}
@@ -973,12 +974,13 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
             highlight={highlighted}
             edit={editId === mEventId}
-            edited={!!editedEvent}
+            edited={timelineItem.kind === 'message' && timelineItem.edited === true}
             canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
@@ -1018,7 +1020,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
-            memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
+            memberPowerTag={getMemberPowerTag(timelineItem.sender)}
             accessibleTagColors={accessiblePowerTagColors}
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
@@ -1046,14 +1048,14 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                     editedEvent?.getContent()['m.new_content'] ??
                     mEvent.getContent()) as GetContentCallback;
 
-                  const senderId = mEvent.getSender() ?? '';
+                  const senderId = timelineItem.sender;
                   const senderDisplayName =
                     getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
                   return (
                     <RenderMessageContent
                       displayName={senderDisplayName}
                       msgType={mEvent.getContent().msgtype ?? ''}
-                      ts={mEvent.getTs()}
+                      ts={timelineItem.timestamp}
                       edited={showEditedInline}
                       getContent={getContent}
                       mediaAutoLoad={mediaAutoLoad}
@@ -1096,6 +1098,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             messageSpacing={messageSpacing}
             messageLayout={messageLayout}
             collapse={collapse}
@@ -1124,7 +1127,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
-            memberPowerTag={getMemberPowerTag(mEvent.getSender() ?? '')}
+            memberPowerTag={getMemberPowerTag(timelineItem.sender)}
             accessibleTagColors={accessiblePowerTagColors}
             legacyUsernameColor={legacyUsernameColor || direct}
             hour24Clock={hour24Clock}
@@ -1158,7 +1161,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         const timeJSX = (
           <Time
-            ts={mEvent.getTs()}
+            ts={timelineItem.timestamp}
             compact={messageLayout === MessageLayout.Compact}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
@@ -1196,12 +1199,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       },
       [StateEvent.RoomName]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const senderId = mEvent.getSender() ?? '';
+        const senderId = timelineItem.sender;
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
         const timeJSX = (
           <Time
-            ts={mEvent.getTs()}
+            ts={timelineItem.timestamp}
             compact={messageLayout === MessageLayout.Compact}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
@@ -1240,12 +1243,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       },
       [StateEvent.RoomTopic]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const senderId = mEvent.getSender() ?? '';
+        const senderId = timelineItem.sender;
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
         const timeJSX = (
           <Time
-            ts={mEvent.getTs()}
+            ts={timelineItem.timestamp}
             compact={messageLayout === MessageLayout.Compact}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
@@ -1284,12 +1287,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       },
       [StateEvent.RoomAvatar]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const senderId = mEvent.getSender() ?? '';
+        const senderId = timelineItem.sender;
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
         const timeJSX = (
           <Time
-            ts={mEvent.getTs()}
+            ts={timelineItem.timestamp}
             compact={messageLayout === MessageLayout.Compact}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
@@ -1335,7 +1338,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         timelineItem
       ) => {
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const senderId = mEvent.getSender() ?? '';
+        const senderId = timelineItem.sender;
         const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
         const content = mEvent.getContent();
@@ -1348,7 +1351,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         const timeJSX = (
           <Time
-            ts={mEvent.getTs()}
+            ts={timelineItem.timestamp}
             compact={messageLayout === MessageLayout.Compact}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
@@ -1389,12 +1392,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
       if (!showHiddenEvents) return null;
       const highlighted = focusItem?.index === item && focusItem.highlight;
-      const senderId = mEvent.getSender() ?? '';
+      const senderId = timelineItem.sender;
       const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
       const timeJSX = (
         <Time
-          ts={mEvent.getTs()}
+          ts={timelineItem.timestamp}
           compact={messageLayout === MessageLayout.Compact}
           hour24Clock={hour24Clock}
           dateFormatString={dateFormatString}
@@ -1440,12 +1443,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       if (mEvent.isRedaction()) return null;
 
       const highlighted = focusItem?.index === item && focusItem.highlight;
-      const senderId = mEvent.getSender() ?? '';
+      const senderId = timelineItem.sender;
       const senderName = getMemberDisplayName(room, senderId) || getMxIdLocalPart(senderId);
 
       const timeJSX = (
         <Time
-          ts={mEvent.getTs()}
+          ts={timelineItem.timestamp}
           compact={messageLayout === MessageLayout.Compact}
           hour24Clock={hour24Clock}
           dateFormatString={dateFormatString}
@@ -1588,9 +1591,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             <Badge as="span" size="500" variant="Secondary" fill="None" radii="300">
               <Text size="L400">
                 {(() => {
-                  if (today(mEvent.getTs())) return 'Today';
-                  if (yesterday(mEvent.getTs())) return 'Yesterday';
-                  return timeDayMonthYear(mEvent.getTs());
+                  if (today(timelineItem.timestamp)) return 'Today';
+                  if (yesterday(timelineItem.timestamp)) return 'Yesterday';
+                  return timeDayMonthYear(timelineItem.timestamp);
                 })()}
               </Text>
             </Badge>
