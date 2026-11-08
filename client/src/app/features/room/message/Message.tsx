@@ -1189,7 +1189,7 @@ export const Message = as<'div', MessageProps>(
                           {!hideReadReceipts && (
                             <MessageReadReceiptItem
                               room={room}
-                              eventId={mEvent.getId() ?? ''}
+                              eventId={timelineItem.eventId}
                               onClose={closeMenu}
                             />
                           )}
@@ -1209,7 +1209,7 @@ export const Message = as<'div', MessageProps>(
                           <>
                             <Line size="300" />
                             <Box direction="Column" gap="100" className={css.MessageMenuGroup}>
-                              {!mEvent.isRedacted() && canDelete && (
+                              {timelineItem.kind !== 'redacted' && canDelete && (
                                 <MessageDeleteItem
                                   room={room}
                                   mEvent={mEvent}
@@ -1264,7 +1264,7 @@ export const Message = as<'div', MessageProps>(
           <ReadReceiptGroup
             className={css.ReadReceiptMarker}
             room={room}
-            eventId={mEvent.getId() ?? ''}
+            eventId={timelineItem.eventId}
             userIds={readReceiptUsers}
           />
         )}
@@ -1276,6 +1276,7 @@ export const Message = as<'div', MessageProps>(
 export type EventProps = {
   room: Room;
   mEvent: MatrixEvent;
+  timelineItem: TimelineItem;
   highlight: boolean;
   canDelete?: boolean;
   messageSpacing: MessageSpacing;
@@ -1289,6 +1290,7 @@ export const Event = as<'div', EventProps>(
       className,
       room,
       mEvent,
+      timelineItem,
       highlight,
       canDelete,
       messageSpacing,
@@ -1305,7 +1307,7 @@ export const Event = as<'div', EventProps>(
     const { hoverProps } = useHover({ onHoverChange: setHover });
     const { focusWithinProps } = useFocusWithin({ onFocusWithinChange: setHover });
     const [menuAnchor, setMenuAnchor] = useState<RectCords>();
-    const stateEvent = typeof mEvent.getStateKey() === 'string';
+    const stateEvent = timelineItem.kind === 'state';
 
     const handleContextMenu: MouseEventHandler<HTMLDivElement> = (evt) => {
       if (evt.altKey || !window.getSelection()?.isCollapsed) return;
@@ -1367,7 +1369,7 @@ export const Event = as<'div', EventProps>(
                           {!hideReadReceipts && (
                             <MessageReadReceiptItem
                               room={room}
-                              eventId={mEvent.getId() ?? ''}
+                              eventId={timelineItem.eventId}
                               onClose={closeMenu}
                             />
                           )}
@@ -1380,19 +1382,19 @@ export const Event = as<'div', EventProps>(
                           )}
                           <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
                         </Box>
-                        {((!mEvent.isRedacted() && canDelete && !stateEvent) ||
-                          (mEvent.getSender() !== mx.getUserId() && !stateEvent)) && (
+                        {((timelineItem.kind !== 'redacted' && canDelete && !stateEvent) ||
+                          (timelineItem.sender !== mx.getUserId() && !stateEvent)) && (
                           <>
                             <Line size="300" />
                             <Box direction="Column" gap="100" className={css.MessageMenuGroup}>
-                              {!mEvent.isRedacted() && canDelete && (
+                              {timelineItem.kind !== 'redacted' && canDelete && (
                                 <MessageDeleteItem
                                   room={room}
                                   mEvent={mEvent}
                                   onClose={closeMenu}
                                 />
                               )}
-                              {mEvent.getSender() !== mx.getUserId() && (
+                              {timelineItem.sender !== mx.getUserId() && (
                                 <MessageReportItem
                                   room={room}
                                   mEvent={mEvent}
@@ -1425,7 +1427,7 @@ export const Event = as<'div', EventProps>(
           <ReadReceiptGroup
             className={css.ReadReceiptMarker}
             room={room}
-            eventId={mEvent.getId() ?? ''}
+            eventId={timelineItem.eventId}
             userIds={readReceiptUsers}
           />
         )}

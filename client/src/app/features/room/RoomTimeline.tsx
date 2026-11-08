@@ -849,7 +849,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Message
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
@@ -973,7 +973,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Message
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
@@ -1094,7 +1094,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Message
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
@@ -1175,14 +1175,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Event
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             highlight={highlighted}
             messageSpacing={messageSpacing}
-            canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+            canDelete={canRedact || timelineItem.sender === mx.getUserId()}
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
@@ -1218,14 +1219,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Event
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             highlight={highlighted}
             messageSpacing={messageSpacing}
-            canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+            canDelete={canRedact || timelineItem.sender === mx.getUserId()}
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
@@ -1262,14 +1264,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Event
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             highlight={highlighted}
             messageSpacing={messageSpacing}
-            canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+            canDelete={canRedact || timelineItem.sender === mx.getUserId()}
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
@@ -1306,14 +1309,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Event
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             highlight={highlighted}
             messageSpacing={messageSpacing}
-            canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+            canDelete={canRedact || timelineItem.sender === mx.getUserId()}
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
@@ -1365,14 +1369,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         return (
           <Event
-            key={mEvent.getId()}
+            key={timelineItem.eventId}
             data-message-item={item}
             data-message-id={mEventId}
             room={room}
             mEvent={mEvent}
+            timelineItem={timelineItem}
             highlight={highlighted}
             messageSpacing={messageSpacing}
-            canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+            canDelete={canRedact || timelineItem.sender === mx.getUserId()}
             hideReadReceipts={hideActivity}
             readReceiptUsers={getReadReceiptUsers(timelineItem)}
             showDeveloperTools={showDeveloperTools}
@@ -1411,14 +1416,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
       return (
         <Event
-          key={mEvent.getId()}
+          key={timelineItem.eventId}
           data-message-item={item}
           data-message-id={mEventId}
           room={room}
           mEvent={mEvent}
+          timelineItem={timelineItem}
           highlight={highlighted}
           messageSpacing={messageSpacing}
-          canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+          canDelete={canRedact || timelineItem.sender === mx.getUserId()}
           hideReadReceipts={hideActivity}
           readReceiptUsers={getReadReceiptUsers(timelineItem)}
           showDeveloperTools={showDeveloperTools}
@@ -1462,14 +1468,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
       return (
         <Event
-          key={mEvent.getId()}
+          key={timelineItem.eventId}
           data-message-item={item}
           data-message-id={mEventId}
           room={room}
           mEvent={mEvent}
+          timelineItem={timelineItem}
           highlight={highlighted}
           messageSpacing={messageSpacing}
-          canDelete={canRedact || mEvent.getSender() === mx.getUserId()}
+          canDelete={canRedact || timelineItem.sender === mx.getUserId()}
           hideReadReceipts={hideActivity}
           readReceiptUsers={getReadReceiptUsers(timelineItem)}
           showDeveloperTools={showDeveloperTools}
