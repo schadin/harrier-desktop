@@ -3,6 +3,7 @@ import {
   notificationCases,
   presenceCases,
   roomsCases,
+  sendCases,
   runCoreContractSuite,
   timelineCases,
   type CoreContractHarness,
@@ -31,6 +32,7 @@ const matrixJsHarness: CoreContractHarness = {
 runCoreContractSuite(matrixJsHarness, [
   ...roomsCases,
   ...timelineCases,
+  ...sendCases,
   ...presenceCases,
   ...notificationCases,
   ...authCases,

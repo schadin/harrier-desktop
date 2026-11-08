@@ -60,6 +60,7 @@ export type SyncFixtureRoom = {
     readonly stateKey: string;
     readonly content: Record<string, unknown>;
   }[];
+  readonly sendFails?: boolean;
   readonly timelineStateEvents?: readonly {
     readonly eventId: string;
     readonly sender: string;

@@ -20,6 +20,7 @@ import {
   type RoomSummaryView,
   type RoomView,
   type SendStatus,
+  type SendStatusView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -860,6 +861,68 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
 
   const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
   const focusedTimelines = new Map<string, { timeline: EventTimeline; eventId: string }>();
+  const sendStores = new Map<string, WritableSnapshotStore<SendStatusView | null>>();
+  const sendRooms = new Map<string, string>();
+  const sendEvents = new Map<string, MatrixEvent>();
+  let sendCounter = 0;
+  const pendingEventOf = (localId: string): { room: Room; event: MatrixEvent } | undefined => {
+    const roomId = sendRooms.get(localId);
+    const room = roomId ? client.getRoom(roomId) : undefined;
+    // После отправки SDK меняет event_id локального echo на серверный,
+    // поэтому держим прямой указатель на объект MatrixEvent.
+    const event = sendEvents.get(localId) ?? room?.findEventById(`~${roomId}:${localId}`);
+    return room && event ? { room, event } : undefined;
+  };
+  const publishSendStatus = (localId: string): void => {
+    const store = sendStores.get(localId);
+    if (!store) return;
+    const roomId = sendRooms.get(localId) ?? '';
+    const found = pendingEventOf(localId);
+    if (!found) {
+      store.publish(null);
+      return;
+    }
+    const { event } = found;
+    if (event.status === EventStatus.CANCELLED) {
+      store.publish(null);
+      return;
+    }
+    const status = toSendStatus(event.status);
+    let error: string | undefined;
+    if (status === 'failed' && event.error) {
+      error = event.error instanceof Error ? event.error.message : 'Send failed';
+    }
+    store.publish({
+      localId,
+      roomId,
+      status,
+      ...(error !== undefined ? { error } : {}),
+    });
+  };
+  const refreshSendStatuses = (): void => {
+    sendStores.forEach((_store, localId) => publishSendStatus(localId));
+  };
+  const sendWithTxn = (
+    roomId: string,
+    send: (txnId: string) => Promise<unknown>
+  ): CoreResult<string> => {
+    const room = client.getRoom(roomId);
+    if (!room) {
+      return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+    }
+    sendCounter += 1;
+    const localId = `harrier-local-${sendCounter}`;
+    sendRooms.set(localId, roomId);
+    if (!sendStores.has(localId)) {
+      sendStores.set(localId, createSnapshotStore<SendStatusView | null>(null));
+    }
+    const sent = send(localId);
+    const found = pendingEventOf(localId);
+    if (found) sendEvents.set(localId, found.event);
+    sent.then(() => publishSendStatus(localId)).catch(() => publishSendStatus(localId));
+    publishSendStatus(localId);
+    return { ok: true, value: localId };
+  };
   const buildTimeline = (roomId: string) => {
     const room = client.getRoom(roomId) ?? undefined;
     const focus = focusedTimelines.get(roomId);
@@ -878,7 +941,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
   client.on(RoomEvent.Timeline, republish);
   client.on(RoomEvent.Receipt, republish);
-  client.on(RoomEvent.LocalEchoUpdated, republish);
+  client.on(RoomEvent.LocalEchoUpdated, (_event, room) => {
+    republish(_event, room);
+    refreshSendStatuses();
+  });
 
   const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
   const buildPresence = (userId: string): PresenceView | null => {
@@ -1344,6 +1410,82 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildTyping(roomId));
         typingStores.set(roomId, store);
+        return store;
+      },
+    },
+    send: {
+      async sendMessage(roomId, content): Promise<CoreResult<string>> {
+        return sendWithTxn(roomId, (txnId) =>
+          client.sendMessage(roomId, null as never, content as never, txnId)
+        );
+      },
+      async sendEvent(roomId, eventType, content): Promise<CoreResult<string>> {
+        return sendWithTxn(roomId, (txnId) =>
+          client.sendEvent(roomId, null as never, eventType as never, content as never, txnId)
+        );
+      },
+      async edit(roomId, eventId, content): Promise<CoreResult<string>> {
+        const wrapped: JsonObject = {
+          'm.new_content': content,
+          'm.relates_to': { rel_type: 'm.replace', event_id: eventId },
+        };
+        return sendWithTxn(roomId, (txnId) =>
+          client.sendEvent(
+            roomId,
+            null as never,
+            'm.room.message' as never,
+            wrapped as never,
+            txnId
+          )
+        );
+      },
+      async reaction(roomId, eventId, key): Promise<CoreResult<string>> {
+        const wrapped: JsonObject = {
+          'm.relates_to': { rel_type: 'm.annotation', event_id: eventId, key },
+        };
+        return sendWithTxn(roomId, (txnId) =>
+          client.sendEvent(roomId, null as never, 'm.reaction' as never, wrapped as never, txnId)
+        );
+      },
+      async redact(roomId, eventId, reason): Promise<CoreResult<string>> {
+        return sendWithTxn(roomId, (txnId) =>
+          client.redactEvent(roomId, null as never, eventId, txnId, {
+            reason: reason ?? '',
+          } as never)
+        );
+      },
+      async cancel(localId) {
+        const found = pendingEventOf(localId);
+        if (!found) {
+          return { ok: false, error: toCoreError(new Error(`Unknown pending event ${localId}`)) };
+        }
+        try {
+          client.cancelPendingEvent(found.event);
+          publishSendStatus(localId);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async resend(localId) {
+        const found = pendingEventOf(localId);
+        if (!found) {
+          return { ok: false, error: toCoreError(new Error(`Unknown pending event ${localId}`)) };
+        }
+        try {
+          await client.resendEvent(found.event, found.room);
+          publishSendStatus(localId);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      status(localId) {
+        const existing = sendStores.get(localId);
+        if (existing) return existing;
+        const store = createSnapshotStore<SendStatusView | null>(null);
+        sendStores.set(localId, store);
+        publishSendStatus(localId);
         return store;
       },
     },

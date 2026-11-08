@@ -73,6 +73,7 @@ export type SyncFixtureRoom = {
     readonly stateKey: string;
     readonly content: Record<string, unknown>;
   }[];
+  readonly sendFails?: boolean;
   readonly timelineStateEvents?: readonly {
     readonly eventId: string;
     readonly sender: string;
@@ -215,6 +216,8 @@ export function createSyncDriver(): SyncDriver {
     timelineSupport: true,
   });
   const directRooms = new Set<string>();
+  const sendFailRooms = new Set<string>();
+  const sendAttempts = new Map<string, number>();
   const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
 
@@ -224,6 +227,18 @@ export function createSyncDriver(): SyncDriver {
       return { room_id: decodeURIComponent(path.split('/join/')[1]?.split('/')[0] ?? '') };
     }
     if (path.endsWith('/leave')) return {};
+    if (path.includes('/send/')) {
+      const roomId = decodeURIComponent(path.split('/rooms/')[1]?.split('/')[0] ?? '');
+      const attempts = (sendAttempts.get(roomId) ?? 0) + 1;
+      sendAttempts.set(roomId, attempts);
+      if (sendFailRooms.has(roomId) && attempts === 1) {
+        const error = new Error('Send failed') as Error & { httpStatus: number };
+        error.httpStatus = 403;
+        throw error;
+      }
+      const txnId = path.split('/').pop() ?? '';
+      return { event_id: `$sent-${txnId}` };
+    }
     if (path.endsWith('/invite')) return {};
     if (path.endsWith('/createRoom')) return { room_id: '!created:example.org' };
     if (path.endsWith('/upgrade')) return { replacement_room: '!upgraded:example.org' };
@@ -380,6 +395,7 @@ export function createSyncDriver(): SyncDriver {
       });
     }
     if (item.direct) directRooms.add(item.roomId);
+    if (item.sendFails) sendFailRooms.add(item.roomId);
     room.recalculate();
     client.emit(ClientEvent.Room, room);
 
