@@ -350,15 +350,17 @@ export const MessageCopyLinkItem = as<
 export const MessageResendItem = as<
   'button',
   {
-    room: Room;
-    mEvent: MatrixEvent;
+    localId: string | undefined;
     onClose?: () => void;
   }
->(({ room, mEvent, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
+>(({ localId, onClose, ...props }, ref) => {
+  const core = useCore();
 
-  const handleResend = () => {
-    mx.resendEvent(mEvent, room).catch(notifySendError);
+  if (!localId) return null;
+
+  const handleResend = async () => {
+    const result = await core.send.resend(localId);
+    if (!result.ok) notifySendError(result.error);
     onClose?.();
   };
 
@@ -381,19 +383,17 @@ export const MessageResendItem = as<
 export const MessageRemoveLocalItem = as<
   'button',
   {
-    room: Room;
-    mEvent: MatrixEvent;
+    localId: string | undefined;
     onClose?: () => void;
   }
->(({ mEvent, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
+>(({ localId, onClose, ...props }, ref) => {
+  const core = useCore();
 
-  const handleRemove = () => {
-    try {
-      mx.cancelPendingEvent(mEvent);
-    } catch (error) {
-      console.error('Failed to remove local event:', error);
-    }
+  if (!localId) return null;
+
+  const handleRemove = async () => {
+    const result = await core.send.cancel(localId);
+    if (!result.ok) notifySendError(result.error);
     onClose?.();
   };
 
@@ -460,14 +460,17 @@ export const MessageDeleteItem = as<
     onClose?: () => void;
   }
 >(({ room, eventId, onClose, ...props }, ref) => {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [open, setOpen] = useState(false);
 
   const [deleteState, deleteMessage] = useAsyncCallback(
     useCallback(
-      (targetId: string, reason?: string) =>
-        mx.redactEvent(room.roomId, targetId, undefined, reason ? { reason } : undefined),
-      [mx, room]
+      async (targetId: string, reason?: string) => {
+        const result = await core.send.redact(room.roomId, targetId, reason);
+        if (!result.ok) throw result.error;
+        return result.value;
+      },
+      [core, room]
     )
   );
 
@@ -1176,10 +1179,16 @@ export const Message = as<'div', MessageProps>(
                             )}
                           {isFailedSend && (
                             <>
-                              <MessageResendItem room={room} mEvent={mEvent} onClose={closeMenu} />
+                              <MessageResendItem
+                                localId={
+                                  timelineItem.kind === 'message' ? timelineItem.localId : undefined
+                                }
+                                onClose={closeMenu}
+                              />
                               <MessageRemoveLocalItem
-                                room={room}
-                                mEvent={mEvent}
+                                localId={
+                                  timelineItem.kind === 'message' ? timelineItem.localId : undefined
+                                }
                                 onClose={closeMenu}
                               />
                             </>

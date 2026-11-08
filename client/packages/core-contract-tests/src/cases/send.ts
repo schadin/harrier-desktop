@@ -34,7 +34,7 @@ export const sendCases = [
           status: 'sent',
         });
         const { value: timelineView } = core.timeline.timeline('!room:example.org').getSnapshot();
-      const { items } = timelineView;
+        const { items } = timelineView;
         const sent = items.find((item) => item.kind === 'message');
         expect(sent).toMatchObject({ kind: 'message', sender: '@tester:example.org' });
         if (sent?.kind !== 'message') return;
@@ -44,6 +44,26 @@ export const sendCases = [
       }
     }
   ),
+
+  contractTest('a pending local echo carries its local id in the timeline', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!room:example.org', membership: 'join', name: 'Room' }],
+      });
+      const result = await core.send.sendMessage('!room:example.org', {
+        msgtype: 'm.text',
+        body: 'pending',
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const items = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      const pending = items.find((item) => item.kind === 'message');
+      expect(pending).toMatchObject({ kind: 'message', localId: result.value });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 
   contractTest('sendMessage to an unknown room fails with a core error', async (harness) => {
     const core = await harness.create();

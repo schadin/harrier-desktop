@@ -308,10 +308,15 @@ const toItem = (
   const replyTo = replyTargetOf(event);
   const relation = event.getRelation();
   const threadRoot = relation?.rel_type === 'm.thread' ? relation.event_id : undefined;
+  const localEchoPrefix = `~${roomId}:`;
+  const localId = eventId.startsWith(localEchoPrefix)
+    ? eventId.slice(localEchoPrefix.length)
+    : undefined;
   return {
     ...base,
     kind: 'message',
     preview: previewText(body),
+    ...(localId !== undefined ? { localId } : {}),
     content: {
       msgtype: content.msgtype ?? 'm.text',
       body,

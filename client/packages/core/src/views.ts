@@ -116,6 +116,7 @@ export type TimelineItem =
       readonly kind: 'message';
       readonly content: MessageContentView;
       readonly status: SendStatus;
+      readonly localId?: string;
       readonly edited?: boolean;
       readonly replyTo?: EventId;
       readonly reactions?: readonly ReactionCountView[];
