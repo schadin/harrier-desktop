@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { EventTimelineSet, IContent, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import { EventTimelineSet, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import classNames from 'classnames';
 import { ReactEditor } from 'slate-react';
@@ -70,7 +70,6 @@ import {
   renderMatrixMention,
 } from '../../plugins/react-custom-html-parser';
 import {
-  getEditedEvent,
   getEventReactions,
   getMemberDisplayName,
   getReactionContent,
@@ -761,27 +760,30 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         console.warn('Button should have "data-event-id" attribute!');
         return;
       }
-      const replyEvt = room.findEventById(replyId);
-      if (!replyEvt) return;
-      const editedReply = getEditedEvent(replyId, replyEvt, room.getUnfilteredTimelineSet());
-      const content: IContent = editedReply?.getContent()['m.new_content'] ?? replyEvt.getContent();
-      const { body, formatted_body: formattedBody } = content;
-      const { 'm.relates_to': relation } = startThread
-        ? { 'm.relates_to': { rel_type: 'm.thread', event_id: replyId } }
-        : replyEvt.getWireContent();
-      const senderId = replyEvt.getSender();
-      if (senderId && typeof body === 'string') {
+      const applyDraft = (item: TimelineItem | null) => {
+        if (!item || (item.kind !== 'message' && item.kind !== 'sticker')) return;
+        const { body } = item.content;
+        if (typeof body !== 'string') return;
+        const formattedBody = item.kind === 'message' ? item.content.formattedBody : undefined;
         setReplyDraft({
-          userId: senderId,
+          userId: item.sender,
           eventId: replyId,
           body,
           formattedBody,
-          relation,
+          relation: startThread ? { rel_type: 'm.thread', event_id: replyId } : undefined,
         });
         setTimeout(() => ReactEditor.focus(editor), 100);
+      };
+      const localItem = timelineView.items.find((entry) => entry.eventId === replyId);
+      if (localItem) {
+        applyDraft(localItem);
+        return;
       }
+      core.timeline.event(room.roomId, replyId).then((result) => {
+        if (result.ok) applyDraft(result.value);
+      });
     },
-    [room, setReplyDraft, editor]
+    [core, room, setReplyDraft, editor, timelineView.items]
   );
 
   const handleReactionToggle = useCallback(

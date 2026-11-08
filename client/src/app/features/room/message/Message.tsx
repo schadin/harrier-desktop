@@ -321,12 +321,11 @@ export const MessageCopyLinkItem = as<
   'button',
   {
     room: Room;
-    mEvent: MatrixEvent;
+    eventId: string;
     onClose?: () => void;
   }
->(({ room, mEvent, onClose, ...props }, ref) => {
+>(({ room, eventId, onClose, ...props }, ref) => {
   const handleCopy = () => {
-    const eventId = mEvent.getId();
     if (!eventId) return;
     copyToClipboard(getMatrixToRoomEvent(room.roomId, eventId, getViaServers(room)));
     onClose?.();
@@ -1200,7 +1199,11 @@ export const Message = as<'div', MessageProps>(
                               onClose={closeMenu}
                             />
                           )}
-                          <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
+                          <MessageCopyLinkItem
+                            room={room}
+                            eventId={timelineItem.eventId}
+                            onClose={closeMenu}
+                          />
                           {canPinEvent && (
                             <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
                           )}
@@ -1380,7 +1383,11 @@ export const Event = as<'div', EventProps>(
                               onClose={closeMenu}
                             />
                           )}
-                          <MessageCopyLinkItem room={room} mEvent={mEvent} onClose={closeMenu} />
+                          <MessageCopyLinkItem
+                            room={room}
+                            eventId={timelineItem.eventId}
+                            onClose={closeMenu}
+                          />
                         </Box>
                         {((timelineItem.kind !== 'redacted' && canDelete && !stateEvent) ||
                           (timelineItem.sender !== mx.getUserId() && !stateEvent)) && (
