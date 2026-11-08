@@ -1,6 +1,6 @@
 /* eslint-disable react/destructuring-assignment */
 import React, { forwardRef, MouseEventHandler, useCallback, useMemo, useRef } from 'react';
-import { MatrixEvent, Room } from 'matrix-js-sdk';
+import { Room } from 'matrix-js-sdk';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
 import {
   Avatar,
@@ -18,20 +18,20 @@ import {
   Text,
   toRem,
 } from 'folds';
+import type { TimelineItem } from '@harrier/core';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
 import * as css from './RoomPinMenu.css';
 import { SequenceCard } from '../../../components/sequence-card';
-import { useRoomEvent } from '../../../hooks/useRoomEvent';
+import { useCoreEvent } from '../../../hooks/useCoreTimeline';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
   AvatarBase,
   DefaultPlaceholder,
   ImageContent,
   MessageNotDecryptedContent,
-  MessageUnsupportedContent,
   ModernLayout,
   MSticker,
   RedactedContent,
@@ -44,14 +44,10 @@ import { UserAvatar } from '../../../components/user-avatar';
 import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
-import { sendRoomState } from '../../../hooks/useCoreRoomState';
-import {
-  getEditedEvent,
-  getMemberAvatarMxc,
-  getMemberDisplayName,
-  getStateEvent,
-} from '../../../utils/room';
-import { GetContentCallback, MessageEvent, StateEvent } from '../../../../types/matrix/room';
+import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
+import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
+import { GetContentCallback, StateEvent } from '../../../../types/matrix/room';
+import type { IImageContent } from '../../../../types/matrix/common';
 import { useMentionClickHandler } from '../../../hooks/useMentionClickHandler';
 import { useSpoilerClickHandler } from '../../../hooks/useSpoilerClickHandler';
 import {
@@ -61,13 +57,10 @@ import {
   makeMentionCustomProps,
   renderMatrixMention,
 } from '../../../plugins/react-custom-html-parser';
-import { RenderMatrixEvent, useMatrixEventRenderer } from '../../../hooks/useMatrixEventRenderer';
 import { RenderMessageContent } from '../../../components/RenderMessageContent';
-import { requestRoomKey } from '../../../utils/keyRequest';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 import * as customHtmlCss from '../../../styles/CustomHtml.css';
-import { EncryptedContent } from '../message';
 import { Image } from '../../../components/media';
 import { ImageViewer } from '../../../components/image-viewer';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
@@ -90,10 +83,72 @@ import {
 } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '../../../hooks/useRoomCreatorsTag';
 
+const renderPinnedContent = (
+  item: TimelineItem,
+  displayName: string,
+  mediaAutoLoad: boolean,
+  urlPreview: boolean,
+  htmlReactParserOptions: HTMLReactParserOptions,
+  linkifyOpts: LinkifyOpts
+): React.ReactNode => {
+  switch (item.kind) {
+    case 'redacted':
+      return <RedactedContent />;
+    case 'sticker':
+      return (
+        <MSticker
+          content={item.content as unknown as IImageContent}
+          renderImageContent={(props) => (
+            <ImageContent
+              {...props}
+              autoPlay={mediaAutoLoad}
+              renderImage={(p) => <Image {...p} loading="lazy" />}
+              renderViewer={(p) => <ImageViewer {...p} />}
+            />
+          )}
+        />
+      );
+    case 'message': {
+      const getContent = (() => item.content.raw) as GetContentCallback;
+      return (
+        <RenderMessageContent
+          displayName={displayName}
+          msgType={item.content.msgtype}
+          ts={item.timestamp}
+          getContent={getContent}
+          edited={item.edited === true}
+          mediaAutoLoad={mediaAutoLoad}
+          urlPreview={urlPreview}
+          htmlReactParserOptions={htmlReactParserOptions}
+          linkifyOpts={linkifyOpts}
+          outlineAttachment
+        />
+      );
+    }
+    case 'encrypted':
+      return (
+        <Text>
+          <MessageNotDecryptedContent />
+        </Text>
+      );
+    case 'state':
+    case 'unsupported':
+      return (
+        <Box grow="Yes" direction="Column">
+          <Text size="T400" priority="300">
+            <code className={customHtmlCss.Code}>{item.eventType}</code>
+            {' event'}
+          </Text>
+        </Box>
+      );
+    default:
+      return null;
+  }
+};
+
 type PinnedMessageProps = {
   room: Room;
   eventId: string;
-  renderContent: RenderMatrixEvent<[MatrixEvent, string, GetContentCallback]>;
   onOpen: (roomId: string, eventId: string) => void;
   canPinEvent: boolean;
   getMemberPowerTag: GetMemberPowerTag;
@@ -101,11 +156,14 @@ type PinnedMessageProps = {
   legacyUsernameColor: boolean;
   hour24Clock: boolean;
   dateFormatString: string;
+  mediaAutoLoad: boolean;
+  urlPreview: boolean;
+  htmlReactParserOptions: HTMLReactParserOptions;
+  linkifyOpts: LinkifyOpts;
 };
 function PinnedMessage({
   room,
   eventId,
-  renderContent,
   onOpen,
   canPinEvent,
   getMemberPowerTag,
@@ -113,16 +171,23 @@ function PinnedMessage({
   legacyUsernameColor,
   hour24Clock,
   dateFormatString,
+  mediaAutoLoad,
+  urlPreview,
+  htmlReactParserOptions,
+  linkifyOpts,
 }: PinnedMessageProps) {
-  const pinnedEvent = useRoomEvent(room, eventId);
+  const pinnedItem = useCoreEvent(room.roomId, eventId);
   const useAuthentication = useMediaAuthentication();
   const mx = useMatrixClient();
   const core = useCore();
+  const pinnedState = useCoreRoomState<RoomPinnedEventsEventContent>(
+    room,
+    StateEvent.RoomPinnedEvents
+  );
 
   const [unpinState, unpin] = useAsyncCallback(
     useCallback(() => {
-      const pinEvent = getStateEvent(room, StateEvent.RoomPinnedEvents);
-      const content = pinEvent?.getContent<RoomPinnedEventsEventContent>() ?? { pinned: [] };
+      const content = pinnedState ?? { pinned: [] };
       const newContent: RoomPinnedEventsEventContent = {
         pinned: content.pinned.filter((id) => id !== eventId),
       };
@@ -130,7 +195,7 @@ function PinnedMessage({
       return sendRoomState(core, room.roomId, StateEvent.RoomPinnedEvents, newContent).then(
         () => newContent
       );
-    }, [core, room, eventId])
+    }, [core, room, eventId, pinnedState])
   );
 
   const handleOpenClick: MouseEventHandler = (evt) => {
@@ -169,8 +234,8 @@ function PinnedMessage({
     </Box>
   );
 
-  if (pinnedEvent === undefined) return <DefaultPlaceholder variant="Secondary" />;
-  if (pinnedEvent === null)
+  if (pinnedItem === undefined) return <DefaultPlaceholder variant="Secondary" />;
+  if (pinnedItem === null)
     return (
       <Box gap="300" justifyContent="SpaceBetween" alignItems="Center">
         <Box>
@@ -180,10 +245,9 @@ function PinnedMessage({
       </Box>
     );
 
-  const sender = pinnedEvent.getSender()!;
+  const { sender } = pinnedItem;
   const displayName = getMemberDisplayName(room, sender) ?? getMxIdLocalPart(sender) ?? sender;
   const senderAvatarMxc = getMemberAvatarMxc(room, sender);
-  const getContent = (() => pinnedEvent.getContent()) as GetContentCallback;
 
   const memberPowerTag = getMemberPowerTag(sender);
   const tagColor = memberPowerTag?.color
@@ -226,25 +290,32 @@ function PinnedMessage({
             {tagIconSrc && <PowerIcon size="100" iconSrc={tagIconSrc} />}
           </Box>
           <Time
-            ts={pinnedEvent.getTs()}
+            ts={pinnedItem.timestamp}
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
           />
         </Box>
         {renderOptions()}
       </Box>
-      {pinnedEvent.replyEventId && (
+      {pinnedItem.kind === 'message' && pinnedItem.replyTo && (
         <Reply
           room={room}
-          replyEventId={pinnedEvent.replyEventId}
-          threadRootId={pinnedEvent.threadRootId}
+          replyEventId={pinnedItem.replyTo}
+          threadRootId={pinnedItem.threadRoot}
           onClick={handleOpenClick}
           getMemberPowerTag={getMemberPowerTag}
           accessibleTagColors={accessibleTagColors}
           legacyUsernameColor={legacyUsernameColor}
         />
       )}
-      {renderContent(pinnedEvent.getType(), false, pinnedEvent, displayName, getContent)}
+      {renderPinnedContent(
+        pinnedItem,
+        displayName,
+        mediaAutoLoad,
+        urlPreview,
+        htmlReactParserOptions,
+        linkifyOpts
+      )}
     </ModernLayout>
   );
 }
@@ -319,139 +390,6 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
     );
 
-    const renderMatrixEvent = useMatrixEventRenderer<[MatrixEvent, string, GetContentCallback]>(
-      {
-        [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
-          if (event.isRedacted()) {
-            return (
-              <RedactedContent reason={event.getUnsigned().redacted_because?.content.reason} />
-            );
-          }
-
-          return (
-            <RenderMessageContent
-              displayName={displayName}
-              msgType={event.getContent().msgtype ?? ''}
-              ts={event.getTs()}
-              getContent={getContent}
-              edited={!!event.replacingEvent()}
-              mediaAutoLoad={mediaAutoLoad}
-              urlPreview={urlPreview}
-              htmlReactParserOptions={htmlReactParserOptions}
-              linkifyOpts={linkifyOpts}
-              outlineAttachment
-            />
-          );
-        },
-        [MessageEvent.RoomMessageEncrypted]: (event, displayName) => {
-          const eventId = event.getId()!;
-          const evtTimeline = room.getTimelineForEvent(eventId);
-
-          const mEvent = evtTimeline?.getEvents().find((e) => e.getId() === eventId);
-
-          if (!mEvent || !evtTimeline) {
-            return (
-              <Box grow="Yes" direction="Column">
-                <Text size="T400" priority="300">
-                  <code className={customHtmlCss.Code}>{event.getType()}</code>
-                  {' event'}
-                </Text>
-              </Box>
-            );
-          }
-
-          return (
-            <EncryptedContent mEvent={mEvent}>
-              {() => {
-                if (mEvent.isRedacted()) return <RedactedContent />;
-                if (mEvent.getType() === MessageEvent.Sticker)
-                  return (
-                    <MSticker
-                      content={mEvent.getContent()}
-                      renderImageContent={(props) => (
-                        <ImageContent
-                          {...props}
-                          autoPlay={mediaAutoLoad}
-                          renderImage={(p) => <Image {...p} loading="lazy" />}
-                          renderViewer={(p) => <ImageViewer {...p} />}
-                        />
-                      )}
-                    />
-                  );
-                if (mEvent.getType() === MessageEvent.RoomMessage) {
-                  const editedEvent = getEditedEvent(eventId, mEvent, evtTimeline.getTimelineSet());
-                  const getContent = (() =>
-                    editedEvent?.getContent()['m.new_content'] ??
-                    mEvent.getContent()) as GetContentCallback;
-
-                  return (
-                    <RenderMessageContent
-                      displayName={displayName}
-                      msgType={mEvent.getContent().msgtype ?? ''}
-                      ts={mEvent.getTs()}
-                      edited={!!editedEvent || !!mEvent.replacingEvent()}
-                      getContent={getContent}
-                      mediaAutoLoad={mediaAutoLoad}
-                      urlPreview={urlPreview}
-                      htmlReactParserOptions={htmlReactParserOptions}
-                      linkifyOpts={linkifyOpts}
-                      decryptionFailureReason={mEvent.decryptionFailureReason}
-                      onRequestKey={() => requestRoomKey(mx, mEvent)}
-                    />
-                  );
-                }
-                if (mEvent.getType() === MessageEvent.RoomMessageEncrypted)
-                  return (
-                    <Text>
-                      <MessageNotDecryptedContent />
-                    </Text>
-                  );
-                return (
-                  <Text>
-                    <MessageUnsupportedContent />
-                  </Text>
-                );
-              }}
-            </EncryptedContent>
-          );
-        },
-        [MessageEvent.Sticker]: (event, displayName, getContent) => {
-          if (event.isRedacted()) {
-            return (
-              <RedactedContent reason={event.getUnsigned().redacted_because?.content.reason} />
-            );
-          }
-          return (
-            <MSticker
-              content={getContent()}
-              renderImageContent={(props) => (
-                <ImageContent
-                  {...props}
-                  autoPlay={mediaAutoLoad}
-                  renderImage={(p) => <Image {...p} loading="lazy" />}
-                  renderViewer={(p) => <ImageViewer {...p} />}
-                />
-              )}
-            />
-          );
-        },
-      },
-      undefined,
-      (event) => {
-        if (event.isRedacted()) {
-          return <RedactedContent reason={event.getUnsigned().redacted_because?.content.reason} />;
-        }
-        return (
-          <Box grow="Yes" direction="Column">
-            <Text size="T400" priority="300">
-              <code className={customHtmlCss.Code}>{event.getType()}</code>
-              {' event'}
-            </Text>
-          </Box>
-        );
-      }
-    );
-
     const handleOpen = (roomId: string, eventId: string) => {
       navigateRoom(roomId, eventId);
       requestClose();
@@ -499,7 +437,6 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                             <PinnedMessage
                               room={room}
                               eventId={eventId}
-                              renderContent={renderMatrixEvent}
                               onOpen={handleOpen}
                               canPinEvent={canPinEvent}
                               getMemberPowerTag={getMemberPowerTag}
@@ -507,6 +444,10 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                               legacyUsernameColor={legacyUsernameColor || direct}
                               hour24Clock={hour24Clock}
                               dateFormatString={dateFormatString}
+                              mediaAutoLoad={mediaAutoLoad}
+                              urlPreview={urlPreview}
+                              htmlReactParserOptions={htmlReactParserOptions}
+                              linkifyOpts={linkifyOpts}
                             />
                           </SequenceCard>
                         </VirtualTile>
