@@ -48,7 +48,7 @@ import {
   UsernameBold,
 } from '../../../components/message';
 import {
-  canEditEvent,
+  canEditItem,
   getEventEdits,
   getMemberAvatarMxc,
   getMemberDisplayName,
@@ -417,16 +417,15 @@ export const MessagePinItem = as<
   'button',
   {
     room: Room;
-    mEvent: MatrixEvent;
+    eventId: string;
     onClose?: () => void;
   }
->(({ room, mEvent, onClose, ...props }, ref) => {
+>(({ room, eventId, onClose, ...props }, ref) => {
   const core = useCore();
   const pinnedEvents = useRoomPinnedEvents(room);
-  const isPinned = pinnedEvents.includes(mEvent.getId() ?? '');
+  const isPinned = pinnedEvents.includes(eventId);
 
   const handlePin = () => {
-    const eventId = mEvent.getId();
     const pinContent: RoomPinnedEventsEventContent = {
       pinned: Array.from(pinnedEvents).filter((id) => id !== eventId),
     };
@@ -457,24 +456,23 @@ export const MessageDeleteItem = as<
   'button',
   {
     room: Room;
-    mEvent: MatrixEvent;
+    eventId: string;
     onClose?: () => void;
   }
->(({ room, mEvent, onClose, ...props }, ref) => {
+>(({ room, eventId, onClose, ...props }, ref) => {
   const mx = useMatrixClient();
   const [open, setOpen] = useState(false);
 
   const [deleteState, deleteMessage] = useAsyncCallback(
     useCallback(
-      (eventId: string, reason?: string) =>
-        mx.redactEvent(room.roomId, eventId, undefined, reason ? { reason } : undefined),
+      (targetId: string, reason?: string) =>
+        mx.redactEvent(room.roomId, targetId, undefined, reason ? { reason } : undefined),
       [mx, room]
     )
   );
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
-    const eventId = mEvent.getId();
     if (
       !eventId ||
       deleteState.status === AsyncStatus.Loading ||
@@ -586,24 +584,23 @@ export const MessageReportItem = as<
   'button',
   {
     room: Room;
-    mEvent: MatrixEvent;
+    eventId: string;
     onClose?: () => void;
   }
->(({ room, mEvent, onClose, ...props }, ref) => {
+>(({ room, eventId, onClose, ...props }, ref) => {
   const mx = useMatrixClient();
   const [open, setOpen] = useState(false);
 
   const [reportState, reportMessage] = useAsyncCallback(
     useCallback(
-      (eventId: string, score: number, reason: string) =>
-        mx.reportEvent(room.roomId, eventId, score, reason),
+      (targetId: string, score: number, reason: string) =>
+        mx.reportEvent(room.roomId, targetId, score, reason),
       [mx, room]
     )
   );
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
     evt.preventDefault();
-    const eventId = mEvent.getId();
     if (
       !eventId ||
       reportState.status === AsyncStatus.Loading ||
@@ -1010,11 +1007,11 @@ export const Message = as<'div', MessageProps>(
                         returnFocusOnDeactivate={false}
                         allowTextCustomEmoji
                         onEmojiSelect={(key) => {
-                          onReactionToggle(mEvent.getId()!, key);
+                          onReactionToggle(timelineItem.eventId, key);
                           setEmojiBoardAnchor(undefined);
                         }}
                         onCustomEmojiSelect={(mxc, shortcode) => {
-                          onReactionToggle(mEvent.getId()!, mxc, shortcode);
+                          onReactionToggle(timelineItem.eventId, mxc, shortcode);
                           setEmojiBoardAnchor(undefined);
                         }}
                         requestClose={() => {
@@ -1036,7 +1033,7 @@ export const Message = as<'div', MessageProps>(
                 )}
                 <IconButton
                   onClick={onReplyClick}
-                  data-event-id={mEvent.getId()}
+                  data-event-id={timelineItem.eventId}
                   variant="SurfaceVariant"
                   size="300"
                   radii="300"
@@ -1046,7 +1043,7 @@ export const Message = as<'div', MessageProps>(
                 {!isThreadedMessage && (
                   <IconButton
                     onClick={(ev: React.MouseEvent<HTMLButtonElement>) => onReplyClick(ev, true)}
-                    data-event-id={mEvent.getId()}
+                    data-event-id={timelineItem.eventId}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1054,9 +1051,9 @@ export const Message = as<'div', MessageProps>(
                     <Icon src={Icons.ThreadPlus} size="100" />
                   </IconButton>
                 )}
-                {canEditEvent(mx, mEvent) && onEditId && (
+                {timelineItem.kind === 'message' && canEditItem(mx, timelineItem) && onEditId && (
                   <IconButton
-                    onClick={() => onEditId(mEvent.getId())}
+                    onClick={() => onEditId(timelineItem.eventId)}
                     variant="SurfaceVariant"
                     size="300"
                     radii="300"
@@ -1084,7 +1081,7 @@ export const Message = as<'div', MessageProps>(
                         {canSendReaction && (
                           <MessageQuickReactions
                             onReaction={(key, shortcode) => {
-                              onReactionToggle(mEvent.getId()!, key, shortcode);
+                              onReactionToggle(timelineItem.eventId, key, shortcode);
                               closeMenu();
                             }}
                           />
@@ -1118,7 +1115,7 @@ export const Message = as<'div', MessageProps>(
                             size="300"
                             after={<Icon size="100" src={Icons.ReplyArrow} />}
                             radii="300"
-                            data-event-id={mEvent.getId()}
+                            data-event-id={timelineItem.eventId}
                             onClick={(evt: any) => {
                               onReplyClick(evt);
                               closeMenu();
@@ -1138,7 +1135,7 @@ export const Message = as<'div', MessageProps>(
                               size="300"
                               after={<Icon src={Icons.ThreadPlus} size="100" />}
                               radii="300"
-                              data-event-id={mEvent.getId()}
+                              data-event-id={timelineItem.eventId}
                               onClick={(evt: any) => {
                                 onReplyClick(evt, true);
                                 closeMenu();
@@ -1154,27 +1151,29 @@ export const Message = as<'div', MessageProps>(
                               </Text>
                             </MenuItem>
                           )}
-                          {canEditEvent(mx, mEvent) && onEditId && (
-                            <MenuItem
-                              size="300"
-                              after={<Icon size="100" src={Icons.Pencil} />}
-                              radii="300"
-                              data-event-id={mEvent.getId()}
-                              onClick={() => {
-                                onEditId(mEvent.getId());
-                                closeMenu();
-                              }}
-                            >
-                              <Text
-                                className={css.MessageMenuItemText}
-                                as="span"
-                                size="T300"
-                                truncate
+                          {timelineItem.kind === 'message' &&
+                            canEditItem(mx, timelineItem) &&
+                            onEditId && (
+                              <MenuItem
+                                size="300"
+                                after={<Icon size="100" src={Icons.Pencil} />}
+                                radii="300"
+                                data-event-id={timelineItem.eventId}
+                                onClick={() => {
+                                  onEditId(timelineItem.eventId);
+                                  closeMenu();
+                                }}
                               >
-                                Edit Message
-                              </Text>
-                            </MenuItem>
-                          )}
+                                <Text
+                                  className={css.MessageMenuItemText}
+                                  as="span"
+                                  size="T300"
+                                  truncate
+                                >
+                                  Edit Message
+                                </Text>
+                              </MenuItem>
+                            )}
                           {isFailedSend && (
                             <>
                               <MessageResendItem room={room} mEvent={mEvent} onClose={closeMenu} />
@@ -1205,24 +1204,29 @@ export const Message = as<'div', MessageProps>(
                             onClose={closeMenu}
                           />
                           {canPinEvent && (
-                            <MessagePinItem room={room} mEvent={mEvent} onClose={closeMenu} />
+                            <MessagePinItem
+                              room={room}
+                              eventId={timelineItem.eventId}
+                              onClose={closeMenu}
+                            />
                           )}
                         </Box>
-                        {((!mEvent.isRedacted() && canDelete) || senderId !== mx.getUserId()) && (
+                        {((timelineItem.kind !== 'redacted' && canDelete) ||
+                          senderId !== mx.getUserId()) && (
                           <>
                             <Line size="300" />
                             <Box direction="Column" gap="100" className={css.MessageMenuGroup}>
                               {timelineItem.kind !== 'redacted' && canDelete && (
                                 <MessageDeleteItem
                                   room={room}
-                                  mEvent={mEvent}
+                                  eventId={timelineItem.eventId}
                                   onClose={closeMenu}
                                 />
                               )}
                               {senderId !== mx.getUserId() && (
                                 <MessageReportItem
                                   room={room}
-                                  mEvent={mEvent}
+                                  eventId={timelineItem.eventId}
                                   onClose={closeMenu}
                                 />
                               )}
@@ -1397,14 +1401,14 @@ export const Event = as<'div', EventProps>(
                               {timelineItem.kind !== 'redacted' && canDelete && (
                                 <MessageDeleteItem
                                   room={room}
-                                  mEvent={mEvent}
+                                  eventId={timelineItem.eventId}
                                   onClose={closeMenu}
                                 />
                               )}
                               {timelineItem.sender !== mx.getUserId() && (
                                 <MessageReportItem
                                   room={room}
-                                  mEvent={mEvent}
+                                  eventId={timelineItem.eventId}
                                   onClose={closeMenu}
                                 />
                               )}

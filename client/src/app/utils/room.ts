@@ -17,12 +17,12 @@ import {
   Room,
   RoomMember,
 } from 'matrix-js-sdk';
+import type { TimelineItem } from '@harrier/core';
 import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   IRoomCreateContent,
   Membership,
-  MessageEvent,
   NotificationType,
   RoomToParents,
   RoomType,
@@ -470,18 +470,15 @@ export const getEditedEvent = (
   return edits && getLatestEdit(mEvent, edits.getRelations());
 };
 
-export const canEditEvent = (mx: MatrixClient, mEvent: MatrixEvent) => {
-  const content = mEvent.getContent();
-  const relationType = content['m.relates_to']?.rel_type;
-  return (
-    mEvent.getSender() === mx.getUserId() &&
-    (!relationType || relationType === RelationType.Thread) &&
-    mEvent.getType() === MessageEvent.RoomMessage &&
-    (content.msgtype === MsgType.Text ||
-      content.msgtype === MsgType.Emote ||
-      content.msgtype === MsgType.Notice)
-  );
-};
+export const canEditItem = (
+  mx: MatrixClient,
+  item: Extract<TimelineItem, { kind: 'message' }>
+): boolean =>
+  item.sender === mx.getUserId() &&
+  (item.replyTo === undefined || item.threadRoot !== undefined) &&
+  (item.content.msgtype === MsgType.Text ||
+    item.content.msgtype === MsgType.Emote ||
+    item.content.msgtype === MsgType.Notice);
 
 export const getLatestEditableEvt = (
   timeline: EventTimeline,
