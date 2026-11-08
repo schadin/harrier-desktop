@@ -131,7 +131,7 @@ export type SendModule = {
   sendMessage(roomId: RoomId, content: JsonObject): Promise<CoreResult<string>>;
   sendEvent(roomId: RoomId, eventType: string, content: JsonObject): Promise<CoreResult<string>>;
   edit(roomId: RoomId, eventId: EventId, content: JsonObject): Promise<CoreResult<string>>;
-  reaction(roomId: RoomId, eventId: EventId, key: string): Promise<CoreResult<string>>;
+  reaction(roomId: RoomId, eventId: EventId, key: string, shortcode?: string): Promise<CoreResult<string>>;
   redact(roomId: RoomId, eventId: EventId, reason?: string): Promise<CoreResult<string>>;
   cancel(localId: string): Promise<CoreResult<void>>;
   resend(localId: string): Promise<CoreResult<void>>;

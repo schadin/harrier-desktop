@@ -72,11 +72,10 @@ import {
 import {
   getEventReactions,
   getMemberDisplayName,
-  getReactionContent,
   isMembershipContentChanged,
 } from '../../utils/room';
 import { isVisibleTimelineItem } from '../../utils/timelineVisibility';
-import { sendEventSafely } from '../../utils/send';
+import { notifySendError } from '../../utils/send';
 import { useSetting } from '../../state/hooks/settings';
 import { MessageLayout, settingsAtom } from '../../state/settings';
 import { useMatrixEventRenderer } from '../../hooks/useMatrixEventRenderer';
@@ -795,20 +794,19 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       const myReaction = reactions.find(factoryEventSentBy(mx.getUserId()!));
 
       if (myReaction && !!myReaction?.isRelation()) {
-        mx.redactEvent(room.roomId, myReaction.getId()!);
+        core.send.redact(room.roomId, myReaction.getId()!).then((result) => {
+          if (!result.ok) notifySendError(result.error);
+        });
         return;
       }
       const rShortcode =
         shortcode ||
         (reactions.find(eventWithShortcode)?.getContent().shortcode as string | undefined);
-      sendEventSafely(
-        mx,
-        room.roomId,
-        MessageEvent.Reaction as any,
-        getReactionContent(targetEventId, key, rShortcode)
-      );
+      core.send.reaction(room.roomId, targetEventId, key, rShortcode).then((result) => {
+        if (!result.ok) notifySendError(result.error);
+      });
     },
-    [mx, room]
+    [core, mx, room]
   );
   const handleEdit = useCallback(
     (editEvtId?: string) => {

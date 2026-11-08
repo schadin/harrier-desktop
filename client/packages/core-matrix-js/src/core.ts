@@ -1444,9 +1444,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           )
         );
       },
-      async reaction(roomId, eventId, key): Promise<CoreResult<string>> {
+      async reaction(roomId, eventId, key, shortcode): Promise<CoreResult<string>> {
         const wrapped: JsonObject = {
           'm.relates_to': { rel_type: 'm.annotation', event_id: eventId, key },
+          ...(shortcode !== undefined ? { shortcode } : {}),
         };
         return sendWithTxn(roomId, (txnId) =>
           client.sendEvent(roomId, null as never, 'm.reaction' as never, wrapped as never, txnId)
