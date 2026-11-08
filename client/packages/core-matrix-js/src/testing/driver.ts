@@ -73,6 +73,14 @@ export type SyncFixtureRoom = {
     readonly stateKey: string;
     readonly content: Record<string, unknown>;
   }[];
+  readonly timelineStateEvents?: readonly {
+    readonly eventId: string;
+    readonly sender: string;
+    readonly type: string;
+    readonly stateKey: string;
+    readonly content: Record<string, unknown>;
+    readonly prevContent?: Record<string, unknown>;
+  }[];
   readonly members?: readonly {
     readonly userId: string;
     readonly displayName: string;
@@ -378,6 +386,19 @@ export function createSyncDriver(): SyncDriver {
     const events = [
       ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),
       ...(item.reactions ?? []).map((reaction) => reactionEvent(item.roomId, reaction)),
+      ...(item.timelineStateEvents ?? []).map((stateItem) => {
+        eventCounter += 1;
+        return new MatrixEvent({
+          type: stateItem.type,
+          state_key: stateItem.stateKey,
+          sender: stateItem.sender,
+          room_id: item.roomId,
+          event_id: stateItem.eventId,
+          origin_server_ts: 1_700_000_000_000 + eventCounter,
+          content: stateItem.content,
+          unsigned: stateItem.prevContent ? { prev_content: stateItem.prevContent } : {},
+        });
+      }),
     ];
     events.forEach((event) => {
       const eventId = event.getId();

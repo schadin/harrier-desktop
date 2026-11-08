@@ -275,6 +275,7 @@ const toItem = (
   }
 
   if (typeof event.getStateKey() === 'string') {
+    const prevContent = event.getPrevContent() as JsonObject;
     return {
       ...base,
       kind: 'state',
@@ -282,6 +283,7 @@ const toItem = (
       stateKey: event.getStateKey() ?? '',
       preview: eventType,
       content: event.getContent() as JsonObject,
+      ...(Object.keys(prevContent).length > 0 ? { prevContent } : {}),
     };
   }
 

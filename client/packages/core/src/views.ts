@@ -131,6 +131,7 @@ export type TimelineItem =
       readonly eventType: string;
       readonly stateKey: string;
       readonly content: JsonObject;
+      readonly prevContent?: JsonObject;
     })
   | (TimelineBase & {
       readonly kind: 'encrypted';

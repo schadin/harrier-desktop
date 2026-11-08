@@ -169,6 +169,40 @@ export const timelineCases = [
     }
   }),
 
+  contractTest('state events expose state key and previous content', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            timelineStateEvents: [
+              {
+                eventId: '$member1',
+                sender: '@alice:example.org',
+                type: 'm.room.member',
+                stateKey: '@bob:example.org',
+                content: { membership: 'join', displayname: 'Bob' },
+                prevContent: { membership: 'invite', displayname: 'Bob' },
+              },
+            ],
+          },
+        ],
+      });
+      const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      expect(item?.kind).toBe('state');
+      if (item?.kind !== 'state') return;
+      expect(item.eventType).toBe('m.room.member');
+      expect(item.stateKey).toBe('@bob:example.org');
+      expect(item.content).toMatchObject({ membership: 'join', displayname: 'Bob' });
+      expect(item.prevContent).toMatchObject({ membership: 'invite', displayname: 'Bob' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('an edit replaces the body and is not listed as its own item', async (harness) => {
     const core = await harness.create();
     try {

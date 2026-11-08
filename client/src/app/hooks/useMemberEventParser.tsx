@@ -1,23 +1,25 @@
 import React, { ReactNode } from 'react';
 import { IconSrc, Icons } from 'folds';
-import { MatrixEvent } from 'matrix-js-sdk';
+import type { TimelineItem } from '@harrier/core';
 import { IMemberContent, Membership } from '../../types/matrix/room';
 import { getMxIdLocalPart } from '../utils/matrix';
-import { isMembershipChanged } from '../utils/room';
+import { isMembershipContentChanged } from '../utils/room';
 
 export type ParsedResult = {
   icon: IconSrc;
   body: ReactNode;
 };
 
-export type MemberEventParser = (mEvent: MatrixEvent) => ParsedResult;
+export type StateTimelineItem = Extract<TimelineItem, { kind: 'state' }>;
+
+export type MemberEventParser = (item: StateTimelineItem) => ParsedResult;
 
 export const useMemberEventParser = (): MemberEventParser => {
-  const parseMemberEvent: MemberEventParser = (mEvent) => {
-    const content = mEvent.getContent<IMemberContent>();
-    const prevContent = mEvent.getPrevContent() as IMemberContent;
-    const senderId = mEvent.getSender();
-    const userId = mEvent.getStateKey();
+  const parseMemberEvent: MemberEventParser = (item) => {
+    const content = item.content as IMemberContent;
+    const prevContent = (item.prevContent ?? {}) as IMemberContent;
+    const senderId = item.sender;
+    const userId = item.stateKey;
     const reason = typeof content.reason === 'string' ? content.reason : undefined;
 
     if (!senderId || !userId)
@@ -32,7 +34,7 @@ export const useMemberEventParser = (): MemberEventParser => {
         ? content.displayname || getMxIdLocalPart(userId)
         : getMxIdLocalPart(userId);
 
-    if (isMembershipChanged(mEvent)) {
+    if (isMembershipContentChanged(content, prevContent)) {
       if (content.membership === Membership.Invite) {
         if (prevContent.membership === Membership.Knock) {
           return {

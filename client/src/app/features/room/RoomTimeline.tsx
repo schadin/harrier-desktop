@@ -74,9 +74,9 @@ import {
   getEventReactions,
   getMemberDisplayName,
   getReactionContent,
-  isMembershipChanged,
+  isMembershipContentChanged,
 } from '../../utils/room';
-import { isVisibleTimelineEvent } from '../../utils/timelineVisibility';
+import { isVisibleTimelineItem } from '../../utils/timelineVisibility';
 import { sendEventSafely } from '../../utils/send';
 import { useSetting } from '../../state/hooks/settings';
 import { MessageLayout, settingsAtom } from '../../state/settings';
@@ -1157,12 +1157,16 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         );
       },
       [StateEvent.RoomMember]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
-        const membershipChanged = isMembershipChanged(mEvent);
+        if (timelineItem.kind !== 'state') return null;
+        const membershipChanged = isMembershipContentChanged(
+          timelineItem.content,
+          timelineItem.prevContent ?? {}
+        );
         if (membershipChanged && hideMembershipEvents) return null;
         if (!membershipChanged && hideNickAvatarEvents) return null;
 
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const parsed = parseMemberEvent(mEvent);
+        const parsed = parseMemberEvent(timelineItem);
 
         const timeJSX = (
           <Time
@@ -1516,7 +1520,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
     const eventSender = timelineItem.sender;
     if (
-      !isVisibleTimelineEvent(mEvent, {
+      !isVisibleTimelineItem(timelineItem, {
         hideMembershipEvents,
         hideNickAvatarEvents,
         showHiddenEvents,
