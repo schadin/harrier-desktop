@@ -30,6 +30,7 @@ import {
 } from 'folds';
 
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import {
   CustomEditor,
   Toolbar,
@@ -132,6 +133,7 @@ interface RoomInputProps {
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
     const mx = useMatrixClient();
+    const core = useCore();
     const useAuthentication = useMediaAuthentication();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [isMarkdown] = useSetting(settingsAtom, 'isMarkdown');
@@ -309,7 +311,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       });
       handleCancelUpload(uploads);
       const contents = fulfilledPromiseSettledResult(await Promise.allSettled(contentsPromises));
-      contents.forEach((content) => sendMessageSafely(mx, roomId, content as any));
+      contents.forEach((content) => sendMessageSafely(core, roomId, content as never));
     };
 
     const submit = useCallback(() => {
@@ -388,7 +390,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           content['m.relates_to'].is_falling_back = false;
         }
       }
-      sendMessageSafely(mx, roomId, content as any);
+      sendMessageSafely(core, roomId, content as never);
       resetEditor(editor);
       resetEditorHistory(editor);
       setReplyDraft(undefined);
@@ -472,7 +474,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await getImageUrlBlob(stickerUrl)
       );
 
-      sendEventSafely(mx, roomId, EventType.Sticker, {
+      sendEventSafely(core, roomId, EventType.Sticker, {
         body: label,
         url: mxc,
         info,

@@ -1,6 +1,5 @@
 import { getDefaultStore } from 'jotai';
-import { IContent, MatrixClient } from 'matrix-js-sdk';
-import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
+import type { HarrierCore, JsonObject } from '@harrier/core';
 import { sendErrorListAtom } from '../state/sendError';
 
 let sendErrorId = 0;
@@ -20,19 +19,25 @@ export const notifySendError = (error: unknown): void => {
   ]);
 };
 
-export const sendMessageSafely = (
-  mx: MatrixClient,
-  roomId: string,
-  content: RoomMessageEventContent
-): void => {
-  mx.sendMessage(roomId, content).catch(notifySendError);
+export const sendMessageSafely = (core: HarrierCore, roomId: string, content: JsonObject): void => {
+  core.send
+    .sendMessage(roomId, content)
+    .then((result) => {
+      if (!result.ok) notifySendError(result.error);
+    })
+    .catch(notifySendError);
 };
 
 export const sendEventSafely = (
-  mx: MatrixClient,
+  core: HarrierCore,
   roomId: string,
   eventType: string,
-  content: IContent
+  content: JsonObject
 ): void => {
-  mx.sendEvent(roomId, eventType as any, content).catch(notifySendError);
+  core.send
+    .sendEvent(roomId, eventType, content)
+    .then((result) => {
+      if (!result.ok) notifySendError(result.error);
+    })
+    .catch(notifySendError);
 };
