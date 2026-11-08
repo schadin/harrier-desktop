@@ -1,6 +1,6 @@
-import { IContent, MatrixClient, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
+import { IContent, MatrixClient, MsgType, Room } from 'matrix-js-sdk';
+import type { TimelineItem } from '@harrier/core';
 import { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
-import { MessageEvent } from '../../../types/matrix/room';
 import { getMentionContent } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { notifySendError } from '../../utils/send';
@@ -233,11 +233,11 @@ export const isBotCommandText = (text: string): boolean => {
   }
 };
 
-export const isBotCommandMessage = (mEvent: MatrixEvent, botMxid: string): boolean => {
-  if (mEvent.getType() !== MessageEvent.RoomMessage) return false;
-  if (mEvent.getSender() === botMxid) return false;
+export const isBotCommandMessage = (item: TimelineItem, botMxid: string): boolean => {
+  if (item.kind !== 'message') return false;
+  if (item.sender === botMxid) return false;
 
-  const { body } = mEvent.getContent();
+  const { body } = item.content.raw;
   if (typeof body !== 'string') return false;
 
   const text = body.trim();
@@ -262,17 +262,17 @@ export const BOT_SERVICE_REPLY_MAX_LINES = 2;
 // в т.ч. созданные серией) сворачивать нельзя.
 const ENVELOPE_COLLAPSIBLE_KINDS = new Set(['notice']);
 
-export const isBotServiceReply = (mEvent: MatrixEvent, botMxid: string): boolean => {
-  if (mEvent.getType() !== MessageEvent.RoomMessage) return false;
-  if (mEvent.getSender() !== botMxid) return false;
+export const isBotServiceReply = (item: TimelineItem, botMxid: string): boolean => {
+  if (item.kind !== 'message') return false;
+  if (item.sender !== botMxid) return false;
 
-  const parsed = parseBotMessage(mEvent, botMxid);
+  const parsed = parseBotMessage(item, botMxid);
   if (parsed) {
     if (parsed.origin === 'envelope') return ENVELOPE_COLLAPSIBLE_KINDS.has(parsed.kind);
     return parsed.kind === 'notice';
   }
 
-  const { body } = mEvent.getContent();
+  const { body } = item.content.raw;
   if (typeof body !== 'string') return false;
 
   const text = body.trim();

@@ -1,4 +1,4 @@
-import { MatrixEvent } from 'matrix-js-sdk';
+import type { TimelineItem } from '@harrier/core';
 import { describe, expect, it } from 'vitest';
 import {
   canCloseTask,
@@ -14,23 +14,30 @@ import {
 const BOT_MXID = '@dstaskbot:ds-core.ru';
 const MY_MXID = '@ashchadin:ds-core.ru';
 
-const makeEvent = (sender: string, body: string, replyEventId?: string): MatrixEvent =>
-  new MatrixEvent({
-    type: 'm.room.message',
-    sender,
-    content: {
-      msgtype: 'm.text',
-      body,
-      ...(replyEventId ? { 'm.relates_to': { 'm.in_reply_to': { event_id: replyEventId } } } : {}),
-    },
-  });
+const makeMessageItem = (
+  sender: string,
+  body: string,
+  raw: Record<string, unknown>
+): TimelineItem => ({
+  kind: 'message',
+  eventId: '$fixture',
+  roomId: '!room:ds-core.ru',
+  sender,
+  timestamp: 1_700_000_000_000,
+  preview: body,
+  status: 'sent',
+  content: { msgtype: 'm.text', body, raw: { msgtype: 'm.text', body, ...raw } },
+});
 
-const makeEnvelopeEvent = (sender: string, body: string, envelope: unknown): MatrixEvent =>
-  new MatrixEvent({
-    type: 'm.room.message',
+const makeEvent = (sender: string, body: string, replyEventId?: string): TimelineItem =>
+  makeMessageItem(
     sender,
-    content: { msgtype: 'm.text', body, 'ru.ds_core.bot': envelope },
-  });
+    body,
+    replyEventId ? { 'm.relates_to': { 'm.in_reply_to': { event_id: replyEventId } } } : {}
+  );
+
+const makeEnvelopeEvent = (sender: string, body: string, envelope: unknown): TimelineItem =>
+  makeMessageItem(sender, body, { 'ru.ds_core.bot': envelope });
 
 describe('parseTaskLines', () => {
   it('парсит строки задач из ответа list (два сообщения)', () => {
@@ -276,13 +283,16 @@ describe('parseBotMessage', () => {
   });
 
   it('не распознаёт не-сообщения', () => {
-    const mEvent = new MatrixEvent({
-      type: 'm.room.encrypted',
+    const item: TimelineItem = {
+      kind: 'encrypted',
+      eventId: '$fixture',
+      roomId: '!room:ds-core.ru',
       sender: BOT_MXID,
-      content: { algorithm: 'm.megolm.v1.aes-sha2' },
-    });
+      timestamp: 1_700_000_000_000,
+      preview: 'm.room.encrypted',
+    };
 
-    expect(parseBotMessage(mEvent, BOT_MXID)).toBeNull();
+    expect(parseBotMessage(item, BOT_MXID)).toBeNull();
   });
 });
 

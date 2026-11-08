@@ -1,4 +1,3 @@
-import { MatrixEvent } from 'matrix-js-sdk';
 import { describe, expect, it } from 'vitest';
 import {
   DS_BOT_ENVELOPE_KEY,
@@ -8,19 +7,17 @@ import {
   parseEnvelopeTasks,
 } from './envelope';
 
-const BOT_MXID = '@dstaskbot:ds-core.ru';
 const MY_MXID = '@ashchadin:ds-core.ru';
 
-const makeEvent = (content: Record<string, unknown>): MatrixEvent =>
-  new MatrixEvent({
-    type: 'm.room.message',
-    sender: BOT_MXID,
-    content: { msgtype: 'm.text', body: 'text', ...content },
-  });
+const makeContent = (content: Record<string, unknown>): Record<string, unknown> => ({
+  msgtype: 'm.text',
+  body: 'text',
+  ...content,
+});
 
 describe('parseEnvelope', () => {
   it('читает конверт ru.ds_core.bot версии 1', () => {
-    const mEvent = makeEvent({
+    const content = makeContent({
       [DS_BOT_ENVELOPE_KEY]: {
         v: 1,
         kind: 'list',
@@ -32,7 +29,7 @@ describe('parseEnvelope', () => {
       },
     });
 
-    expect(parseEnvelope(mEvent)).toMatchObject({
+    expect(parseEnvelope(content)).toMatchObject({
       v: 1,
       kind: 'list',
       tasks: {
@@ -44,17 +41,19 @@ describe('parseEnvelope', () => {
   });
 
   it('возвращает null без конверта, при чужой версии и неизвестном kind', () => {
-    expect(parseEnvelope(makeEvent({}))).toBeNull();
-    expect(parseEnvelope(makeEvent({ [DS_BOT_ENVELOPE_KEY]: { v: 2, kind: 'list' } }))).toBeNull();
+    expect(parseEnvelope(makeContent({}))).toBeNull();
     expect(
-      parseEnvelope(makeEvent({ [DS_BOT_ENVELOPE_KEY]: { v: 1, kind: 'unknown' } }))
+      parseEnvelope(makeContent({ [DS_BOT_ENVELOPE_KEY]: { v: 2, kind: 'list' } }))
     ).toBeNull();
-    expect(parseEnvelope(makeEvent({ [DS_BOT_ENVELOPE_KEY]: 'not an object' }))).toBeNull();
+    expect(
+      parseEnvelope(makeContent({ [DS_BOT_ENVELOPE_KEY]: { v: 1, kind: 'unknown' } }))
+    ).toBeNull();
+    expect(parseEnvelope(makeContent({ [DS_BOT_ENVELOPE_KEY]: 'not an object' }))).toBeNull();
   });
 
   it('игнорирует необязательные поля, если они не заданы', () => {
     const envelope = parseEnvelope(
-      makeEvent({ [DS_BOT_ENVELOPE_KEY]: { v: 1, kind: 'verify_request' } })
+      makeContent({ [DS_BOT_ENVELOPE_KEY]: { v: 1, kind: 'verify_request' } })
     );
     expect(envelope).toEqual({ v: 1, kind: 'verify_request' });
   });

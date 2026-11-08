@@ -1,5 +1,3 @@
-import { MatrixEvent } from 'matrix-js-sdk';
-
 export const DS_BOT_ENVELOPE_KEY = 'ru.ds_core.bot';
 
 export type DsTaskStatus = 'open' | 'closed';
@@ -170,8 +168,7 @@ export const parseEnvelopeTasks = (
   };
 };
 
-export const parseEnvelope = (mEvent: MatrixEvent): DsEnvelope | null => {
-  const content = mEvent.getContent() as Record<string, unknown>;
+export const parseEnvelope = (content: Record<string, unknown>): DsEnvelope | null => {
   const raw = content[DS_BOT_ENVELOPE_KEY];
   if (!isRecord(raw)) return null;
   if (raw.v !== 1) return null;

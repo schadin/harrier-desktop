@@ -843,8 +843,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
 
         const dsBotMxid = dsTaskBotSettings.botMxid;
         const parsedBotContent =
-          dsTaskBotSettings.cardsEnabled && dsBotMxid !== '' && senderId === dsBotMxid
-            ? parseBotMessage(mEvent, dsBotMxid)
+          dsTaskBotSettings.cardsEnabled &&
+          dsBotMxid !== '' &&
+          senderId === dsBotMxid &&
+          timelineItem.kind === 'message'
+            ? parseBotMessage(timelineItem, dsBotMxid)
             : null;
 
         return (
@@ -1552,17 +1555,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
       dsTaskBotSettings.botMxid !== '' &&
       eventSender !== undefined &&
       eventSender !== dsTaskBotSettings.botMxid &&
-      isBotCommandMessage(mEvent, dsTaskBotSettings.botMxid);
+      isBotCommandMessage(timelineItem, dsTaskBotSettings.botMxid);
 
     const collapseBotReply =
       botCollapseAllowed &&
       dsTaskBotSettings.collapseCommandsEnabled &&
       dsTaskBotSettings.botMxid !== '' &&
-      isBotServiceReply(mEvent, dsTaskBotSettings.botMxid);
+      isBotServiceReply(timelineItem, dsTaskBotSettings.botMxid);
 
     let eventJSX: React.ReactNode;
     if (collapseBotCommand || collapseBotReply) {
-      const body = typeof mEvent.getContent().body === 'string' ? mEvent.getContent().body : '';
+      const body =
+        timelineItem.kind === 'message' && typeof timelineItem.content.body === 'string'
+          ? timelineItem.content.body
+          : '';
       const senderName = eventSender
         ? getMemberDisplayName(room, eventSender) ?? getMxIdLocalPart(eventSender) ?? eventSender
         : '';

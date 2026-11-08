@@ -1,4 +1,5 @@
-import { MatrixEvent, Room } from 'matrix-js-sdk';
+import { Room } from 'matrix-js-sdk';
+import type { TimelineItem } from '@harrier/core';
 import { describe, expect, it } from 'vitest';
 import {
   buildBotCommand,
@@ -14,19 +15,25 @@ const BOT_MXID = '@dstaskbot:ds-core.ru';
 const MY_MXID = '@ashchadin:ds-core.ru';
 const OTHER_MXID = '@ashumkov:ds-core.ru';
 
-const makeEvent = (sender: string, body: string): MatrixEvent =>
-  new MatrixEvent({
-    type: 'm.room.message',
-    sender,
-    content: { msgtype: 'm.text', body },
-  });
+const makeMessageItem = (
+  sender: string,
+  body: string,
+  raw: Record<string, unknown>
+): TimelineItem => ({
+  kind: 'message',
+  eventId: '$fixture',
+  roomId: '!room:ds-core.ru',
+  sender,
+  timestamp: 1_700_000_000_000,
+  preview: body,
+  status: 'sent',
+  content: { msgtype: 'm.text', body, raw: { msgtype: 'm.text', body, ...raw } },
+});
 
-const makeEnvelopeEvent = (sender: string, body: string, envelope: unknown): MatrixEvent =>
-  new MatrixEvent({
-    type: 'm.room.message',
-    sender,
-    content: { msgtype: 'm.text', body, 'ru.ds_core.bot': envelope },
-  });
+const makeEvent = (sender: string, body: string): TimelineItem => makeMessageItem(sender, body, {});
+
+const makeEnvelopeEvent = (sender: string, body: string, envelope: unknown): TimelineItem =>
+  makeMessageItem(sender, body, { 'ru.ds_core.bot': envelope });
 
 describe('buildBotCommand', () => {
   it('в комнате добавляет упоминание бота к команде с префиксом «!»', () => {

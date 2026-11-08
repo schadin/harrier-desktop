@@ -1,5 +1,4 @@
-import { MatrixEvent } from 'matrix-js-sdk';
-import { MessageEvent } from '../../../types/matrix/room';
+import type { TimelineItem } from '@harrier/core';
 import { parseEnvelope } from './envelope';
 import type { DsEnvelope, DsFile, DsSeries, DsTask } from './envelope';
 
@@ -204,14 +203,15 @@ export const parseEnvelopeMessage = (
   }
 };
 
-export const parseBotMessage = (mEvent: MatrixEvent, botMxid: string): ParsedBotMessage | null => {
-  if (mEvent.getType() !== MessageEvent.RoomMessage) return null;
-  if (mEvent.getSender() !== botMxid) return null;
+export const parseBotMessage = (item: TimelineItem, botMxid: string): ParsedBotMessage | null => {
+  if (item.kind !== 'message') return null;
+  if (item.sender !== botMxid) return null;
 
-  const { body } = mEvent.getContent();
+  const content = item.content.raw;
+  const { body } = content;
   const text = typeof body === 'string' ? body.trim() : '';
 
-  const envelope = parseEnvelope(mEvent);
+  const envelope = parseEnvelope(content);
   if (envelope) return parseEnvelopeMessage(envelope, text);
 
   if (typeof body !== 'string') return null;
