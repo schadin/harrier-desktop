@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 import { useSetAtom } from 'jotai';
 import { Box, Button, Icon, Icons, Text, config } from 'folds';
 import { SequenceCard } from '../../components/sequence-card';
@@ -21,7 +21,7 @@ import { dsTaskBotLastTasksAtom, useDsTaskBotSettings } from '../../state/dsTask
 
 type DsTaskBotCardsProps = {
   parsed: ParsedBotMessage;
-  mx: MatrixClient;
+  core: HarrierCore;
   roomId: string;
   myUserId: string;
   botMxid: string;
@@ -305,7 +305,7 @@ function NoticeCard({
 
 export function DsTaskBotCards({
   parsed,
-  mx,
+  core,
   roomId,
   myUserId,
   botMxid,
@@ -339,15 +339,15 @@ export function DsTaskBotCards({
   }, [parsed, roomId, setLastTasks]);
 
   const sendClose = (taskId: number) => {
-    sendBotCommand(mx, roomId, botMxid, dm, 'close', String(taskId));
+    sendBotCommand(core, roomId, botMxid, dm, 'close', String(taskId));
   };
 
   const sendFile = (taskId: number) => {
-    sendBotCommand(mx, roomId, botMxid, dm, 'file', String(taskId));
+    sendBotCommand(core, roomId, botMxid, dm, 'file', String(taskId));
   };
 
   const stopSeries = () => {
-    sendBotSeriesStop(mx, roomId, eventId);
+    sendBotSeriesStop(core, roomId, eventId);
   };
 
   if (parsed.origin === 'envelope') {

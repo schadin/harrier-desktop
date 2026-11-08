@@ -1,6 +1,5 @@
-import { IContent, MatrixClient, MsgType, Room } from 'matrix-js-sdk';
-import type { TimelineItem } from '@harrier/core';
-import { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
+import { IContent, MsgType, Room } from 'matrix-js-sdk';
+import type { HarrierCore, JsonObject, TimelineItem } from '@harrier/core';
 import { getMentionContent } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { notifySendError } from '../../utils/send';
@@ -29,22 +28,18 @@ export const buildBotMentionContent = (body: string, mentionUserIds: string[]): 
 };
 
 export const sendBotText = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   roomId: string,
   body: string,
   mentionUserIds: string[] = []
 ): Promise<string | null> => {
-  const content: RoomMessageEventContent = buildBotMentionContent(
-    body,
-    mentionUserIds
-  ) as RoomMessageEventContent;
-  try {
-    const response = await mx.sendMessage(roomId, content);
-    return response.event_id;
-  } catch (error) {
-    notifySendError(error);
+  const content = buildBotMentionContent(body, mentionUserIds) as unknown as JsonObject;
+  const result = await core.send.sendMessage(roomId, content);
+  if (!result.ok) {
+    notifySendError(result.error);
     return null;
   }
+  return result.value;
 };
 
 export const isDirectRoomWithBot = (room: Room, botMxid: string): boolean => {
@@ -176,7 +171,7 @@ export const buildBotCommand = (
 };
 
 export const sendBotCommand = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   roomId: string,
   botMxid: string,
   dm: boolean,
@@ -184,28 +179,27 @@ export const sendBotCommand = async (
   params = ''
 ): Promise<string | null> => {
   const { body, mentionUserIds } = buildBotCommand(botMxid, dm, action, params);
-  return sendBotText(mx, roomId, body, mentionUserIds);
+  return sendBotText(core, roomId, body, mentionUserIds);
 };
 
 // Остановка регулярной задачи: бот останавливает серию по `!stop`, отправленному
 // ответом на любое сообщение серии.
 export const sendBotSeriesStop = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   roomId: string,
   replyToEventId: string
 ): Promise<string | null> => {
-  const content = {
+  const content: JsonObject = {
     msgtype: MsgType.Text,
     body: '!stop',
     'm.relates_to': { 'm.in_reply_to': { event_id: replyToEventId } },
-  } as unknown as RoomMessageEventContent;
-  try {
-    const response = await mx.sendMessage(roomId, content);
-    return response.event_id;
-  } catch (error) {
-    notifySendError(error);
+  };
+  const result = await core.send.sendMessage(roomId, content);
+  if (!result.ok) {
+    notifySendError(result.error);
     return null;
   }
+  return result.value;
 };
 
 // Набор сворачиваемых команд и форма их аргументов берутся из единого

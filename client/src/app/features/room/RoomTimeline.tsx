@@ -934,7 +934,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                 const botCards = (
                   <DsTaskBotCards
                     parsed={parsedBotContent}
-                    mx={mx}
+                    core={core}
                     roomId={room.roomId}
                     myUserId={mx.getUserId() ?? ''}
                     botMxid={dsBotMxid}

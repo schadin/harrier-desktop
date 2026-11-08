@@ -9,6 +9,7 @@ import {
   RoomMember,
   Visibility,
 } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 import { RoomServerAclEventContent } from 'matrix-js-sdk/lib/types';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -182,7 +183,7 @@ export type CommandRecord = Partial<Record<Command, CommandContent>> & {
   [commandName: string]: CommandContent | undefined;
 };
 
-export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
+export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): CommandRecord => {
   const { navigateRoom } = useRoomNavigate();
   const { t } = useTranslation();
   const dsTaskBotSettings = useDsTaskBotSettings();
@@ -501,9 +502,10 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
             const eventIds = eventsToDelete.map((roomEvent) => roomEvent.event_id);
 
             // eslint-disable-next-line no-await-in-loop
-            await rateLimitedActions(eventIds, (eventId) =>
-              mx.redactEvent(room.roomId, eventId, undefined, { reason })
-            );
+            await rateLimitedActions(eventIds, async (eventId) => {
+              const redactResult = await core.send.redact(room.roomId, eventId, reason);
+              if (!redactResult.ok) throw redactResult.error;
+            });
           }
         },
       },
@@ -576,7 +578,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
                 if (!parsed) return;
 
                 await sendBotCommand(
-                  mx,
+                  core,
                   room.roomId,
                   dsTaskBotSettings.botMxid,
                   dsTaskBotDm,
@@ -593,7 +595,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
                     description: t(i18n.key, { defaultValue: i18n.defaultValue }),
                     exe: async (payload) => {
                       await sendBotCommand(
-                        mx,
+                        core,
                         room.roomId,
                         dsTaskBotSettings.botMxid,
                         dsTaskBotDm,
@@ -611,6 +613,7 @@ export const useCommands = (mx: MatrixClient, room: Room): CommandRecord => {
     }),
     [
       mx,
+      core,
       room,
       navigateRoom,
       dsTaskBotEnabled,
