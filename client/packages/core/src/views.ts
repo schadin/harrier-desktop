@@ -93,6 +93,7 @@ export type MessageContentView = {
   readonly formattedBody?: string;
   readonly format?: string;
   readonly attachment?: MessageAttachmentView;
+  readonly raw: JsonObject;
 };
 
 export type ReactionCountView = {

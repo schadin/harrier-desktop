@@ -172,6 +172,7 @@ type EditedMessage = {
   readonly body: string;
   readonly formattedBody?: string;
   readonly format?: string;
+  readonly raw?: JsonObject;
 };
 
 const viaServersOf = (room: Room): readonly string[] => {
@@ -288,7 +289,7 @@ const toItem = (
     return { ...base, kind: 'unsupported', eventType, preview: eventType };
   }
 
-  const rawContent = event.getContent() as JsonObject;
+  const originalContent = event.getContent() as JsonObject;
   const content = event.getContent<{
     msgtype?: string;
     body?: string;
@@ -296,6 +297,7 @@ const toItem = (
     format?: string;
   }>();
   const edit = latestEdit.get(eventId);
+  const rawContent = edit?.raw ?? originalContent;
   const body = edit?.body ?? content.body ?? '';
   const formattedBody = edit?.formattedBody ?? content.formatted_body;
   const format = edit?.format ?? content.format;
@@ -312,6 +314,7 @@ const toItem = (
       body,
       ...(formattedBody !== undefined && format !== undefined ? { formattedBody, format } : {}),
       ...(attachment !== undefined ? { attachment } : {}),
+      raw: rawContent,
     },
     status: toSendStatus(event.status),
     ...(edit !== undefined ? { edited: true } : {}),

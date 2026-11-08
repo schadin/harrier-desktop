@@ -98,6 +98,7 @@ import { createMentionElement, isEmptyEditor, moveCursor } from '../../component
 import { roomIdToReplyDraftAtomFamily } from '../../state/room/roomInputDrafts';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
+import { IImageContent } from '../../../types/matrix/common';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { useDocumentFocusChange } from '../../hooks/useDocumentFocusChange';
 import { RenderMessageContent } from '../../components/RenderMessageContent';
@@ -829,10 +830,12 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const threadRootId = timelineItem.kind === 'message' ? timelineItem.threadRoot : undefined;
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
-        const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
-        const showEditedInline = !!editedEvent && messageLayout !== MessageLayout.Bubble;
-        const getContent = (() =>
-          editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent()) as GetContentCallback;
+        const itemContent = timelineItem.kind === 'message' ? timelineItem.content : undefined;
+        const showEditedInline =
+          timelineItem.kind === 'message' &&
+          timelineItem.edited === true &&
+          messageLayout !== MessageLayout.Bubble;
+        const getContent = (() => itemContent?.raw ?? mEvent.getContent()) as GetContentCallback;
 
         const senderId = timelineItem.sender;
         const senderDisplayName =
@@ -858,7 +861,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             edit={editId === mEventId}
             edited={timelineItem.kind === 'message' && timelineItem.edited === true}
-            canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
+            canDelete={canRedact || (canDeleteOwn && timelineItem.sender === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
@@ -905,7 +908,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             dateFormatString={dateFormatString}
           >
             {(() => {
-              if (mEvent.isRedacted()) {
+              if (timelineItem.kind === 'redacted') {
                 return (
                   <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
                 );
@@ -913,7 +916,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               const messageContent = (
                 <RenderMessageContent
                   displayName={senderDisplayName}
-                  msgType={mEvent.getContent().msgtype ?? ''}
+                  msgType={itemContent?.msgtype ?? mEvent.getContent().msgtype ?? ''}
                   ts={timelineItem.timestamp}
                   edited={showEditedInline}
                   getContent={getContent}
@@ -963,8 +966,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         const replyEventId = timelineItem.kind === 'message' ? timelineItem.replyTo : undefined;
         const threadRootId = timelineItem.kind === 'message' ? timelineItem.threadRoot : undefined;
         const highlighted = focusItem?.index === item && focusItem.highlight;
-        const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
-        const showEditedInline = !!editedEvent && messageLayout !== MessageLayout.Bubble;
+        const showEditedInline =
+          timelineItem.kind === 'message' &&
+          timelineItem.edited === true &&
+          messageLayout !== MessageLayout.Bubble;
 
         return (
           <Message
@@ -980,7 +985,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             highlight={highlighted}
             edit={editId === mEventId}
             edited={timelineItem.kind === 'message' && timelineItem.edited === true}
-            canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
+            canDelete={canRedact || (canDeleteOwn && timelineItem.sender === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
@@ -1028,11 +1033,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
           >
             <EncryptedContent mEvent={mEvent}>
               {() => {
-                if (mEvent.isRedacted()) return <RedactedContent />;
-                if (mEvent.getType() === MessageEvent.Sticker)
+                if (timelineItem.kind === 'redacted') return <RedactedContent />;
+                if (timelineItem.kind === 'sticker')
                   return (
                     <MSticker
-                      content={mEvent.getContent()}
+                      content={timelineItem.content as unknown as IImageContent}
                       renderImageContent={(props) => (
                         <ImageContent
                           {...props}
@@ -1043,10 +1048,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                       )}
                     />
                   );
-                if (mEvent.getType() === MessageEvent.RoomMessage) {
-                  const getContent = (() =>
-                    editedEvent?.getContent()['m.new_content'] ??
-                    mEvent.getContent()) as GetContentCallback;
+                if (timelineItem.kind === 'message') {
+                  const getContent = (() => timelineItem.content.raw) as GetContentCallback;
 
                   const senderId = timelineItem.sender;
                   const senderDisplayName =
@@ -1054,7 +1057,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   return (
                     <RenderMessageContent
                       displayName={senderDisplayName}
-                      msgType={mEvent.getContent().msgtype ?? ''}
+                      msgType={timelineItem.content.msgtype}
                       ts={timelineItem.timestamp}
                       edited={showEditedInline}
                       getContent={getContent}
@@ -1070,7 +1073,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                     />
                   );
                 }
-                if (mEvent.getType() === MessageEvent.RoomMessageEncrypted)
+                if (timelineItem.kind === 'encrypted')
                   return (
                     <Text>
                       <MessageNotDecryptedContent />
@@ -1101,7 +1104,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             messageLayout={messageLayout}
             collapse={collapse}
             highlight={highlighted}
-            canDelete={canRedact || (canDeleteOwn && mEvent.getSender() === mx.getUserId())}
+            canDelete={canRedact || (canDeleteOwn && timelineItem.sender === mx.getUserId())}
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
@@ -1131,11 +1134,15 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
           >
-            {mEvent.isRedacted() ? (
+            {timelineItem.kind === 'redacted' ? (
               <RedactedContent reason={mEvent.getUnsigned().redacted_because?.content.reason} />
             ) : (
               <MSticker
-                content={mEvent.getContent()}
+                content={
+                  (timelineItem.kind === 'sticker'
+                    ? timelineItem.content
+                    : mEvent.getContent()) as unknown as IImageContent
+                }
                 renderImageContent={(props) => (
                   <ImageContent
                     {...props}

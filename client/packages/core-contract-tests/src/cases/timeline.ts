@@ -55,10 +55,16 @@ export const timelineCases = [
         ],
       });
       const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
-      expect(item?.kind === 'message' && item.content).toEqual({
+      expect(item?.kind === 'message' && item.content).toMatchObject({
         msgtype: 'm.text',
         body: 'bold',
         formattedBody: '<b>bold</b>',
+        format: 'org.matrix.custom.html',
+      });
+      expect(item?.kind === 'message' && item.content.raw).toMatchObject({
+        msgtype: 'm.text',
+        body: 'bold',
+        formatted_body: '<b>bold</b>',
         format: 'org.matrix.custom.html',
       });
     } finally {
@@ -94,10 +100,16 @@ export const timelineCases = [
         ],
       });
       const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
-      expect(item?.kind === 'message' && item.content).toEqual({
+      expect(item?.kind === 'message' && item.content).toMatchObject({
         msgtype: 'm.text',
         body: 'fixed',
         formattedBody: '<i>fixed</i>',
+        format: 'org.matrix.custom.html',
+      });
+      expect(item?.kind === 'message' && item.content.raw).toMatchObject({
+        msgtype: 'm.text',
+        body: 'fixed',
+        formatted_body: '<i>fixed</i>',
         format: 'org.matrix.custom.html',
       });
       expect(item?.kind === 'message' && item.edited).toBe(true);
