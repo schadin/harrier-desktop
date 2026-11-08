@@ -188,7 +188,7 @@ export const sendCases = [
           },
         ],
       });
-      const result = await core.send.reaction('!room:example.org', '$1', '👍');
+      const result = await core.send.reaction('!room:example.org', '$1', '👍', 'thumbs_up');
       expect(result.ok).toBe(true);
       await flush();
       const { value: timelineView } = core.timeline.timeline('!room:example.org').getSnapshot();
@@ -196,7 +196,7 @@ export const sendCases = [
       const item = items.find((entry) => entry.eventId === '$1');
       expect(item?.kind).toBe('message');
       if (item?.kind !== 'message') return;
-      expect(item.reactions).toContainEqual(expect.objectContaining({ key: '👍', count: 1 }));
+      expect(item.reactions).toContainEqual(expect.objectContaining({ key: '👍', count: 1, shortcode: 'thumbs_up' }));
     } finally {
       await harness.dispose(core);
     }
