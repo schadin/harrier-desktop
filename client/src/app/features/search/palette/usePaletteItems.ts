@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { Icons } from 'folds';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { useDirects, useRooms, useSpaces } from '../../../state/hooks/roomList';
@@ -219,6 +220,7 @@ export type PaletteActionHandlers = {
 
 const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): PaletteItem[] => {
   const mx = useMatrixClient();
+  const core = useCore();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const openCreateRoomModal = useOpenCreateRoomModal();
@@ -287,7 +289,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
         keywords: ['read', 'unread', 'прочитать'],
         icon: Icons.CheckTwice,
         run: async () => {
-          await Promise.all(unreadRoomIds.map((roomId) => markAsRead(mx, roomId, hideActivity)));
+          await Promise.all(unreadRoomIds.map((roomId) => markAsRead(core, roomId, hideActivity)));
         },
       });
     }
@@ -338,6 +340,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
     return items;
   }, [
     mx,
+    core,
     t,
     navigate,
     customPresets,

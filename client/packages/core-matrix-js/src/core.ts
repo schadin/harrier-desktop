@@ -1,4 +1,5 @@
 import {
+  CoreError,
   createSnapshotStore,
   fillMissingPowers,
   toCoreError,
@@ -47,6 +48,7 @@ import {
   User,
   UserEvent,
   Method,
+  ReceiptType,
   type ICreateRoomStateEvent,
 } from 'matrix-js-sdk';
 
@@ -1313,6 +1315,26 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
     },
     timeline: {
+      async markRead(roomId, eventId, privateReceipt = false) {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        const event = room.findEventById(eventId);
+        if (!event) {
+          return {
+            ok: false,
+            error: new CoreError('not-found', `Event ${eventId} not found in ${roomId}`),
+          };
+        }
+        try {
+          await client.sendReadReceipt(
+            event,
+            privateReceipt ? ReceiptType.ReadPrivate : ReceiptType.Read
+          );
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       timeline(roomId) {
         const existing = timelines.get(roomId);
         if (existing) return existing;
@@ -1416,6 +1438,16 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore(buildTyping(roomId));
         typingStores.set(roomId, store);
         return store;
+      },
+      async setTyping(roomId, typing, timeoutMs) {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        try {
+          await client.sendTyping(roomId, typing, timeoutMs ?? 20000);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
       },
     },
     send: {

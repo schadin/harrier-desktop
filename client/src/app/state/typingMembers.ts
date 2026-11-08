@@ -1,9 +1,5 @@
 import produce from 'immer';
-import { atom, useSetAtom } from 'jotai';
-import { MatrixClient, RoomMemberEvent, RoomMemberEventHandlerMap } from 'matrix-js-sdk';
-import { useEffect } from 'react';
-import { useSetting } from './hooks/settings';
-import { settingsAtom } from './settings';
+import { atom } from 'jotai';
 
 export const TYPING_TIMEOUT_MS = 5000; // 5 seconds
 
@@ -123,33 +119,3 @@ export const roomIdToTypingMembersAtom = atom<
     }
   }
 );
-
-export const useBindRoomIdToTypingMembersAtom = (
-  mx: MatrixClient,
-  typingMembersAtom: typeof roomIdToTypingMembersAtom
-) => {
-  const setTypingMembers = useSetAtom(typingMembersAtom);
-  const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
-
-  useEffect(() => {
-    const handleTypingEvent: RoomMemberEventHandlerMap[RoomMemberEvent.Typing] = (
-      event,
-      member
-    ) => {
-      if (hideActivity) {
-        return;
-      }
-      setTypingMembers({
-        type: member.typing ? 'PUT' : 'DELETE',
-        roomId: member.roomId,
-        userId: member.userId,
-        ts: Date.now(),
-      });
-    };
-
-    mx.on(RoomMemberEvent.Typing, handleTypingEvent);
-    return () => {
-      mx.removeListener(RoomMemberEvent.Typing, handleTypingEvent);
-    };
-  }, [mx, setTypingMembers, hideActivity]);
-};

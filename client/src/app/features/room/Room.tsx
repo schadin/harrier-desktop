@@ -12,7 +12,7 @@ import { PowerLevelsContextProvider, usePowerLevels } from '../../hooks/usePower
 import { useRoom } from '../../hooks/useRoom';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { markAsRead } from '../../utils/notifications';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { CallView } from '../call/CallView';
 import { RoomViewHeader } from './RoomViewHeader';
@@ -24,7 +24,7 @@ import { useCallMembers, useCallSession } from '../../hooks/useCall';
 export function Room() {
   const { eventId } = useParams();
   const room = useRoom();
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const callSession = useCallSession(room);
   const callMembers = useCallMembers(callSession);
@@ -42,10 +42,10 @@ export function Room() {
     useCallback(
       (evt) => {
         if (isKeyHotkey('escape', evt)) {
-          markAsRead(mx, room.roomId, hideActivity);
+          markAsRead(core, room.roomId, hideActivity);
         }
       },
-      [mx, room.roomId, hideActivity]
+      [core, room.roomId, hideActivity]
     )
   );
 

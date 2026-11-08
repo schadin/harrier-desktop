@@ -57,7 +57,8 @@ export const sendCases = [
       });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      const items = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
+      const { value: timelineView } = core.timeline.timeline('!room:example.org').getSnapshot();
+      const { items } = timelineView;
       const pending = items.find((item) => item.kind === 'message');
       expect(pending).toMatchObject({ kind: 'message', localId: result.value });
     } finally {
@@ -196,7 +197,9 @@ export const sendCases = [
       const item = items.find((entry) => entry.eventId === '$1');
       expect(item?.kind).toBe('message');
       if (item?.kind !== 'message') return;
-      expect(item.reactions).toContainEqual(expect.objectContaining({ key: '👍', count: 1, shortcode: 'thumbs_up' }));
+      expect(item.reactions).toContainEqual(
+        expect.objectContaining({ key: '👍', count: 1, shortcode: 'thumbs_up' })
+      );
     } finally {
       await harness.dispose(core);
     }

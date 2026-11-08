@@ -1,26 +1,24 @@
-import { MatrixClient, ReceiptType } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 
-export async function markAsRead(mx: MatrixClient, roomId: string, privateReceipt: boolean) {
-  const room = mx.getRoom(roomId);
-  if (!room) return;
+export async function markAsRead(core: HarrierCore, roomId: string, privateReceipt: boolean) {
+  const timeline = core.timeline.timeline(roomId).getSnapshot().value;
+  const { readUpTo: readEventId, items } = timeline;
 
-  const timeline = room.getLiveTimeline().getEvents();
-  const readEventId = room.getEventReadUpTo(mx.getUserId()!);
-
-  const getLatestValidEvent = () => {
-    for (let i = timeline.length - 1; i >= 0; i -= 1) {
-      const latestEvent = timeline[i];
-      if (latestEvent.getId() === readEventId) return null;
-      if (!latestEvent.isSending()) return latestEvent;
+  const getLatestValidItem = () => {
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      const item = items[i];
+      if (item.eventId === readEventId) return undefined;
+      if (item.kind === 'message' && item.status === 'sending') {
+        // eslint-disable-next-line no-continue -- skip local echoes that are still sending
+        continue;
+      }
+      return item;
     }
-    return null;
+    return undefined;
   };
-  if (timeline.length === 0) return;
-  const latestEvent = getLatestValidEvent();
-  if (latestEvent === null) return;
+  if (items.length === 0) return;
+  const latestItem = getLatestValidItem();
+  if (!latestItem) return;
 
-  await mx.sendReadReceipt(
-    latestEvent,
-    privateReceipt ? ReceiptType.ReadPrivate : ReceiptType.Read
-  );
+  await core.timeline.markRead(roomId, latestItem.eventId, privateReceipt);
 }

@@ -1,10 +1,10 @@
-import { MatrixClient } from 'matrix-js-sdk';
 import { useMemo, useRef } from 'react';
+import type { HarrierCore } from '@harrier/core';
 import { TYPING_TIMEOUT_MS } from '../state/typingMembers';
 
 type TypingStatusUpdater = (typing: boolean) => void;
 
-export const useTypingStatusUpdater = (mx: MatrixClient, roomId: string): TypingStatusUpdater => {
+export const useTypingStatusUpdater = (core: HarrierCore, roomId: string): TypingStatusUpdater => {
   const statusSentTsRef = useRef<number>(0);
 
   const sendTypingStatus: TypingStatusUpdater = useMemo(() => {
@@ -15,7 +15,7 @@ export const useTypingStatusUpdater = (mx: MatrixClient, roomId: string): Typing
           return;
         }
 
-        mx.sendTyping(roomId, true, TYPING_TIMEOUT_MS);
+        core.presence.setTyping(roomId, true, TYPING_TIMEOUT_MS).catch(() => undefined);
         const sentTs = Date.now();
         statusSentTsRef.current = sentTs;
 
@@ -23,7 +23,7 @@ export const useTypingStatusUpdater = (mx: MatrixClient, roomId: string): Typing
         // Clear typing status after timeout if already not;
         setTimeout(() => {
           if (statusSentTsRef.current === sentTs) {
-            mx.sendTyping(roomId, false, TYPING_TIMEOUT_MS);
+            core.presence.setTyping(roomId, false, TYPING_TIMEOUT_MS).catch(() => undefined);
             statusSentTsRef.current = 0;
           }
         }, TYPING_TIMEOUT_MS);
@@ -31,11 +31,11 @@ export const useTypingStatusUpdater = (mx: MatrixClient, roomId: string): Typing
       }
 
       if (Date.now() - statusSentTsRef.current < TYPING_TIMEOUT_MS) {
-        mx.sendTyping(roomId, false, TYPING_TIMEOUT_MS);
+        core.presence.setTyping(roomId, false, TYPING_TIMEOUT_MS).catch(() => undefined);
       }
       statusSentTsRef.current = 0;
     };
-  }, [mx, roomId]);
+  }, [core, roomId]);
 
   return sendTypingStatus;
 };

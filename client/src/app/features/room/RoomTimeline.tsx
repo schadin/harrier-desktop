@@ -446,7 +446,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     };
     if (atBottomRef.current) {
       if (document.hasFocus() && (!unreadInfo || last.sender === mx.getUserId())) {
-        requestAnimationFrame(() => markAsRead(mx, last.roomId, hideActivity));
+        requestAnimationFrame(() => markAsRead(core, last.roomId, hideActivity));
       }
       if (!document.hasFocus() && !unreadInfo) {
         refreshUnreadInfo();
@@ -456,7 +456,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     } else if (!unreadInfo) {
       refreshUnreadInfo();
     }
-  }, [items, liveTimelineLinked, mx, hideActivity, unreadInfo, timelineView.readUpTo]);
+  }, [core, items, liveTimelineLinked, mx, hideActivity, unreadInfo, timelineView.readUpTo]);
 
   const handleOpenEvent = useCallback(
     async (
@@ -512,14 +512,14 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const tryAutoMarkAsRead = useCallback(() => {
     const readUptoEventId = readUptoEventIdRef.current;
     if (!readUptoEventId) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, hideActivity));
+      requestAnimationFrame(() => markAsRead(core, room.roomId, hideActivity));
       return;
     }
     const inCurrentChain = items.some((timelineItem) => timelineItem.eventId === readUptoEventId);
     if (inCurrentChain && liveTimelineLinked) {
-      requestAnimationFrame(() => markAsRead(mx, room.roomId, hideActivity));
+      requestAnimationFrame(() => markAsRead(core, room.roomId, hideActivity));
     }
-  }, [items, liveTimelineLinked, mx, room.roomId, hideActivity]);
+  }, [core, items, liveTimelineLinked, room.roomId, hideActivity]);
 
   const debounceSetAtBottom = useDebounce(
     useCallback((entry: IntersectionObserverEntry) => {
@@ -700,7 +700,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   };
 
   const handleMarkAsRead = () => {
-    markAsRead(mx, room.roomId, hideActivity);
+    markAsRead(core, room.roomId, hideActivity);
   };
 
   const handleOpenReply: MouseEventHandler = useCallback(
