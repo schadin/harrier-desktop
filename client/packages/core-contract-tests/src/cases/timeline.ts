@@ -658,6 +658,92 @@ export const timelineCases = [
     }
   }),
 
+  contractTest('event resolves a loaded message as a TimelineItem', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'hello' }],
+          },
+        ],
+      });
+      const result = await core.timeline.event('!room:example.org', '$1');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toMatchObject({
+        kind: 'message',
+        eventId: '$1',
+        sender: '@alice:example.org',
+      });
+      if (result.value?.kind !== 'message') return;
+      expect(result.value.content.body).toBe('hello');
+      expect(result.value.content.raw).toMatchObject({ body: 'hello' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('event resolves an event that is only reachable via context', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$recent', sender: '@alice:example.org', body: 'recent' }],
+            history: {
+              messages: [{ eventId: '$older', sender: '@alice:example.org', body: 'older' }],
+            },
+          },
+        ],
+      });
+      const result = await core.timeline.event('!room:example.org', '$older');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toMatchObject({ kind: 'message', eventId: '$older' });
+      if (result.value?.kind !== 'message') return;
+      expect(result.value.content.body).toBe('older');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('event returns null for an unknown event', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!room:example.org',
+            membership: 'join',
+            name: 'Room',
+            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'only' }],
+          },
+        ],
+      });
+      const result = await core.timeline.event('!room:example.org', '$unknown');
+      expect(result).toEqual({ ok: true, value: null });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('event fails for an unknown room', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.timeline.event('!missing:example.org', '$1');
+      expect(result.ok).toBe(false);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('focusEvent fails for an unknown event', async (harness) => {
     const core = await harness.create();
     try {

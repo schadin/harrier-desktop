@@ -1314,6 +1314,22 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       clearFocus(roomId) {
         if (focusedTimelines.delete(roomId)) timelines.get(roomId)?.publish(buildTimeline(roomId));
       },
+      async event(roomId, eventId): Promise<CoreResult<TimelineItem | null>> {
+        const room = client.getRoom(roomId);
+        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        const local = room.findEventById(eventId);
+        if (local) return { ok: true, value: toItem(roomId, local, new Map(), []) };
+        try {
+          const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
+          const fetched = timeline
+            ? collectLinkedEvents(timeline).find((entry) => entry.getId() === eventId)
+            : undefined;
+          if (!fetched) return { ok: true, value: null };
+          return { ok: true, value: toItem(roomId, fetched, new Map(), []) };
+        } catch {
+          return { ok: true, value: null };
+        }
+      },
     },
     presence: {
       presence(userId) {

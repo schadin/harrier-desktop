@@ -878,7 +878,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               replyEventId && (
                 <Reply
                   room={room}
-                  timelineSet={timelineSet}
                   replyEventId={replyEventId}
                   replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}
@@ -1002,7 +1001,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               replyEventId && (
                 <Reply
                   room={room}
-                  timelineSet={timelineSet}
                   replyEventId={replyEventId}
                   replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}

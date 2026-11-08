@@ -1,6 +1,6 @@
 import { Box, Icon, Icons, Text, as, color, toRem } from 'folds';
-import { EventTimelineSet, Room } from 'matrix-js-sdk';
-import React, { MouseEventHandler, ReactNode, useCallback, useMemo } from 'react';
+import { Room } from 'matrix-js-sdk';
+import React, { MouseEventHandler, ReactNode, useMemo } from 'react';
 import classNames from 'classnames';
 import type { TimelineItem } from '@harrier/core';
 import { getMemberDisplayName, trimReplyFromBody } from '../../utils/room';
@@ -10,7 +10,7 @@ import { randomNumberBetween } from '../../utils/common';
 import * as css from './Reply.css';
 import { MessageBadEncryptedContent, MessageDeletedContent, MessageFailedContent } from './content';
 import { scaleSystemEmoji } from '../../plugins/react-custom-html-parser';
-import { useRoomEvent } from '../../hooks/useRoomEvent';
+import { useCoreEvent } from '../../hooks/useCoreTimeline';
 import colorMXID from '../../../util/colorMXID';
 import { GetMemberPowerTag } from '../../hooks/useMemberPowerTag';
 
@@ -63,7 +63,6 @@ const itemBody = (item: TimelineItem | undefined): string | undefined => {
 
 type ReplyProps = {
   room: Room;
-  timelineSet?: EventTimelineSet | undefined;
   replyEventId: string;
   replyItem?: TimelineItem | undefined;
   threadRootId?: string | undefined;
@@ -77,7 +76,6 @@ export const Reply = as<'div', ReplyProps>(
   (
     {
       room,
-      timelineSet,
       replyEventId,
       replyItem,
       threadRootId,
@@ -90,30 +88,27 @@ export const Reply = as<'div', ReplyProps>(
     ref
   ) => {
     const placeholderWidth = useMemo(() => randomNumberBetween(40, 400), []);
-    const getFromLocalTimeline = useCallback(
-      () => (replyItem ? undefined : timelineSet?.findEventById(replyEventId)),
-      [timelineSet, replyEventId, replyItem]
-    );
-    const replyEvent = useRoomEvent(room, replyEventId, getFromLocalTimeline, !replyItem);
+    // Без replyItem (поиск, закрепы, уведомления) событие резолвится
+    // через core (`timeline.event`), а не через SDK-фетч.
+    const fetchedItem = useCoreEvent(room.roomId, replyEventId, !replyItem);
+    const resolvedItem = replyItem ?? fetchedItem ?? undefined;
 
-    const body = replyItem ? itemBody(replyItem) : replyEvent?.getContent().body;
-    const sender = replyItem ? replyItem.sender : replyEvent?.getSender();
+    const body = itemBody(resolvedItem);
+    const sender = resolvedItem?.sender;
     const powerTag = sender ? getMemberPowerTag?.(sender) : undefined;
     const tagColor = powerTag?.color ? accessibleTagColors?.get(powerTag.color) : undefined;
 
     const usernameColor = legacyUsernameColor ? colorMXID(sender ?? replyEventId) : tagColor;
 
-    const isRedacted = replyItem
-      ? replyItem.kind === 'redacted'
-      : replyEvent?.isRedacted() ?? false;
+    const isRedacted = resolvedItem?.kind === 'redacted';
     const fallbackBody = isRedacted ? <MessageDeletedContent /> : <MessageFailedContent />;
 
-    const badEncryption = replyItem
-      ? replyItem.kind === 'encrypted'
-      : replyEvent?.getContent().msgtype === 'm.bad.encrypted';
+    const badEncryption = resolvedItem?.kind === 'encrypted';
     const bodyJSX = body ? scaleSystemEmoji(trimReplyFromBody(body)) : fallbackBody;
 
-    const hasReply = replyItem !== undefined || replyEvent !== undefined;
+    // null от useCoreEvent — событие не найдено: показываем fallback,
+    // undefined — ещё грузим: показываем placeholder.
+    const hasReply = replyItem !== undefined || fetchedItem !== undefined;
 
     return (
       <Box direction="Row" gap="200" alignItems="Center" {...props} ref={ref}>

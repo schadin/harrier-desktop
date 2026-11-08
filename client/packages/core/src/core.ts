@@ -15,6 +15,7 @@ import type {
   SessionView,
   SyncView,
   TimelineView,
+  TimelineItem,
   UnreadMapEntry,
   UserId,
 } from './views';
@@ -117,6 +118,7 @@ export type TimelineModule = {
   paginateForward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
   focusEvent(roomId: RoomId, eventId: EventId): Promise<CoreResult<number>>;
   clearFocus(roomId: RoomId): void;
+  event(roomId: RoomId, eventId: EventId): Promise<CoreResult<TimelineItem | null>>;
 };
 
 export type PresenceModule = {
