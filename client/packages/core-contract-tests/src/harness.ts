@@ -23,6 +23,7 @@ export type SyncFixtureReaction = {
   readonly target: string;
   readonly sender: string;
   readonly key: string;
+  readonly shortcode?: string;
 };
 
 export type SyncFixtureReceipt = {

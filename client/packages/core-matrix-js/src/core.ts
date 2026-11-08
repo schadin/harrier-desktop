@@ -348,23 +348,32 @@ const toTimelineView = (
     });
   });
 
-  const countsByTarget = new Map<string, Map<string, number>>();
+  const countsByTarget = new Map<string, Map<string, { senders: string[]; shortcode?: string }>>();
   events.forEach((event) => {
     if (event.getType() !== 'm.reaction') return;
-    const relates = event.getContent()['m.relates_to'] as
-      | { event_id?: unknown; key?: unknown }
-      | undefined;
+    const content = event.getContent();
+    const relates = content['m.relates_to'] as { event_id?: unknown; key?: unknown } | undefined;
     const target = relates?.event_id;
     const key = relates?.key;
-    if (typeof target !== 'string' || typeof key !== 'string') return;
-    const counts = countsByTarget.get(target) ?? new Map<string, number>();
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    const sender = event.getSender();
+    if (typeof target !== 'string' || typeof key !== 'string' || sender === null) return;
+    const counts = countsByTarget.get(target) ?? new Map();
+    const entry = counts.get(key) ?? { senders: [] };
+    if (!entry.senders.includes(sender)) entry.senders.push(sender);
+    const shortcode = stringOrUndefined(content.shortcode);
+    if (entry.shortcode === undefined && shortcode !== undefined) entry.shortcode = shortcode;
+    counts.set(key, entry);
     countsByTarget.set(target, counts);
   });
 
   const items = renderableEvents(events).map((event) => {
-    const counts = countsByTarget.get(event.getId() ?? '') ?? new Map<string, number>();
-    const reactions = [...counts].map(([key, count]) => ({ key, count }));
+    const counts = countsByTarget.get(event.getId() ?? '') ?? new Map();
+    const reactions = [...counts].map(([key, { senders, shortcode }]) => ({
+      key,
+      count: senders.length,
+      senders,
+      ...(shortcode !== undefined ? { shortcode } : {}),
+    }));
     const item = toItem(roomId, event, latestEdit, reactions);
     const readers = room
       ? room

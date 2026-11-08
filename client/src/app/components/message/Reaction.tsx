@@ -1,11 +1,11 @@
 import React from 'react';
 import { Box, Text, as } from 'folds';
 import classNames from 'classnames';
-import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import { MatrixClient, Room } from 'matrix-js-sdk';
 import * as css from './Reaction.css';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../plugins/emoji';
 import { getMemberDisplayName } from '../../utils/room';
-import { eventWithShortcode, getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
 
 export const Reaction = as<
   'button',
@@ -47,20 +47,19 @@ export const Reaction = as<
 type ReactionTooltipMsgProps = {
   room: Room;
   reaction: string;
-  events: MatrixEvent[];
+  senders: readonly string[];
+  shortcode?: string;
 };
 
-export function ReactionTooltipMsg({ room, reaction, events }: ReactionTooltipMsgProps) {
-  const shortCodeEvt = events.find(eventWithShortcode);
-  const shortcode =
-    shortCodeEvt?.getContent().shortcode ??
-    getShortcodeFor(getHexcodeForEmoji(reaction)) ??
-    reaction;
-  const names = events.map(
-    (ev: MatrixEvent) =>
-      getMemberDisplayName(room, ev.getSender() ?? 'Unknown') ??
-      getMxIdLocalPart(ev.getSender() ?? 'Unknown') ??
-      'Unknown'
+export function ReactionTooltipMsg({
+  room,
+  reaction,
+  senders,
+  shortcode: reactionShortcode,
+}: ReactionTooltipMsgProps) {
+  const shortcode = reactionShortcode ?? getShortcodeFor(getHexcodeForEmoji(reaction)) ?? reaction;
+  const names = senders.map(
+    (senderId) => getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? 'Unknown'
   );
 
   return (

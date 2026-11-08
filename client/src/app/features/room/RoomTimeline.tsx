@@ -825,9 +825,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   >(
     {
       [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
-        const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
-        const { replyEventId, threadRootId } = mEvent;
+        const replyEventId = timelineItem.kind === 'message' ? timelineItem.replyTo : undefined;
+        const threadRootId = timelineItem.kind === 'message' ? timelineItem.threadRoot : undefined;
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
         const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
@@ -863,7 +862,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
-            relations={hasReactions ? reactionRelations : undefined}
+            reactionCounts={itemReactions(timelineItem)}
             onUserClick={handleUserClick}
             onUsernameClick={handleUsernameClick}
             onReplyClick={handleReplyClick}
@@ -875,6 +874,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   room={room}
                   timelineSet={timelineSet}
                   replyEventId={replyEventId}
+                  replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}
                   onClick={handleOpenReply}
                   getMemberPowerTag={getMemberPowerTag}
@@ -884,11 +884,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             reactions={
-              reactionRelations && (
+              (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
                   room={room}
-                  relations={reactionRelations}
+                  reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}
                   onReactionToggle={handleReactionToggle}
@@ -960,9 +960,8 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         collapse,
         timelineItem
       ) => {
-        const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
-        const { replyEventId, threadRootId } = mEvent;
+        const replyEventId = timelineItem.kind === 'message' ? timelineItem.replyTo : undefined;
+        const threadRootId = timelineItem.kind === 'message' ? timelineItem.threadRoot : undefined;
         const highlighted = focusItem?.index === item && focusItem.highlight;
         const editedEvent = getEditedEvent(mEventId, mEvent, timelineSet);
         const showEditedInline = !!editedEvent && messageLayout !== MessageLayout.Bubble;
@@ -985,7 +984,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
-            relations={hasReactions ? reactionRelations : undefined}
+            reactionCounts={itemReactions(timelineItem)}
             onUserClick={handleUserClick}
             onUsernameClick={handleUsernameClick}
             onReplyClick={handleReplyClick}
@@ -997,6 +996,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                   room={room}
                   timelineSet={timelineSet}
                   replyEventId={replyEventId}
+                  replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}
                   onClick={handleOpenReply}
                   getMemberPowerTag={getMemberPowerTag}
@@ -1006,11 +1006,11 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               )
             }
             reactions={
-              reactionRelations && (
+              (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
                   room={room}
-                  relations={reactionRelations}
+                  reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}
                   onReactionToggle={handleReactionToggle}
@@ -1087,8 +1087,6 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
         );
       },
       [MessageEvent.Sticker]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
-        const reactionRelations = getEventReactions(timelineSet, mEventId);
-        const hasReactions = itemReactions(timelineItem)?.length ?? 0;
         const highlighted = focusItem?.index === item && focusItem.highlight;
 
         return (
@@ -1107,17 +1105,17 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             canSendReaction={canSendReaction}
             canPinEvent={canPinEvent}
             imagePackRooms={imagePackRooms}
-            relations={hasReactions ? reactionRelations : undefined}
+            reactionCounts={itemReactions(timelineItem)}
             onUserClick={handleUserClick}
             onUsernameClick={handleUsernameClick}
             onReplyClick={handleReplyClick}
             onReactionToggle={handleReactionToggle}
             reactions={
-              reactionRelations && (
+              (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
                   room={room}
-                  relations={reactionRelations}
+                  reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}
                   onReactionToggle={handleReactionToggle}

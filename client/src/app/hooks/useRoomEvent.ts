@@ -37,23 +37,26 @@ const useFetchEvent = (room: Room, eventId: string) => {
 export const useRoomEvent = (
   room: Room,
   eventId: string,
-  getLocally?: () => MatrixEvent | undefined
+  getLocally?: () => MatrixEvent | undefined,
+  enabled = true
 ) => {
   const event = useMemo(() => {
+    if (!enabled) return undefined;
     if (getLocally) return getLocally();
     return room.findEventById(eventId);
-  }, [room, eventId, getLocally]);
+  }, [room, eventId, getLocally, enabled]);
 
   const fetchEvent = useFetchEvent(room, eventId);
 
   const { data, error } = useQuery({
-    enabled: event === undefined,
+    enabled: enabled && event === undefined,
     queryKey: [room.roomId, eventId],
     queryFn: fetchEvent,
     staleTime: Infinity,
     gcTime: 60 * 60 * 1000, // 1hour
   });
 
+  if (!enabled) return undefined;
   if (event) return event;
   if (data) return data;
   if (error) return null;

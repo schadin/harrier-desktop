@@ -241,15 +241,30 @@ export const timelineCases = [
             reactions: [
               { eventId: '$r1', target: '$1', sender: '@bob:example.org', key: '👍' },
               { eventId: '$r2', target: '$1', sender: '@carol:example.org', key: '👍' },
-              { eventId: '$r3', target: '$1', sender: '@bob:example.org', key: '🎉' },
+              {
+                eventId: '$r3',
+                target: '$1',
+                sender: '@bob:example.org',
+                key: '🎉',
+                shortcode: 'tada',
+              },
             ],
           },
         ],
       });
       const [item] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
       expect(item?.kind === 'message' && item.reactions).toEqual([
-        { key: '👍', count: 2 },
-        { key: '🎉', count: 1 },
+        {
+          key: '👍',
+          count: 2,
+          senders: ['@bob:example.org', '@carol:example.org'],
+        },
+        {
+          key: '🎉',
+          count: 1,
+          senders: ['@bob:example.org'],
+          shortcode: 'tada',
+        },
       ]);
     } finally {
       await harness.dispose(core);

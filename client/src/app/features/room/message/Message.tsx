@@ -33,10 +33,9 @@ import React, {
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
 import { MatrixEvent, Room } from 'matrix-js-sdk';
-import { Relations } from 'matrix-js-sdk/lib/models/relations';
 import classNames from 'classnames';
 import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
-import type { TimelineItem } from '@harrier/core';
+import type { ReactionCountView, TimelineItem } from '@harrier/core';
 import {
   AvatarBase,
   BubbleLayout,
@@ -128,10 +127,10 @@ export const MessageAllReactionItem = as<
   'button',
   {
     room: Room;
-    relations: Relations;
+    reactionCounts: readonly ReactionCountView[];
     onClose?: () => void;
   }
->(({ room, relations, onClose, ...props }, ref) => {
+>(({ room, reactionCounts, onClose, ...props }, ref) => {
   const [open, setOpen] = useState(false);
 
   const handleClose = () => {
@@ -161,7 +160,7 @@ export const MessageAllReactionItem = as<
             <Modal variant="Surface" size="300">
               <ReactionViewer
                 room={room}
-                relations={relations}
+                reactions={reactionCounts}
                 requestClose={() => setOpen(false)}
               />
             </Modal>
@@ -729,7 +728,7 @@ export type MessageProps = {
   canSendReaction?: boolean;
   canPinEvent?: boolean;
   imagePackRooms?: Room[];
-  relations?: Relations;
+  reactionCounts?: readonly ReactionCountView[];
   messageLayout: MessageLayout;
   messageSpacing: MessageSpacing;
   /** Event has an `m.replace` edit — rendered by the Bubble meta footer (#55). */
@@ -767,7 +766,7 @@ export const Message = as<'div', MessageProps>(
       canSendReaction,
       canPinEvent,
       imagePackRooms,
-      relations,
+      reactionCounts,
       messageLayout,
       messageSpacing,
       edited,
@@ -1109,10 +1108,10 @@ export const Message = as<'div', MessageProps>(
                               </Text>
                             </MenuItem>
                           )}
-                          {relations && (
+                          {reactionCounts && reactionCounts.length > 0 && (
                             <MessageAllReactionItem
                               room={room}
-                              relations={relations}
+                              reactionCounts={reactionCounts}
                               onClose={closeMenu}
                             />
                           )}

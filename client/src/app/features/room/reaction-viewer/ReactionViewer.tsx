@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import classNames from 'classnames';
 import {
   Avatar,
@@ -14,13 +14,12 @@ import {
   as,
   config,
 } from 'folds';
-import { MatrixEvent, Room, RoomMember } from 'matrix-js-sdk';
-import { Relations } from 'matrix-js-sdk/lib/models/relations';
+import { Room } from 'matrix-js-sdk';
+import type { ReactionCountView } from '@harrier/core';
 import { getMemberDisplayName } from '../../../utils/room';
-import { eventWithShortcode, getMxIdLocalPart } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
 import * as css from './ReactionViewer.css';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useRelations } from '../../../hooks/useRelations';
 import { Reaction } from '../../../components/message';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../../plugins/emoji';
 import { UserAvatar } from '../../../components/user-avatar';
@@ -32,40 +31,25 @@ import { getMouseEventCords } from '../../../utils/dom';
 export type ReactionViewerProps = {
   room: Room;
   initialKey?: string;
-  relations: Relations;
+  reactions: readonly ReactionCountView[];
   requestClose: () => void;
 };
 export const ReactionViewer = as<'div', ReactionViewerProps>(
-  ({ className, room, initialKey, relations, requestClose, ...props }, ref) => {
+  ({ className, room, initialKey, reactions, requestClose, ...props }, ref) => {
     const mx = useMatrixClient();
     const useAuthentication = useMediaAuthentication();
-    const reactions = useRelations(
-      relations,
-      useCallback((rel) => [...(rel.getSortedAnnotationsByKey() ?? [])], [])
-    );
     const space = useSpaceOptionally();
     const openProfile = useOpenUserRoomProfile();
 
     const [selectedKey, setSelectedKey] = useState<string>(() => {
       if (initialKey) return initialKey;
-      const defaultReaction = reactions.find((reaction) => typeof reaction[0] === 'string');
-      return defaultReaction ? defaultReaction[0] : '';
+      return reactions[0]?.key ?? '';
     });
 
-    const getName = (member: RoomMember) =>
-      getMemberDisplayName(room, member.userId) ?? getMxIdLocalPart(member.userId) ?? member.userId;
-
-    const getReactionsForKey = (key: string): MatrixEvent[] => {
-      const reactSet = reactions.find(([k]) => k === key)?.[1];
-      if (!reactSet) return [];
-      return Array.from(reactSet);
-    };
-
-    const selectedReactions = getReactionsForKey(selectedKey);
+    const selectedSummary = reactions.find((reaction) => reaction.key === selectedKey);
+    const selectedSenders = selectedSummary?.senders ?? [];
     const selectedShortcode =
-      selectedReactions.find(eventWithShortcode)?.getContent().shortcode ??
-      getShortcodeFor(getHexcodeForEmoji(selectedKey)) ??
-      selectedKey;
+      selectedSummary?.shortcode ?? getShortcodeFor(getHexcodeForEmoji(selectedKey)) ?? selectedKey;
 
     return (
       <Box
@@ -77,14 +61,14 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
         <Box shrink="No" className={css.Sidebar}>
           <Scroll visibility="Hover" hideTrack size="300">
             <Box className={css.SidebarContent} direction="Column" gap="200">
-              {reactions.map(([key, evts]) => {
+              {reactions.map(({ key, count }) => {
                 if (typeof key !== 'string') return null;
                 return (
                   <Reaction
                     key={key}
                     mx={mx}
                     reaction={key}
-                    count={evts.size}
+                    count={count}
                     aria-selected={key === selectedKey}
                     onClick={() => setSelectedKey(key)}
                     useAuthentication={useAuthentication}
@@ -108,11 +92,11 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
           <Box grow="Yes">
             <Scroll visibility="Hover" hideTrack size="300">
               <Box className={css.Content} direction="Column">
-                {selectedReactions.map((mEvent) => {
-                  const senderId = mEvent.getSender();
-                  if (!senderId) return null;
+                {selectedSenders.map((senderId) => {
                   const member = room.getMember(senderId);
-                  const name = (member ? getName(member) : getMxIdLocalPart(senderId)) ?? senderId;
+                  const name =
+                    (member ? getMemberDisplayName(room, senderId) : getMxIdLocalPart(senderId)) ??
+                    senderId;
 
                   const avatarMxcUrl = member?.getMxcAvatarUrl();
                   const avatarUrl = avatarMxcUrl

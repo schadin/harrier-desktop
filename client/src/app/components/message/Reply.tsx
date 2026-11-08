@@ -2,6 +2,7 @@ import { Box, Icon, Icons, Text, as, color, toRem } from 'folds';
 import { EventTimelineSet, Room } from 'matrix-js-sdk';
 import React, { MouseEventHandler, ReactNode, useCallback, useMemo } from 'react';
 import classNames from 'classnames';
+import type { TimelineItem } from '@harrier/core';
 import { getMemberDisplayName, trimReplyFromBody } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { LinePlaceholder } from './placeholder';
@@ -51,10 +52,20 @@ export const ThreadIndicator = as<'div'>(({ ...props }, ref) => (
   </Box>
 ));
 
+const itemBody = (item: TimelineItem | undefined): string | undefined => {
+  if (!item) return undefined;
+  if (item.kind === 'message' || item.kind === 'state' || item.kind === 'sticker') {
+    const { body } = item.content as { body?: unknown };
+    return typeof body === 'string' ? body : undefined;
+  }
+  return undefined;
+};
+
 type ReplyProps = {
   room: Room;
   timelineSet?: EventTimelineSet | undefined;
   replyEventId: string;
+  replyItem?: TimelineItem | undefined;
   threadRootId?: string | undefined;
   onClick?: MouseEventHandler | undefined;
   getMemberPowerTag?: GetMemberPowerTag;
@@ -68,6 +79,7 @@ export const Reply = as<'div', ReplyProps>(
       room,
       timelineSet,
       replyEventId,
+      replyItem,
       threadRootId,
       onClick,
       getMemberPowerTag,
@@ -79,26 +91,29 @@ export const Reply = as<'div', ReplyProps>(
   ) => {
     const placeholderWidth = useMemo(() => randomNumberBetween(40, 400), []);
     const getFromLocalTimeline = useCallback(
-      () => timelineSet?.findEventById(replyEventId),
-      [timelineSet, replyEventId]
+      () => (replyItem ? undefined : timelineSet?.findEventById(replyEventId)),
+      [timelineSet, replyEventId, replyItem]
     );
-    const replyEvent = useRoomEvent(room, replyEventId, getFromLocalTimeline);
+    const replyEvent = useRoomEvent(room, replyEventId, getFromLocalTimeline, !replyItem);
 
-    const { body } = replyEvent?.getContent() ?? {};
-    const sender = replyEvent?.getSender();
+    const body = replyItem ? itemBody(replyItem) : replyEvent?.getContent().body;
+    const sender = replyItem ? replyItem.sender : replyEvent?.getSender();
     const powerTag = sender ? getMemberPowerTag?.(sender) : undefined;
     const tagColor = powerTag?.color ? accessibleTagColors?.get(powerTag.color) : undefined;
 
     const usernameColor = legacyUsernameColor ? colorMXID(sender ?? replyEventId) : tagColor;
 
-    const fallbackBody = replyEvent?.isRedacted() ? (
-      <MessageDeletedContent />
-    ) : (
-      <MessageFailedContent />
-    );
+    const isRedacted = replyItem
+      ? replyItem.kind === 'redacted'
+      : replyEvent?.isRedacted() ?? false;
+    const fallbackBody = isRedacted ? <MessageDeletedContent /> : <MessageFailedContent />;
 
-    const badEncryption = replyEvent?.getContent().msgtype === 'm.bad.encrypted';
+    const badEncryption = replyItem
+      ? replyItem.kind === 'encrypted'
+      : replyEvent?.getContent().msgtype === 'm.bad.encrypted';
     const bodyJSX = body ? scaleSystemEmoji(trimReplyFromBody(body)) : fallbackBody;
+
+    const hasReply = replyItem !== undefined || replyEvent !== undefined;
 
     return (
       <Box direction="Row" gap="200" alignItems="Center" {...props} ref={ref}>
@@ -118,7 +133,7 @@ export const Reply = as<'div', ReplyProps>(
           data-event-id={replyEventId}
           onClick={onClick}
         >
-          {replyEvent !== undefined ? (
+          {hasReply ? (
             <Text size="T300" truncate>
               {badEncryption ? <MessageBadEncryptedContent /> : bodyJSX}
             </Text>

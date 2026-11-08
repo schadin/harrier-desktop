@@ -98,6 +98,8 @@ export type MessageContentView = {
 export type ReactionCountView = {
   readonly key: string;
   readonly count: number;
+  readonly senders: readonly UserId[];
+  readonly shortcode?: string;
 };
 
 type TimelineBase = {

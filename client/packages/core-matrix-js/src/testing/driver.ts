@@ -23,6 +23,7 @@ export type SyncFixtureReaction = {
   readonly target: string;
   readonly sender: string;
   readonly key: string;
+  readonly shortcode?: string;
 };
 
 export type SyncFixtureMessage = {
@@ -193,6 +194,7 @@ function reactionEvent(roomId: string, reaction: SyncFixtureReaction): MatrixEve
     origin_server_ts: 1_700_000_000_000 + eventCounter,
     content: {
       'm.relates_to': { rel_type: 'm.annotation', event_id: reaction.target, key: reaction.key },
+      ...(reaction.shortcode !== undefined ? { shortcode: reaction.shortcode } : {}),
     },
   });
 }
