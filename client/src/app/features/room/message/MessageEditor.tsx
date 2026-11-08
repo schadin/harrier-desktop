@@ -21,9 +21,10 @@ import {
 } from 'folds';
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';
-import { IContent, IMentions, MatrixEvent, RelationType, Room } from 'matrix-js-sdk';
-import type { RoomMessageEventContent } from 'matrix-js-sdk/lib/@types/events';
+import { IMentions, Room } from 'matrix-js-sdk';
+import type { JsonObject, MessageContentView } from '@harrier/core';
 import { isKeyHotkey } from 'is-hotkey';
+import { useCore } from '../../../hooks/useCore';
 import { notifySendError } from '../../../utils/send';
 import {
   AUTOCOMPLETE_PREFIXES,
@@ -53,20 +54,22 @@ import { UseStateProvider } from '../../../components/UseStateProvider';
 import { EmojiBoard } from '../../../components/emoji-board';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { getEditedEvent, getMentionContent, trimReplyFromFormattedBody } from '../../../utils/room';
+import { getMentionContent, trimReplyFromFormattedBody } from '../../../utils/room';
 import { mobileOrTablet } from '../../../utils/user-agent';
 import { useComposingCheck } from '../../../hooks/useComposingCheck';
 
 type MessageEditorProps = {
   roomId: string;
   room: Room;
-  mEvent: MatrixEvent;
+  eventId: string;
+  content: MessageContentView;
   imagePackRooms?: Room[];
   onCancel: () => void;
 };
 export const MessageEditor = as<'div', MessageEditorProps>(
-  ({ room, roomId, mEvent, imagePackRooms, onCancel, ...props }, ref) => {
+  ({ room, roomId, eventId, content, imagePackRooms, onCancel, ...props }, ref) => {
     const mx = useMatrixClient();
+    const core = useCore();
     const editor = useEditor();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
     const [globalToolbar] = useSetting(settingsAtom, 'editorToolbar');
@@ -82,22 +85,14 @@ export const MessageEditor = as<'div', MessageEditorProps>(
       string | undefined,
       IMentions | undefined
     ] => {
-      const evtId = mEvent.getId()!;
-      const evtTimeline = room.getTimelineForEvent(evtId);
-      const editedEvent =
-        evtTimeline && getEditedEvent(evtId, mEvent, evtTimeline.getTimelineSet());
-
-      const content: IContent = editedEvent?.getContent()['m.new_content'] ?? mEvent.getContent();
-      const { body, formatted_body: customHtml }: Record<string, unknown> = content;
-
-      const mMentions: IMentions | undefined = content['m.mentions'];
+      const mMentions = content.raw['m.mentions'] as IMentions | undefined;
 
       return [
-        typeof body === 'string' ? body : undefined,
-        typeof customHtml === 'string' ? customHtml : undefined,
+        typeof content.body === 'string' ? content.body : undefined,
+        typeof content.formattedBody === 'string' ? content.formattedBody : undefined,
         mMentions,
       ];
-    }, [room, mEvent]);
+    }, [content]);
 
     const [saveState, save] = useAsyncCallback(
       useCallback(async () => {
@@ -126,8 +121,8 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           }
         }
 
-        const newContent: IContent = {
-          msgtype: mEvent.getContent().msgtype,
+        const newContent: JsonObject = {
+          msgtype: content.msgtype,
           body: plainText,
         };
 
@@ -138,30 +133,20 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         });
 
         const mMentions = getMentionContent(Array.from(mentionData.users), mentionData.room);
-        newContent['m.mentions'] = mMentions;
+        newContent['m.mentions'] = mMentions as unknown as JsonObject;
 
         if (!customHtmlEqualsPlainText(customHtml, plainText)) {
           newContent.format = 'org.matrix.custom.html';
           newContent.formatted_body = customHtml;
         }
 
-        const content: IContent = {
-          ...newContent,
-          body: `* ${plainText}`,
-          'm.new_content': newContent,
-          'm.relates_to': {
-            event_id: mEvent.getId(),
-            rel_type: RelationType.Replace,
-          },
-        };
-
-        return mx
-          .sendMessage(roomId, content as unknown as RoomMessageEventContent)
-          .catch((error) => {
-            notifySendError(error);
-            throw error;
-          });
-      }, [mx, editor, roomId, mEvent, isMarkdown, getPrevBodyAndFormattedBody])
+        const result = await core.send.edit(roomId, eventId, newContent);
+        if (!result.ok) {
+          notifySendError(result.error);
+          throw result.error;
+        }
+        return result.value;
+      }, [core, mx, editor, roomId, eventId, content, isMarkdown, getPrevBodyAndFormattedBody])
     );
 
     const handleSave = useCallback(() => {

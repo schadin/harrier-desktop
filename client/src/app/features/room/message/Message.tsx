@@ -917,7 +917,7 @@ export const Message = as<'div', MessageProps>(
     const msgContentJSX = (
       <Box direction="Column" alignSelf="Start" style={{ maxWidth: '100%' }}>
         {reply}
-        {edit && onEditId ? (
+        {edit && onEditId && timelineItem.kind === 'message' ? (
           <MessageEditor
             style={{
               maxWidth: '100%',
@@ -925,7 +925,8 @@ export const Message = as<'div', MessageProps>(
             }}
             roomId={room.roomId}
             room={room}
-            mEvent={mEvent}
+            eventId={timelineItem.eventId}
+            content={timelineItem.content}
             imagePackRooms={imagePackRooms}
             onCancel={() => onEditId()}
           />

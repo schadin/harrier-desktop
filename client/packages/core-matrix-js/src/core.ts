@@ -1430,7 +1430,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         );
       },
       async edit(roomId, eventId, content): Promise<CoreResult<string>> {
+        const body = typeof content.body === 'string' ? content.body : '';
         const wrapped: JsonObject = {
+          msgtype: typeof content.msgtype === 'string' ? content.msgtype : 'm.text',
+          body: `* ${body}`,
           'm.new_content': content,
           'm.relates_to': { rel_type: 'm.replace', event_id: eventId },
         };
