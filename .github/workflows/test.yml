@@ -66,6 +66,10 @@ jobs:
           src-tauri/target/release/bundle/appimage/Harrier_*.AppImage
         if-no-files-found: warn
 
+    - name: Create Windows zip archive
+      if: matrix.platform == 'windows-latest'
+      run: Compress-Archive -Path "src-tauri\target\release\bundle\msi\Harrier_*_x64_*.msi", "src-tauri\target\release\bundle\nsis\Harrier_*_x64-setup.exe" -DestinationPath "src-tauri\target\release\bundle\Harrier_windows-x86_64.zip" -Force
+      shell: pwsh
     - name: Upload Windows artifacts
       if: matrix.platform == 'windows-latest'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -74,4 +78,5 @@ jobs:
         path: |
           src-tauri/target/release/bundle/msi/Harrier_*_x64_*.msi
           src-tauri/target/release/bundle/nsis/Harrier_*_x64-setup.exe
+          src-tauri/target/release/bundle/Harrier_windows-x86_64.zip
         if-no-files-found: warn

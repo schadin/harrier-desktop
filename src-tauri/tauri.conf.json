@@ -9,6 +9,9 @@
       "wix": {
         "bannerPath": "wix/banner.bmp",
         "dialogImagePath": "wix/dialogImage.bmp",
+        "fragmentPaths": [
+          "wix/per-user.wxs"
+        ],
         "version": "4.12.6.9"
       }
     },
