@@ -964,11 +964,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     if (!user) return null;
     const status =
       user.presence === 'online' || user.presence === 'unavailable' ? user.presence : 'offline';
-    return { userId, status };
+    return {
+      userId,
+      status,
+      ...(user.presenceStatusMsg ? { statusMessage: user.presenceStatusMsg } : {}),
+      active: user.currentlyActive,
+      ...(Number.isFinite(user.getLastActiveTs()) ? { lastActiveTs: user.getLastActiveTs() } : {}),
+    };
   };
-  client.on(UserEvent.Presence, (_event: MatrixEvent | undefined, user: User) => {
+  const publishPresence = (_event: MatrixEvent | undefined, user: User) => {
     presenceStores.get(user.userId)?.publish(buildPresence(user.userId));
-  });
+  };
+  client.on(UserEvent.Presence, publishPresence);
+  client.on(UserEvent.CurrentlyActive, publishPresence);
+  client.on(UserEvent.LastPresenceTs, publishPresence);
 
   const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
   const buildTyping = (roomId: string): readonly string[] =>
@@ -1449,6 +1458,17 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
         try {
           await client.sendTyping(roomId, typing, timeoutMs ?? 20000);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async setOwnPresence(input) {
+        try {
+          await client.setPresence({
+            presence: input.status as SetPresence,
+            ...(input.statusMessage !== undefined ? { status_msg: input.statusMessage } : {}),
+          });
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };

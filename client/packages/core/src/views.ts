@@ -154,6 +154,9 @@ export type PresenceStatus = 'online' | 'offline' | 'unavailable';
 export type PresenceView = {
   readonly userId: UserId;
   readonly status: PresenceStatus;
+  readonly statusMessage?: string;
+  readonly active: boolean;
+  readonly lastActiveTs?: number;
 };
 
 export type UnreadMapEntry = {

@@ -12,6 +12,7 @@ import type {
   RoomSummaryView,
   RoomView,
   PresenceView,
+  PresenceStatus,
   SessionView,
   SyncView,
   TimelineView,
@@ -128,6 +129,10 @@ export type PresenceModule = {
   presence(userId: string): SnapshotStore<PresenceView | null>;
   typing(roomId: RoomId): SnapshotStore<readonly string[]>;
   setTyping(roomId: RoomId, typing: boolean, timeoutMs?: number): Promise<CoreResult<void>>;
+  setOwnPresence(input: {
+    status: PresenceStatus;
+    statusMessage?: string;
+  }): Promise<CoreResult<void>>;
 };
 
 export type SendModule = {

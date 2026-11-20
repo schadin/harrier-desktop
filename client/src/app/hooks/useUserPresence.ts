@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { User, UserEvent, UserEventHandlerMap } from 'matrix-js-sdk';
-import { useMatrixClient } from './useMatrixClient';
+import type { PresenceView } from '@harrier/core';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
 export enum Presence {
   Online = 'online',
@@ -15,36 +15,22 @@ export type UserPresence = {
   lastActiveTs?: number;
 };
 
-const getUserPresence = (user: User): UserPresence => ({
-  presence: user.presence as Presence,
-  status: user.presenceStatusMsg,
-  active: user.currentlyActive,
-  lastActiveTs: user.getLastActiveTs(),
-});
+const toUserPresence = (view: PresenceView | null): UserPresence | undefined =>
+  view
+    ? {
+        presence: view.status as Presence,
+        status: view.statusMessage,
+        active: view.active,
+        lastActiveTs: view.lastActiveTs,
+      }
+    : undefined;
 
 export const useUserPresence = (userId: string): UserPresence | undefined => {
-  const mx = useMatrixClient();
-  const user = mx.getUser(userId);
+  const core = useCore();
+  const store = useMemo(() => core.presence.presence(userId), [core, userId]);
+  const view = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 
-  const [presence, setPresence] = useState(() => (user ? getUserPresence(user) : undefined));
-
-  useEffect(() => {
-    const updatePresence: UserEventHandlerMap[UserEvent.Presence] = (event, u) => {
-      if (u.userId === user?.userId) {
-        setPresence(getUserPresence(user));
-      }
-    };
-    user?.on(UserEvent.Presence, updatePresence);
-    user?.on(UserEvent.CurrentlyActive, updatePresence);
-    user?.on(UserEvent.LastPresenceTs, updatePresence);
-    return () => {
-      user?.removeListener(UserEvent.Presence, updatePresence);
-      user?.removeListener(UserEvent.CurrentlyActive, updatePresence);
-      user?.removeListener(UserEvent.LastPresenceTs, updatePresence);
-    };
-  }, [user]);
-
-  return presence;
+  return useMemo(() => toUserPresence(view), [view]);
 };
 
 export const usePresenceLabel = (): Record<Presence, string> =>

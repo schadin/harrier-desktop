@@ -93,6 +93,9 @@ export type SyncFixtureRoom = {
 export type SyncFixturePresence = {
   readonly userId: string;
   readonly status: 'online' | 'offline' | 'unavailable';
+  readonly statusMessage?: string;
+  readonly active?: boolean;
+  readonly lastActiveTs?: number;
 };
 
 export type SyncFixture = {
@@ -228,6 +231,7 @@ export function createSyncDriver(): SyncDriver {
     }
     if (path.endsWith('/leave')) return {};
     if (path.includes('/upload')) return { content_uri: 'mxc://example.org/uploaded' };
+    if (path.includes('/presence/')) return {};
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {
@@ -498,7 +502,14 @@ export function createSyncDriver(): SyncDriver {
         const user = new User(item.userId);
         const event = new MatrixEvent({
           type: 'm.presence',
-          content: { presence: item.status },
+          content: {
+            presence: item.status,
+            ...(item.statusMessage !== undefined ? { status_msg: item.statusMessage } : {}),
+            ...(item.active !== undefined ? { currently_active: item.active } : {}),
+            ...(item.lastActiveTs !== undefined
+              ? { last_active_ago: Math.max(0, Date.now() - item.lastActiveTs) }
+              : {}),
+          },
         });
         user.setPresenceEvent(event);
         client.store.storeUser(user);

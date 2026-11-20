@@ -80,6 +80,9 @@ export type SyncFixtureRoom = {
 export type SyncFixturePresence = {
   readonly userId: string;
   readonly status: 'online' | 'offline' | 'unavailable';
+  readonly statusMessage?: string;
+  readonly active?: boolean;
+  readonly lastActiveTs?: number;
 };
 
 export type SyncFixture = {
