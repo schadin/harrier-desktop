@@ -131,6 +131,8 @@ export type PresenceModule = {
   presence(userId: string): SnapshotStore<PresenceView | null>;
   typing(roomId: RoomId): SnapshotStore<readonly string[]>;
   setTyping(roomId: RoomId, typing: boolean, timeoutMs?: number): Promise<CoreResult<void>>;
+  getOwnPresence(): Promise<CoreResult<PresenceView | null>>;
+  setLocalOwnStatus(statusMessage?: string): void;
   setOwnPresence(input: {
     status: PresenceStatus;
     statusMessage?: string;

@@ -68,6 +68,20 @@ export const presenceCases = [
     }
   }),
 
+  contractTest('own presence can be read through the contract', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.presence.getOwnPresence();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value?.userId).toBeTypeOf('string');
+        expect(result.value?.status).toBe('offline');
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('typing members are listed for the room', async (harness) => {
     const core = await harness.create();
     try {

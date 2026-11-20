@@ -16,6 +16,7 @@ import { settingsAtom } from '../../state/settings';
 import { allInvitesAtom } from '../../state/room-list/inviteList';
 import { usePreviousValue } from '../../hooks/usePreviousValue';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { getInboxInvitesPath, getInboxNotificationsPath } from '../pathUtils';
 import {
   getMemberDisplayName,
@@ -52,7 +53,7 @@ import { useRetryDecryptionOnKeyArrival } from '../../hooks/useRetryDecryptionOn
 const STATUS_RESTORE_RETRY_DELAYS_MS = [1_000, 3_000, 10_000, 30_000, 60_000];
 
 function CustomStatusRestore() {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   useEffect(() => {
     let disposed = false;
@@ -70,7 +71,7 @@ function CustomStatusRestore() {
 
     function run() {
       if (disposed) return;
-      restoreCustomStatus(mx)
+      restoreCustomStatus(core)
         .then((result) => {
           if (!disposed && result === 'retry') schedule();
         })
@@ -85,7 +86,7 @@ function CustomStatusRestore() {
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [mx]);
+  }, [core]);
 
   return null;
 }
@@ -102,6 +103,7 @@ function RetryDecryption() {
 
 function DesktopFeatures() {
   const mx = useMatrixClient();
+  const core = useCore();
   const userId = mx.getUserId()!;
   const currentStatus = useCustomStatus(userId);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
@@ -173,7 +175,7 @@ function DesktopFeatures() {
     let disposed = false;
     const disposeFns: Array<() => void> = [];
     listenTrayStatus((preset) => {
-      setCustomStatusWithTime(mx, preset.emoji, preset.text, statusNoticeRoomId);
+      setCustomStatusWithTime(core, preset.emoji, preset.text, statusNoticeRoomId);
     }).then((fn) => {
       if (disposed) {
         fn();
@@ -185,7 +187,7 @@ function DesktopFeatures() {
       disposed = true;
       disposeFns.forEach((fn) => fn());
     };
-  }, [mx, statusNoticeRoomId]);
+  }, [core, statusNoticeRoomId]);
 
   useEffect(() => {
     if (!isTauri() || !showTrayIcon) return undefined;

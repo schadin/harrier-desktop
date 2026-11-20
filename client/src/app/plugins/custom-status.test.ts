@@ -1,4 +1,4 @@
-import { MatrixClient, SetPresence } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   decideStatusRestore,
@@ -28,26 +28,34 @@ afterEach(() => {
 
 const USER_ID = '@user:example.org';
 
-type ClientStub = {
-  getUserId: () => string;
-  getPresence: ReturnType<typeof vi.fn>;
-  getUser: ReturnType<typeof vi.fn>;
-  setPresence: ReturnType<typeof vi.fn>;
+type CoreStub = {
+  getOwnPresence: ReturnType<typeof vi.fn>;
+  setOwnPresence: ReturnType<typeof vi.fn>;
+  setLocalOwnStatus: ReturnType<typeof vi.fn>;
 };
 
-const makeClient = (presence: Record<string, unknown>): { mx: MatrixClient; stub: ClientStub } => {
-  const user = {
-    presence: SetPresence.Unavailable,
-    presenceStatusMsg: undefined,
-    emit: vi.fn(),
+const makeCore = (response: Record<string, unknown>): { core: HarrierCore; stub: CoreStub } => {
+  const stub: CoreStub = {
+    getOwnPresence: vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          userId: USER_ID,
+          status: 'unavailable',
+          active: false,
+          ...response,
+        },
+      })
+    ),
+    setOwnPresence: vi.fn(() => Promise.resolve({ ok: true, value: undefined })),
+    setLocalOwnStatus: vi.fn(),
   };
-  const stub: ClientStub = {
-    getUserId: () => USER_ID,
-    getPresence: vi.fn(() => Promise.resolve(presence)),
-    getUser: vi.fn(() => user),
-    setPresence: vi.fn(() => Promise.resolve({})),
-  };
-  return { mx: stub as unknown as MatrixClient, stub };
+  const core = {
+    auth: { session: { getSnapshot: () => ({ value: { userId: USER_ID } }) } },
+    presence: stub,
+    send: { sendMessage: vi.fn(() => Promise.resolve({ ok: true, value: '$sent' })) },
+  } as unknown as HarrierCore;
+  return { core, stub };
 };
 
 describe('decideStatusRestore', () => {
@@ -85,62 +93,63 @@ describe('decideStatusRestore', () => {
 });
 
 describe('restoreCustomStatus', () => {
-  it('повторяет запрос и не трогает кэш при ошибке getPresence', async () => {
+  it('повторяет запрос и не трогает кэш при ошибке getOwnPresence', async () => {
     saveActiveStatusMsg('🍴 Обед');
-    const { mx, stub } = makeClient({});
-    stub.getPresence.mockRejectedValueOnce(new Error('network down'));
+    const { core, stub } = makeCore({});
+    stub.getOwnPresence.mockRejectedValueOnce(new Error('network down'));
 
-    await expect(restoreCustomStatus(mx)).resolves.toBe('retry');
-    expect(stub.setPresence).not.toHaveBeenCalled();
+    await expect(restoreCustomStatus(core)).resolves.toBe('retry');
+    expect(stub.setOwnPresence).not.toHaveBeenCalled();
     expect(getActiveStatusMsg()).toBe('🍴 Обед');
   });
 
   it('восстанавливает локальный статус, когда сервер вернул пусто, сохраняя presence', async () => {
     saveActiveStatusMsg('🍴 Обед');
-    const { mx, stub } = makeClient({});
+    const { core, stub } = makeCore({ statusMessage: undefined });
 
-    await expect(restoreCustomStatus(mx)).resolves.toBe('done');
-    expect(stub.setPresence).toHaveBeenCalledWith({
-      presence: SetPresence.Unavailable,
-      status_msg: '🍴 Обед',
+    await expect(restoreCustomStatus(core)).resolves.toBe('done');
+    expect(stub.setOwnPresence).toHaveBeenCalledWith({
+      status: 'unavailable',
+      statusMessage: '🍴 Обед',
     });
     expect(getActiveStatusMsg()).toBe('🍴 Обед');
   });
 
-  it('синхронизирует локальный кэш с серверным значением без setPresence', async () => {
+  it('синхронизирует локальный кэш с серверным значением без setOwnPresence', async () => {
     saveActiveStatusMsg('🍴 Обед');
-    const { mx, stub } = makeClient({ presence: 'online', status_msg: '🟢 На месте' });
+    const { core, stub } = makeCore({ statusMessage: '🟢 На месте' });
 
-    await expect(restoreCustomStatus(mx)).resolves.toBe('done');
-    expect(stub.setPresence).not.toHaveBeenCalled();
+    await expect(restoreCustomStatus(core)).resolves.toBe('done');
+    expect(stub.setOwnPresence).not.toHaveBeenCalled();
+    expect(stub.setLocalOwnStatus).toHaveBeenCalledWith('🟢 На месте');
     expect(getActiveStatusMsg()).toBe('🟢 На месте');
   });
 
-  it('не отправляет setPresence, когда значения совпадают', async () => {
+  it('не отправляет setOwnPresence, когда значения совпадают', async () => {
     saveActiveStatusMsg('🟢 На месте');
-    const { mx, stub } = makeClient({ presence: 'online', status_msg: '🟢 На месте' });
+    const { core, stub } = makeCore({ statusMessage: '🟢 На месте' });
 
-    await expect(restoreCustomStatus(mx)).resolves.toBe('done');
-    expect(stub.setPresence).not.toHaveBeenCalled();
+    await expect(restoreCustomStatus(core)).resolves.toBe('done');
+    expect(stub.setOwnPresence).not.toHaveBeenCalled();
     expect(getActiveStatusMsg()).toBe('🟢 На месте');
   });
 
   it('не перезаписывает статус, изменённый пользователем за время запроса', async () => {
     saveActiveStatusMsg('🍴 Обед');
-    const { mx, stub } = makeClient({ presence: 'online', status_msg: '🟢 На месте' });
-    let releasePresence: (value: Record<string, unknown>) => void = () => {};
-    stub.getPresence.mockReturnValueOnce(
+    const { core, stub } = makeCore({ statusMessage: '🟢 На месте' });
+    let releasePresence: (value: { ok: true; value: Record<string, unknown> }) => void = () => {};
+    stub.getOwnPresence.mockReturnValueOnce(
       new Promise((resolve) => {
         releasePresence = resolve;
       })
     );
 
-    const pending = restoreCustomStatus(mx);
+    const pending = restoreCustomStatus(core);
     saveActiveStatusMsg('🏁 Ушел');
-    releasePresence({ presence: 'online', status_msg: '🟢 На месте' });
+    releasePresence({ ok: true, value: { statusMessage: '🟢 На месте' } });
 
     await expect(pending).resolves.toBe('done');
-    expect(stub.setPresence).not.toHaveBeenCalled();
+    expect(stub.setOwnPresence).not.toHaveBeenCalled();
     expect(getActiveStatusMsg()).toBe('🏁 Ушел');
   });
 });

@@ -1,4 +1,4 @@
-import { MatrixClient, MsgType, SetPresence, UserEvent } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 
 export type CustomStatus = {
   emoji?: string;
@@ -90,17 +90,8 @@ export const formatStatusMsgWithTime = (emoji: string, text?: string): string =>
   return `${base}${TIME_SEPARATOR}${timeStr}`;
 };
 
-function updateLocalPresence(mx: MatrixClient, statusMsg: string | undefined): void {
-  const userId = mx.getUserId();
-  if (!userId) return;
-  const user = mx.getUser(userId);
-  if (!user) return;
-  user.presenceStatusMsg = statusMsg;
-  user.emit(UserEvent.Presence, undefined, user);
-}
-
 const sendStatusNotice = (
-  mx: MatrixClient,
+  core: HarrierCore,
   noticeRoomId: string | undefined,
   emoji: string,
   text?: string
@@ -108,39 +99,41 @@ const sendStatusNotice = (
   if (!noticeRoomId) return;
   const body = formatStatusMsg(emoji, text);
   if (!body) return;
-  mx.sendMessage(noticeRoomId, { msgtype: MsgType.Notice, body }).catch(() => undefined);
+  core.send.sendMessage(noticeRoomId, { msgtype: 'm.notice', body }).catch(() => undefined);
+};
+
+const applyOwnStatus = async (core: HarrierCore, statusMessage: string): Promise<void> => {
+  const result = await core.presence.setOwnPresence({ status: 'online', statusMessage });
+  if (!result.ok) throw result.error;
 };
 
 export const setCustomStatus = (
-  mx: MatrixClient,
+  core: HarrierCore,
   emoji: string,
   text?: string,
   noticeRoomId?: string
 ): Promise<void> => {
   const statusMsg = formatStatusMsg(emoji, text);
-  updateLocalPresence(mx, statusMsg);
   saveActiveStatusMsg(statusMsg);
-  sendStatusNotice(mx, noticeRoomId, emoji, text);
-  return mx.setPresence({ presence: 'online', status_msg: statusMsg });
+  sendStatusNotice(core, noticeRoomId, emoji, text);
+  return applyOwnStatus(core, statusMsg);
 };
 
 export const setCustomStatusWithTime = (
-  mx: MatrixClient,
+  core: HarrierCore,
   emoji: string,
   text?: string,
   noticeRoomId?: string
 ): Promise<void> => {
   const statusMsg = formatStatusMsgWithTime(emoji, text);
-  updateLocalPresence(mx, statusMsg);
   saveActiveStatusMsg(statusMsg);
-  sendStatusNotice(mx, noticeRoomId, emoji, text);
-  return mx.setPresence({ presence: 'online', status_msg: statusMsg });
+  sendStatusNotice(core, noticeRoomId, emoji, text);
+  return applyOwnStatus(core, statusMsg);
 };
 
-export const clearCustomStatus = (mx: MatrixClient): Promise<void> => {
-  updateLocalPresence(mx, undefined);
+export const clearCustomStatus = (core: HarrierCore): Promise<void> => {
   saveActiveStatusMsg(undefined);
-  return mx.setPresence({ presence: 'online', status_msg: '' });
+  return applyOwnStatus(core, '');
 };
 
 export type StatusRestoreAction =
@@ -177,8 +170,8 @@ export const decideStatusRestore = (
 
 export type StatusRestoreResult = 'done' | 'retry';
 
-export const restoreCustomStatus = async (mx: MatrixClient): Promise<StatusRestoreResult> => {
-  const userId = mx.getUserId();
+export const restoreCustomStatus = async (core: HarrierCore): Promise<StatusRestoreResult> => {
+  const userId = core.auth.session.getSnapshot().value?.userId;
   if (!userId) return 'done';
 
   const saved = getActiveStatusMsg();
@@ -186,14 +179,14 @@ export const restoreCustomStatus = async (mx: MatrixClient): Promise<StatusResto
   // авторитетный источник серверного значения — явный запрос presence;
   // собственное m.presence не подходит: у Synapse статус не переживает offline,
   // а matrix-js-sdk не различает «пустой status_msg» и «события не было»
-  let serverMsg: string | undefined;
+  let response;
   try {
-    const response = await mx.getPresence(userId);
-    serverMsg = response.status_msg || undefined;
+    response = await core.presence.getOwnPresence();
   } catch {
-    // недоступность сервера — не признак пустого статуса; нужен повтор
     return 'retry';
   }
+  if (!response.ok) return 'retry';
+  const serverMsg = response.value?.statusMessage;
 
   // пользователь изменил или снял статус, пока шёл запрос — его выбор важнее
   if (getActiveStatusMsg() !== saved) return 'done';
@@ -202,21 +195,20 @@ export const restoreCustomStatus = async (mx: MatrixClient): Promise<StatusResto
 
   switch (action.type) {
     case 'show-server':
-      updateLocalPresence(mx, action.statusMsg);
+      core.presence.setLocalOwnStatus(action.statusMsg);
       break;
     case 'adopt-server':
       saveActiveStatusMsg(action.statusMsg);
-      updateLocalPresence(mx, action.statusMsg);
+      core.presence.setLocalOwnStatus(action.statusMsg);
       break;
-    case 'restore': {
-      const user = mx.getUser(userId);
-      updateLocalPresence(mx, action.statusMsg);
-      mx.setPresence({
-        presence: (user?.presence as SetPresence) ?? SetPresence.Online,
-        status_msg: action.statusMsg,
-      }).catch(() => undefined);
+    case 'restore':
+      core.presence
+        .setOwnPresence({
+          status: response.value?.status ?? 'online',
+          statusMessage: action.statusMsg,
+        })
+        .catch(() => undefined);
       break;
-    }
     case 'noop':
     default:
       break;

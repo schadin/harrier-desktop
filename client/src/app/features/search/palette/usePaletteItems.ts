@@ -246,7 +246,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
         }),
         keywords: ['status', 'статус', preset.text],
         icon: Icons.Heart,
-        run: () => setCustomStatusWithTime(mx, preset.emoji, preset.text, statusNoticeRoomId),
+        run: () => setCustomStatusWithTime(core, preset.emoji, preset.text, statusNoticeRoomId),
       });
     });
 
@@ -257,7 +257,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
         title: t('CommandPalette.actions.clearStatus', 'Clear status'),
         keywords: ['status', 'clear', 'статус'],
         icon: Icons.Cross,
-        run: () => clearCustomStatus(mx),
+        run: () => clearCustomStatus(core),
       });
     }
 

@@ -11,6 +11,7 @@ import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
@@ -28,6 +29,7 @@ const MAX_STATUS_LENGTH = 60;
 
 export function StatusEditor() {
   const mx = useMatrixClient();
+  const core = useCore();
   const userId = mx.getUserId()!;
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
@@ -89,11 +91,11 @@ export function StatusEditor() {
       if (!removed) return;
       setCustomPresets(customPresets.filter((_, i) => i !== index));
       if (currentEmoji === removed.emoji && stripTimeSuffix(currentText) === removed.text) {
-        clearCustomStatus(mx);
+        clearCustomStatus(core);
       }
       setConfirmingDeleteIndex(null);
     },
-    [customPresets, setCustomPresets, currentEmoji, currentText, mx]
+    [customPresets, setCustomPresets, currentEmoji, currentText, core]
   );
 
   const handleDeleteClick = useCallback(
@@ -126,7 +128,7 @@ export function StatusEditor() {
       currentEmoji === customPresets[editingIndex].emoji &&
       stripTimeSuffix(currentText) === customPresets[editingIndex].text
     ) {
-      setCustomStatusWithTime(mx, newEmoji, newText, statusNoticeRoomId);
+      setCustomStatusWithTime(core, newEmoji, newText, statusNoticeRoomId);
     }
     setEditingIndex(null);
   }, [
@@ -137,7 +139,7 @@ export function StatusEditor() {
     setCustomPresets,
     currentEmoji,
     currentText,
-    mx,
+    core,
     statusNoticeRoomId,
   ]);
 

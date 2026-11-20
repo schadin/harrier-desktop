@@ -1563,12 +1563,47 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: false, error: toCoreError(error) };
         }
       },
+      setLocalOwnStatus(statusMessage) {
+        const user = client.getUser(client.getSafeUserId());
+        if (!user) return;
+        user.presenceStatusMsg = statusMessage;
+        user.emit(UserEvent.Presence, undefined, user);
+      },
+      async getOwnPresence() {
+        try {
+          const userId = client.getSafeUserId();
+          const response = await client.getPresence(userId);
+          const status =
+            response.presence === 'online' || response.presence === 'unavailable'
+              ? response.presence
+              : 'offline';
+          return {
+            ok: true,
+            value: {
+              userId,
+              status,
+              ...(response.status_msg ? { statusMessage: response.status_msg } : {}),
+              active: response.currently_active ?? false,
+              ...(typeof response.last_active_ago === 'number'
+                ? { lastActiveTs: Date.now() - response.last_active_ago }
+                : {}),
+            },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async setOwnPresence(input) {
         try {
           await client.setPresence({
             presence: input.status as SetPresence,
             ...(input.statusMessage !== undefined ? { status_msg: input.statusMessage } : {}),
           });
+          const user = client.getUser(client.getSafeUserId());
+          if (user) {
+            user.presenceStatusMsg = input.statusMessage;
+            user.emit(UserEvent.Presence, undefined, user);
+          }
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };

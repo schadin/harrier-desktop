@@ -2,6 +2,7 @@ import React, { MouseEventHandler, useCallback, useState } from 'react';
 import { Box, color, config, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import {
   DEFAULT_STATUS_PRESETS,
@@ -15,6 +16,7 @@ import { stopPropagation } from '../../../utils/keyboard';
 
 export function StatusButton() {
   const mx = useMatrixClient();
+  const core = useCore();
   const userId = mx.getUserId()!;
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
@@ -35,10 +37,10 @@ export function StatusButton() {
 
   const handleSelect = useCallback(
     (emoji: string, text: string) => {
-      setCustomStatusWithTime(mx, emoji, text, statusNoticeRoomId);
+      setCustomStatusWithTime(core, emoji, text, statusNoticeRoomId);
       closeMenu();
     },
-    [mx, closeMenu, statusNoticeRoomId]
+    [core, closeMenu, statusNoticeRoomId]
   );
 
   const isActive = useCallback(
