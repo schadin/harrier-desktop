@@ -85,9 +85,17 @@ export type SyncFixturePresence = {
   readonly lastActiveTs?: number;
 };
 
+export type SyncFixtureDevice = {
+  readonly deviceId: string;
+  readonly displayName?: string;
+  readonly lastSeenIp?: string;
+  readonly lastSeenTs?: number;
+};
+
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
   readonly presence?: readonly SyncFixturePresence[];
+  readonly devices?: readonly SyncFixtureDevice[];
 };
 
 export type CoreContractHarness = {

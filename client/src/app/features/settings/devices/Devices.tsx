@@ -7,7 +7,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { LocalBackup } from './LocalBackup';
-import { DeviceLogoutBtn, DeviceKeyDetails, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
+import { DeviceLogoutBtn, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
 import {
   DeviceVerificationOptions,
@@ -47,17 +47,12 @@ export function Devices({ requestClose }: DevicesProps) {
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
   const verificationStatus = useDeviceVerificationStatus(
-    crypto,
     mx.getSafeUserId(),
-    currentDevice?.device_id
+    currentDevice?.deviceId
   );
 
   const otherDevicesId = useDeviceIds(otherDevices);
-  const unverifiedDeviceCount = useUnverifiedDeviceCount(
-    crypto,
-    mx.getSafeUserId(),
-    otherDevicesId
-  );
+  const unverifiedDeviceCount = useUnverifiedDeviceCount(mx.getSafeUserId(), otherDevicesId);
 
   const defaultSecretStorageKeyId = useSecretStorageDefaultKeyId();
   const defaultSecretStorageKeyContent = useSecretStorageKeyContent(
@@ -125,9 +120,7 @@ export function Devices({ requestClose }: DevicesProps) {
                       device={currentDevice}
                       refreshDeviceList={refreshDeviceList}
                       options={<DeviceLogoutBtn />}
-                    >
-                      {crypto && <DeviceKeyDetails crypto={crypto} />}
-                    </DeviceTile>
+                    />
                     {crossSigningActive &&
                       verificationStatus === VerificationStatus.Unverified &&
                       defaultSecretStorageKeyId &&

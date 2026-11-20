@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Box, Button, config, Menu, Spinner, Text } from 'folds';
-import { AuthDict, IMyDevice, MatrixError } from 'matrix-js-sdk';
+import type { DeviceView } from '@harrier/core';
+import { AuthDict, MatrixError } from 'matrix-js-sdk';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { ActionUIA, ActionUIAFlowsLoader } from '../../../components/ActionUIA';
@@ -17,7 +18,7 @@ import { useAccountManagementActions } from '../../../hooks/useAccountManagement
 import { SettingTile } from '../../../components/setting-tile';
 
 type OtherDevicesProps = {
-  devices: IMyDevice[];
+  devices: DeviceView[];
   refreshDeviceList: () => Promise<void>;
   showVerification?: boolean;
 };
@@ -132,33 +133,33 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
         )}
         {devices
           .sort((d1, d2) => {
-            if (!d1.last_seen_ts || !d2.last_seen_ts) return 0;
-            return d1.last_seen_ts < d2.last_seen_ts ? 1 : -1;
+            if (!d1.lastSeenTs || !d2.lastSeenTs) return 0;
+            return d1.lastSeenTs < d2.lastSeenTs ? 1 : -1;
           })
           .map((device) => (
             <SequenceCard
-              key={device.device_id}
+              key={device.deviceId}
               className={SequenceCardStyle}
-              variant={deleted.has(device.device_id) ? 'Critical' : 'SurfaceVariant'}
+              variant={deleted.has(device.deviceId) ? 'Critical' : 'SurfaceVariant'}
               direction="Column"
               gap="400"
             >
               <DeviceTile
                 device={device}
-                deleted={deleted.has(device.device_id)}
+                deleted={deleted.has(device.deviceId)}
                 refreshDeviceList={refreshDeviceList}
                 disabled={deleting}
                 options={
                   authMetadata ? (
                     <DeviceDeleteBtn
-                      deviceId={device.device_id}
+                      deviceId={device.deviceId}
                       deleted={false}
                       onDeleteToggle={handleDeleteOIDC}
                     />
                   ) : (
                     <DeviceDeleteBtn
-                      deviceId={device.device_id}
-                      deleted={deleted.has(device.device_id)}
+                      deviceId={device.deviceId}
+                      deleted={deleted.has(device.deviceId)}
                       onDeleteToggle={handleToggleDelete}
                       disabled={deleting}
                     />
@@ -166,14 +167,10 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 }
               />
               {showVerification && crypto && (
-                <DeviceVerificationStatus
-                  crypto={crypto}
-                  userId={mx.getSafeUserId()}
-                  deviceId={device.device_id}
-                >
+                <DeviceVerificationStatus userId={mx.getSafeUserId()} deviceId={device.deviceId}>
                   {(status) =>
                     status === VerificationStatus.Unverified && (
-                      <VerifyOtherDeviceTile crypto={crypto} deviceId={device.device_id} />
+                      <VerifyOtherDeviceTile crypto={crypto} deviceId={device.deviceId} />
                     )
                   }
                 </DeviceVerificationStatus>

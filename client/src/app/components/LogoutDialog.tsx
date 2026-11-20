@@ -19,7 +19,6 @@ export const LogoutDialog = forwardRef<HTMLDivElement, LogoutDialogProps>(
     const hasEncryptedRoom = !!mx.getRooms().find((room) => room.hasEncryptionStateEvent());
     const crossSigningActive = useCrossSigningActive();
     const verificationStatus = useDeviceVerificationStatus(
-      mx.getCrypto(),
       mx.getSafeUserId(),
       mx.getDeviceId() ?? undefined
     );

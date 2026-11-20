@@ -21,24 +21,18 @@ import { Settings, SettingsPages } from '../../../features/settings';
 function UnverifiedIndicator() {
   const mx = useMatrixClient();
 
-  const crypto = mx.getCrypto();
   const [devices] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
 
   const verificationStatus = useDeviceVerificationStatus(
-    crypto,
     mx.getSafeUserId(),
-    currentDevice?.device_id
+    currentDevice?.deviceId
   );
   const unverified = verificationStatus === VerificationStatus.Unverified;
 
   const otherDevicesId = useDeviceIds(otherDevices);
-  const unverifiedDeviceCount = useUnverifiedDeviceCount(
-    crypto,
-    mx.getSafeUserId(),
-    otherDevicesId
-  );
+  const unverifiedDeviceCount = useUnverifiedDeviceCount(mx.getSafeUserId(), otherDevicesId);
 
   const [settings, setSettings] = useState(false);
   const closeSettings = () => setSettings(false);

@@ -13,6 +13,8 @@ import type {
   RoomView,
   PresenceView,
   PresenceStatus,
+  DeviceTrust,
+  DeviceView,
   SessionView,
   SyncView,
   TimelineView,
@@ -135,6 +137,15 @@ export type PresenceModule = {
   }): Promise<CoreResult<void>>;
 };
 
+export type CryptoModule = {
+  readonly devices: SnapshotStore<readonly DeviceView[] | null>;
+  refreshDevices(): Promise<CoreResult<void>>;
+  trust(userId: string, deviceId: string): SnapshotStore<DeviceTrust>;
+  unverifiedCount(userId: string, deviceIds: readonly string[]): SnapshotStore<number | undefined>;
+  renameDevice(deviceId: string, displayName: string): Promise<CoreResult<void>>;
+  deleteDevices(deviceIds: readonly string[]): Promise<CoreResult<void>>;
+};
+
 export type SendModule = {
   sendMessage(roomId: RoomId, content: JsonObject): Promise<CoreResult<string>>;
   sendEvent(roomId: RoomId, eventType: string, content: JsonObject): Promise<CoreResult<string>>;
@@ -163,6 +174,7 @@ export type HarrierCore = {
   readonly rooms: RoomsModule;
   readonly timeline: TimelineModule;
   readonly presence: PresenceModule;
+  readonly crypto: CryptoModule;
   readonly send: SendModule;
   readonly uploads: UploadModule;
 };

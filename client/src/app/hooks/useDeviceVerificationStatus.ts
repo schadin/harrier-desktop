@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
-import { verifiedDevice } from '../utils/matrix-crypto';
-import { useAlive } from './useAlive';
-import { fulfilledPromiseSettledResult } from '../utils/common';
-import { useMatrixClient } from './useMatrixClient';
-import { useDeviceListChange } from './useDeviceList';
+import type { DeviceTrust } from '@harrier/core';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
 export enum VerificationStatus {
   Unknown,
@@ -13,94 +9,38 @@ export enum VerificationStatus {
   Unsupported,
 }
 
-export const useDeviceVerificationDetect = (
-  crypto: CryptoApi | undefined,
-  userId: string,
-  deviceId: string | undefined,
-  callback: (status: VerificationStatus) => void
-): void => {
-  const mx = useMatrixClient();
-
-  const updateStatus = useCallback(async () => {
-    if (crypto && deviceId) {
-      const data = await verifiedDevice(crypto, userId, deviceId);
-      if (data === null) {
-        callback(VerificationStatus.Unsupported);
-        return;
-      }
-      callback(data ? VerificationStatus.Verified : VerificationStatus.Unverified);
-      return;
-    }
-    callback(VerificationStatus.Unknown);
-  }, [crypto, deviceId, userId, callback]);
-
-  useEffect(() => {
-    updateStatus();
-  }, [mx, updateStatus, userId]);
-
-  useDeviceListChange(
-    useCallback(
-      (userIds) => {
-        if (userIds.includes(userId)) {
-          updateStatus();
-        }
-      },
-      [userId, updateStatus]
-    )
-  );
+const toVerificationStatus = (trust: DeviceTrust): VerificationStatus => {
+  switch (trust) {
+    case 'verified':
+      return VerificationStatus.Verified;
+    case 'unverified':
+      return VerificationStatus.Unverified;
+    case 'unsupported':
+      return VerificationStatus.Unsupported;
+    default:
+      return VerificationStatus.Unknown;
+  }
 };
 
 export const useDeviceVerificationStatus = (
-  crypto: CryptoApi | undefined,
   userId: string,
-  deviceId: string | undefined
+  deviceId?: string
 ): VerificationStatus => {
-  const [verificationStatus, setVerificationStatus] = useState(VerificationStatus.Unknown);
+  const core = useCore();
+  const store = useMemo(() => core.crypto.trust(userId, deviceId ?? ''), [core, userId, deviceId]);
+  const trust = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 
-  useDeviceVerificationDetect(crypto, userId, deviceId, setVerificationStatus);
-
-  return verificationStatus;
+  return toVerificationStatus(trust);
 };
 
 export const useUnverifiedDeviceCount = (
-  crypto: CryptoApi | undefined,
   userId: string,
-  devices: string[]
+  deviceIds: string[]
 ): number | undefined => {
-  const [unverifiedCount, setUnverifiedCount] = useState<number>();
-  const alive = useAlive();
-
-  const updateCount = useCallback(async () => {
-    let count = 0;
-    if (crypto) {
-      const promises = devices.map((deviceId) => verifiedDevice(crypto, userId, deviceId));
-      const result = await Promise.allSettled(promises);
-      const settledResult = fulfilledPromiseSettledResult(result);
-      settledResult.forEach((status) => {
-        if (status === false) {
-          count += 1;
-        }
-      });
-    }
-    if (alive()) {
-      setUnverifiedCount(count);
-    }
-  }, [crypto, userId, devices, alive]);
-
-  useDeviceListChange(
-    useCallback(
-      (userIds) => {
-        if (userIds.includes(userId)) {
-          updateCount();
-        }
-      },
-      [userId, updateCount]
-    )
+  const core = useCore();
+  const store = useMemo(
+    () => core.crypto.unverifiedCount(userId, deviceIds),
+    [core, userId, deviceIds]
   );
-
-  useEffect(() => {
-    updateCount();
-  }, [updateCount]);
-
-  return unverifiedCount;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 };

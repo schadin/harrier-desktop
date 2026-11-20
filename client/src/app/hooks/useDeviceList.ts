@@ -1,77 +1,28 @@
-import { useEffect, useCallback, useMemo } from 'react';
-import { IMyDevice } from 'matrix-js-sdk';
-import { useQuery } from '@tanstack/react-query';
-import { CryptoEvent, CryptoEventHandlerMap } from 'matrix-js-sdk/lib/crypto-api';
-import { useMatrixClient } from './useMatrixClient';
+import type { DeviceView } from '@harrier/core';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
-export const useDeviceListChange = (
-  onChange: CryptoEventHandlerMap[CryptoEvent.DevicesUpdated]
-) => {
-  const mx = useMatrixClient();
-  useEffect(() => {
-    mx.on(CryptoEvent.DevicesUpdated, onChange);
-    return () => {
-      mx.removeListener(CryptoEvent.DevicesUpdated, onChange);
-    };
-  }, [mx, onChange]);
-};
-
-const DEVICES_QUERY_KEY = ['devices'];
-
-export function useDeviceList(): [undefined | IMyDevice[], () => Promise<void>] {
-  const mx = useMatrixClient();
-
-  const fetchDevices = useCallback(async () => {
-    const data = await mx.getDevices();
-    return data.devices ?? [];
-  }, [mx]);
-
-  const { data: deviceList, refetch } = useQuery({
-    queryKey: DEVICES_QUERY_KEY,
-    queryFn: fetchDevices,
-    staleTime: 0,
-    gcTime: Infinity,
-    refetchOnMount: 'always',
-  });
-
+export function useDeviceList(): [DeviceView[] | undefined, () => Promise<void>] {
+  const core = useCore();
+  const store = core.crypto.devices;
+  const devices = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
   const refreshDeviceList = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    await core.crypto.refreshDevices();
+  }, [core]);
 
-  useDeviceListChange(
-    useCallback(
-      (users) => {
-        const userId = mx.getUserId();
-        if (userId && users.includes(userId)) {
-          refreshDeviceList();
-        }
-      },
-      [mx, refreshDeviceList]
-    )
-  );
-
-  return [deviceList ?? undefined, refreshDeviceList];
+  return [devices ? [...devices] : undefined, refreshDeviceList];
 }
 
-export const useDeviceIds = (devices: IMyDevice[] | undefined): string[] => {
-  const devicesId = useMemo(() => devices?.map((device) => device.device_id) ?? [], [devices]);
-
-  return devicesId;
-};
+export const useDeviceIds = (devices: DeviceView[] | undefined): string[] =>
+  useMemo(() => devices?.map((device) => device.deviceId) ?? [], [devices]);
 
 export const useSplitCurrentDevice = (
-  devices: IMyDevice[] | undefined
-): [IMyDevice | undefined, IMyDevice[] | undefined] => {
-  const mx = useMatrixClient();
-  const currentDeviceId = mx.getDeviceId();
-  const currentDevice = useMemo(
-    () => devices?.find((d) => d.device_id === currentDeviceId),
-    [devices, currentDeviceId]
+  devices: DeviceView[] | undefined
+): [DeviceView | undefined, DeviceView[] | undefined] =>
+  useMemo(
+    () => [
+      devices?.find((device) => device.isCurrent),
+      devices?.filter((device) => !device.isCurrent),
+    ],
+    [devices]
   );
-  const otherDevices = useMemo(
-    () => devices?.filter((device) => device.device_id !== currentDeviceId),
-    [devices, currentDeviceId]
-  );
-
-  return [currentDevice, otherDevices];
-};

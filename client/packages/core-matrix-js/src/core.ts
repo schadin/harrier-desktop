@@ -4,6 +4,8 @@ import {
   fillMissingPowers,
   toCoreError,
   type CoreResult,
+  type DeviceTrust,
+  type DeviceView,
   type HarrierCore,
   type IPowerLevels,
   type JsonObject,
@@ -53,6 +55,7 @@ import {
   type ICreateRoomStateEvent,
   type UploadResponse,
 } from 'matrix-js-sdk';
+import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -979,6 +982,103 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(UserEvent.CurrentlyActive, publishPresence);
   client.on(UserEvent.LastPresenceTs, publishPresence);
 
+  const devicesStore = createSnapshotStore<readonly DeviceView[] | null>(null);
+  const trustStores = new Map<string, WritableSnapshotStore<DeviceTrust>>();
+  const unverifiedCountStores = new Map<string, WritableSnapshotStore<number | undefined>>();
+  const trustKey = (userId: string, deviceId: string) => `${userId}\u0000${deviceId}`;
+  const countKey = (userId: string, deviceIds: readonly string[]) =>
+    `${userId}\u0000${deviceIds.join('\u0000')}`;
+
+  const buildTrust = async (userId: string, deviceId: string): Promise<DeviceTrust> => {
+    if (!deviceId) return 'unknown';
+    const crypto = client.getCrypto();
+    if (!crypto) return 'unsupported';
+    try {
+      const status = await crypto.getDeviceVerificationStatus(userId, deviceId);
+      if (!status) return 'unsupported';
+      return status.crossSigningVerified ? 'verified' : 'unverified';
+    } catch {
+      return 'unsupported';
+    }
+  };
+
+  const publishUnverifiedCounts = (userId: string) => {
+    unverifiedCountStores.forEach((store, key) => {
+      if (!key.startsWith(`${userId}\u0000`)) return;
+      const ids = key
+        .slice(userId.length + 1)
+        .split('\u0000')
+        .filter(Boolean);
+      store.publish(
+        ids.filter(
+          (deviceId) =>
+            trustStores.get(trustKey(userId, deviceId))?.getSnapshot().value === 'unverified'
+        ).length
+      );
+    });
+  };
+
+  const publishTrust = async (userId: string, deviceId: string): Promise<DeviceTrust> => {
+    const trust = await buildTrust(userId, deviceId);
+    trustStores.get(trustKey(userId, deviceId))?.publish(trust);
+    publishUnverifiedCounts(userId);
+    return trust;
+  };
+
+  const refreshDevices = async (): Promise<CoreResult<void>> => {
+    try {
+      const data = await client.getDevices();
+      const userId = client.getSafeUserId();
+      const currentDeviceId = client.getDeviceId();
+      let ed25519: string | undefined;
+      try {
+        ed25519 = (await client.getCrypto()?.getOwnDeviceKeys())?.ed25519;
+      } catch {
+        ed25519 = undefined;
+      }
+      const devices = await Promise.all(
+        (data.devices ?? []).map(async (device) => {
+          const trust = await buildTrust(userId, device.device_id);
+          trustStores.get(trustKey(userId, device.device_id))?.publish(trust);
+          const isCurrent = device.device_id === currentDeviceId;
+          return {
+            deviceId: device.device_id,
+            ...(typeof device.display_name === 'string'
+              ? { displayName: device.display_name }
+              : {}),
+            ...(typeof device.last_seen_ip === 'string' ? { lastSeenIp: device.last_seen_ip } : {}),
+            ...(typeof device.last_seen_ts === 'number' ? { lastSeenTs: device.last_seen_ts } : {}),
+            isCurrent,
+            trust,
+            ...(isCurrent && ed25519 ? { ed25519 } : {}),
+          };
+        })
+      );
+      devicesStore.publish(devices);
+      publishUnverifiedCounts(userId);
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: toCoreError(error) };
+    }
+  };
+
+  const refreshTrustForUser = (userId: string) => {
+    trustStores.forEach((_store, key) => {
+      if (!key.startsWith(`${userId}\u0000`)) return;
+      const deviceId = key.slice(userId.length + 1);
+      publishTrust(userId, deviceId).catch(() => undefined);
+    });
+  };
+  client.on(CryptoEvent.DevicesUpdated, (userIds: string[]) => {
+    if (userIds.includes(client.getSafeUserId())) {
+      refreshDevices().catch(() => undefined);
+    }
+    userIds.forEach(refreshTrustForUser);
+  });
+  client.on(CryptoEvent.UserTrustStatusChanged, (userId: string) => {
+    refreshTrustForUser(userId);
+  });
+
   const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
   const buildTyping = (roomId: string): readonly string[] =>
     client
@@ -1470,6 +1570,49 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             ...(input.statusMessage !== undefined ? { status_msg: input.statusMessage } : {}),
           });
           return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+    },
+    crypto: {
+      devices: devicesStore,
+      refreshDevices,
+      trust(userId, deviceId) {
+        const key = trustKey(userId, deviceId);
+        const existing = trustStores.get(key);
+        if (existing) return existing;
+        const store = createSnapshotStore<DeviceTrust>('unknown');
+        trustStores.set(key, store);
+        publishTrust(userId, deviceId).catch(() => undefined);
+        return store;
+      },
+      unverifiedCount(userId, deviceIds) {
+        const key = countKey(userId, deviceIds);
+        const existing = unverifiedCountStores.get(key);
+        if (existing) return existing;
+        const store = createSnapshotStore<number | undefined>(undefined);
+        unverifiedCountStores.set(key, store);
+        deviceIds.forEach((deviceId) => {
+          if (!trustStores.has(trustKey(userId, deviceId))) {
+            publishTrust(userId, deviceId).catch(() => undefined);
+          }
+        });
+        store.publish(0);
+        return store;
+      },
+      async renameDevice(deviceId, displayName) {
+        try {
+          await client.setDeviceDetails(deviceId, { display_name: displayName });
+          return await refreshDevices();
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async deleteDevices(deviceIds) {
+        try {
+          await client.deleteMultipleDevices([...deviceIds]);
+          return await refreshDevices();
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

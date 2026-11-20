@@ -172,6 +172,7 @@ export function ClientRoot({ children }: ClientRootProps) {
     useCallback(async (currentCore) => {
       const result = await currentCore.auth.start();
       if (!result.ok) throw result.error;
+      await currentCore.crypto.refreshDevices();
     }, [])
   );
 

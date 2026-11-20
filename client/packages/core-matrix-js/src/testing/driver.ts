@@ -101,6 +101,12 @@ export type SyncFixturePresence = {
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
   readonly presence?: readonly SyncFixturePresence[];
+  readonly devices?: readonly {
+    readonly deviceId: string;
+    readonly displayName?: string;
+    readonly lastSeenIp?: string;
+    readonly lastSeenTs?: number;
+  }[];
 };
 
 export type SyncDriver = {
@@ -218,6 +224,20 @@ export function createSyncDriver(): SyncDriver {
     accessToken: 'test-token',
     timelineSupport: true,
   });
+  let devices: readonly {
+    deviceId: string;
+    displayName?: string;
+    lastSeenIp?: string;
+    lastSeenTs?: number;
+  }[] = [];
+  client.getDevices = (async () => ({
+    devices: devices.map((device) => ({
+      device_id: device.deviceId,
+      ...(device.displayName !== undefined ? { display_name: device.displayName } : {}),
+      ...(device.lastSeenIp !== undefined ? { last_seen_ip: device.lastSeenIp } : {}),
+      ...(device.lastSeenTs !== undefined ? { last_seen_ts: device.lastSeenTs } : {}),
+    })),
+  })) as typeof client.getDevices;
   const directRooms = new Set<string>();
   const sendFailRooms = new Set<string>();
   const sendAttempts = new Map<string, number>();
@@ -232,6 +252,7 @@ export function createSyncDriver(): SyncDriver {
     if (path.endsWith('/leave')) return {};
     if (path.includes('/upload')) return { content_uri: 'mxc://example.org/uploaded' };
     if (path.includes('/presence/')) return {};
+    if (path.includes('/devices/') || path.endsWith('/delete_devices')) return {};
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {
@@ -477,6 +498,7 @@ export function createSyncDriver(): SyncDriver {
   return {
     client,
     async applyFixture(fixture) {
+      if (fixture.devices) devices = fixture.devices;
       await fixture.rooms.reduce(async (previous, item) => {
         await previous;
         await applyRoom(item);

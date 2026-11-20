@@ -15,11 +15,10 @@ import {
   OverlayBackdrop,
   OverlayCenter,
 } from 'folds';
-import { CryptoApi } from 'matrix-js-sdk/lib/crypto-api';
+import type { CoreError, DeviceView } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
-import { IMyDevice, MatrixError } from 'matrix-js-sdk';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { timeDayMonYear, timeHourMinute, today, yesterday } from '../../../utils/time';
 import { BreakWord } from '../../../styles/Text.css';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -61,64 +60,43 @@ function DeviceActiveTime({ ts }: { ts: number }) {
   );
 }
 
-function DeviceDetails({ device }: { device: IMyDevice }) {
+function DeviceDetails({ device }: { device: DeviceView }) {
   return (
     <>
-      {typeof device.device_id === 'string' && (
+      <Text className={BreakWord} size="T200" priority="300">
+        Device ID: <i>{device.deviceId}</i>
+      </Text>
+      {device.lastSeenIp && (
         <Text className={BreakWord} size="T200" priority="300">
-          Device ID: <i>{device.device_id}</i>
+          IP Address: <i>{device.lastSeenIp}</i>
         </Text>
       )}
-      {typeof device.last_seen_ip === 'string' && (
+      {device.ed25519 && (
         <Text className={BreakWord} size="T200" priority="300">
-          IP Address: <i>{device.last_seen_ip}</i>
+          Device Key: <i>{device.ed25519}</i>
         </Text>
       )}
     </>
   );
 }
 
-type DeviceKeyDetailsProps = {
-  crypto: CryptoApi;
-};
-export function DeviceKeyDetails({ crypto }: DeviceKeyDetailsProps) {
-  const [keysState, loadKeys] = useAsyncCallback(
-    useCallback(() => {
-      const keys = crypto.getOwnDeviceKeys();
-      return keys;
-    }, [crypto])
-  );
-
-  useEffect(() => {
-    loadKeys();
-  }, [loadKeys]);
-
-  if (keysState.status === AsyncStatus.Error) return null;
-
-  return (
-    <Text className={BreakWord} size="T200" priority="300">
-      Device Key:{' '}
-      <i>{keysState.status === AsyncStatus.Success ? keysState.data.ed25519 : 'loading...'}</i>
-    </Text>
-  );
-}
-
 type DeviceRenameProps = {
-  device: IMyDevice;
+  device: DeviceView;
   onCancel: () => void;
   onRename: () => void;
   refreshDeviceList: () => Promise<void>;
 };
 function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceRenameProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
-  const [renameState, rename] = useAsyncCallback<void, MatrixError, [string]>(
+  const [renameState, rename] = useAsyncCallback<void, CoreError, [string]>(
     useCallback(
       async (name: string) => {
-        await mx.setDeviceDetails(device.device_id, { display_name: name });
+        const result = await core.crypto.renameDevice(device.deviceId, name);
+        if (!result.ok) throw result.error;
         await refreshDeviceList();
       },
-      [mx, device.device_id, refreshDeviceList]
+      [core, device.deviceId, refreshDeviceList]
     )
   );
 
@@ -138,7 +116,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
     const nameInput = target?.nameInput as HTMLInputElement | undefined;
     if (!nameInput) return;
     const deviceName = nameInput.value.trim();
-    if (!deviceName || deviceName === device.display_name) return;
+    if (!deviceName || deviceName === device.displayName) return;
 
     rename(deviceName);
   };
@@ -153,7 +131,7 @@ function DeviceRename({ device, onCancel, onRename, refreshDeviceList }: DeviceR
             size="300"
             variant="Secondary"
             radii="300"
-            defaultValue={device.display_name}
+            defaultValue={device.displayName}
             autoFocus
             required
             readOnly={renaming}
@@ -260,7 +238,7 @@ export function DeviceDeleteBtn({
 }
 
 type DeviceTileProps = {
-  device: IMyDevice;
+  device: DeviceView;
   deleted?: boolean;
   refreshDeviceList: () => Promise<void>;
   disabled?: boolean;
@@ -275,7 +253,7 @@ export function DeviceTile({
   options,
   children,
 }: DeviceTileProps) {
-  const activeTs = device.last_seen_ts;
+  const activeTs = device.lastSeenTs;
   const [details, setDetails] = useState(false);
   const [edit, setEdit] = useState(false);
 
@@ -314,7 +292,7 @@ export function DeviceTile({
           )
         }
       >
-        <Text size="T300">{device.display_name ?? device.device_id}</Text>
+        <Text size="T300">{device.displayName ?? device.deviceId}</Text>
         <Box direction="Column">
           {typeof activeTs === 'number' && <DeviceActiveTime ts={activeTs} />}
           {details && (

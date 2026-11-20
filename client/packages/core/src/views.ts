@@ -149,6 +149,18 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type DeviceTrust = 'unknown' | 'unverified' | 'verified' | 'unsupported';
+
+export type DeviceView = {
+  readonly deviceId: string;
+  readonly displayName?: string;
+  readonly lastSeenIp?: string;
+  readonly lastSeenTs?: number;
+  readonly isCurrent: boolean;
+  readonly trust: DeviceTrust;
+  readonly ed25519?: string;
+};
+
 export type PresenceStatus = 'online' | 'offline' | 'unavailable';
 
 export type PresenceView = {
