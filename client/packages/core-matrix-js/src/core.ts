@@ -25,6 +25,8 @@ import {
   type SendStatus,
   type SendStatusView,
   type UploadView,
+  type VerificationPhaseView,
+  type VerificationRequestView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -55,7 +57,16 @@ import {
   type ICreateRoomStateEvent,
   type UploadResponse,
 } from 'matrix-js-sdk';
-import { CryptoEvent } from 'matrix-js-sdk/lib/crypto-api';
+import {
+  CryptoEvent,
+  VerificationPhase,
+  VerificationRequestEvent,
+  VerifierEvent,
+  type ShowSasCallbacks,
+  type VerificationRequest,
+  type Verifier,
+} from 'matrix-js-sdk/lib/crypto-api';
+import { VerificationMethod } from 'matrix-js-sdk/lib/types';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -1079,6 +1090,127 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     refreshTrustForUser(userId);
   });
 
+  const incomingVerificationStore = createSnapshotStore<VerificationRequestView | null>(null);
+  const verificationStores = new Map<
+    string,
+    WritableSnapshotStore<VerificationRequestView | null>
+  >();
+  const verificationRequests = new Map<string, VerificationRequest>();
+  const verificationIds = new WeakMap<VerificationRequest, string>();
+  const verificationSas = new Map<string, VerificationRequestView['sas']>();
+  const attachedSasCallbacks = new Map<string, ShowSasCallbacks>();
+  const attachedVerifiers = new WeakSet<Verifier>();
+  let verificationCounter = 0;
+
+  const verificationPhaseOf = (phase: VerificationPhase): VerificationPhaseView => {
+    switch (phase) {
+      case VerificationPhase.Unsent:
+        return 'unsent';
+      case VerificationPhase.Requested:
+        return 'requested';
+      case VerificationPhase.Ready:
+        return 'ready';
+      case VerificationPhase.Started:
+        return 'started';
+      case VerificationPhase.Cancelled:
+        return 'cancelled';
+      case VerificationPhase.Done:
+        return 'done';
+      default:
+        return 'unsent';
+    }
+  };
+
+  const buildVerificationView = (
+    id: string,
+    request: VerificationRequest
+  ): VerificationRequestView => ({
+    id,
+    otherUserId: request.otherUserId,
+    ...(request.otherDeviceId ? { otherDeviceId: request.otherDeviceId } : {}),
+    isSelf: request.isSelfVerification,
+    initiatedByMe: request.initiatedByMe,
+    hasVerifier: !!request.verifier,
+    phase: verificationPhaseOf(request.phase),
+    ...(verificationSas.get(id) ? { sas: verificationSas.get(id) } : {}),
+  });
+
+  const attachVerifier = (id: string, verifier: Verifier) => {
+    if (attachedVerifiers.has(verifier)) return;
+    attachedVerifiers.add(verifier);
+    verifier.on(VerifierEvent.ShowSas, (data: ShowSasCallbacks) => {
+      attachedSasCallbacks.set(id, data);
+      verificationSas.set(id, {
+        emoji: (data.sas.emoji ?? []).map(([emoji, name]) => ({ emoji, name })),
+      });
+      const request = verificationRequests.get(id);
+      if (request) verificationStores.get(id)?.publish(buildVerificationView(id, request));
+    });
+    verifier.on(VerifierEvent.Cancel, () => {
+      const request = verificationRequests.get(id);
+      if (request) {
+        verificationStores.get(id)?.publish({
+          ...buildVerificationView(id, request),
+          phase: 'cancelled',
+        });
+      }
+    });
+    verifier.verify().catch(() => undefined);
+  };
+
+  const registerVerification = (request: VerificationRequest): string => {
+    const existingId = verificationIds.get(request);
+    if (existingId) return existingId;
+    verificationCounter += 1;
+    const id = `harrier-verify-${verificationCounter}`;
+    verificationIds.set(request, id);
+    verificationRequests.set(id, request);
+    const store = createSnapshotStore<VerificationRequestView | null>(
+      buildVerificationView(id, request)
+    );
+    verificationStores.set(id, store);
+    const publish = () => {
+      const view = buildVerificationView(id, request);
+      store.publish(view);
+      if (view.phase === 'done' || view.phase === 'cancelled') {
+        incomingVerificationStore.publish(null);
+      }
+      if (request.verifier) attachVerifier(id, request.verifier);
+      if (view.phase === 'done' || view.phase === 'cancelled') {
+        refreshDevices().catch(() => undefined);
+      }
+    };
+    request.on(VerificationRequestEvent.Change, publish);
+    if (request.verifier) attachVerifier(id, request.verifier);
+    return id;
+  };
+
+  client.on(CryptoEvent.VerificationRequestReceived, (request: VerificationRequest) => {
+    const id = registerVerification(request);
+    incomingVerificationStore.publish(buildVerificationView(id, request));
+  });
+
+  const verificationById = (id: string) => {
+    const request = verificationRequests.get(id);
+    if (!request)
+      return { ok: false as const, error: toCoreError(new Error(`Unknown verification ${id}`)) };
+    return { ok: true as const, request };
+  };
+
+  const runVerificationCommand = async (
+    id: string,
+    action: (request: VerificationRequest) => Promise<void> | void
+  ): Promise<CoreResult<void>> => {
+    const found = verificationById(id);
+    if (!found.ok) return found;
+    try {
+      await action(found.request);
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: toCoreError(error) };
+    }
+  };
+
   const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
   const buildTyping = (roomId: string): readonly string[] =>
     client
@@ -1613,6 +1745,67 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     crypto: {
       devices: devicesStore,
       refreshDevices,
+      verification: {
+        incoming: incomingVerificationStore,
+        async request(deviceId) {
+          const crypto = client.getCrypto();
+          if (!crypto) {
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          }
+          try {
+            const request = await crypto.requestDeviceVerification(
+              client.getSafeUserId(),
+              deviceId
+            );
+            return {
+              ok: true,
+              value: buildVerificationView(registerVerification(request), request),
+            };
+          } catch (error) {
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        view(id) {
+          const existing = verificationStores.get(id);
+          if (existing) return existing;
+          const store = createSnapshotStore<VerificationRequestView | null>(null);
+          verificationStores.set(id, store);
+          return store;
+        },
+        accept(id) {
+          return runVerificationCommand(id, (request) => request.accept());
+        },
+        cancel(id) {
+          return runVerificationCommand(id, (request) => request.cancel());
+        },
+        startSas(id) {
+          return runVerificationCommand(id, async (request) => {
+            await request.startVerification(VerificationMethod.Sas);
+          });
+        },
+        confirmSas(id) {
+          const found = verificationById(id);
+          if (!found.ok) return Promise.resolve(found);
+          const sasCallbacks = attachedSasCallbacks.get(id);
+          if (!sasCallbacks) {
+            return Promise.resolve({
+              ok: false,
+              error: toCoreError(new Error('SAS is not available')),
+            });
+          }
+          return runVerificationCommand(id, () => sasCallbacks.confirm());
+        },
+        async mismatchSas(id) {
+          const found = verificationById(id);
+          if (!found.ok) return found;
+          const sasCallbacks = attachedSasCallbacks.get(id);
+          if (!sasCallbacks) {
+            return { ok: false, error: toCoreError(new Error('SAS is not available')) };
+          }
+          sasCallbacks.mismatch();
+          return { ok: true, value: undefined };
+        },
+      },
       trust(userId, deviceId) {
         const key = trustKey(userId, deviceId);
         const existing = trustStores.get(key);

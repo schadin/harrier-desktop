@@ -15,6 +15,7 @@ import type {
   PresenceStatus,
   DeviceTrust,
   DeviceView,
+  VerificationRequestView,
   SessionView,
   SyncView,
   TimelineView,
@@ -139,8 +140,20 @@ export type PresenceModule = {
   }): Promise<CoreResult<void>>;
 };
 
+export type VerificationModule = {
+  readonly incoming: SnapshotStore<VerificationRequestView | null>;
+  request(deviceId: string): Promise<CoreResult<VerificationRequestView>>;
+  view(id: string): SnapshotStore<VerificationRequestView | null>;
+  accept(id: string): Promise<CoreResult<void>>;
+  cancel(id: string): Promise<CoreResult<void>>;
+  startSas(id: string): Promise<CoreResult<void>>;
+  confirmSas(id: string): Promise<CoreResult<void>>;
+  mismatchSas(id: string): Promise<CoreResult<void>>;
+};
+
 export type CryptoModule = {
   readonly devices: SnapshotStore<readonly DeviceView[] | null>;
+  readonly verification: VerificationModule;
   refreshDevices(): Promise<CoreResult<void>>;
   trust(userId: string, deviceId: string): SnapshotStore<DeviceTrust>;
   unverifiedCount(userId: string, deviceIds: readonly string[]): SnapshotStore<number | undefined>;

@@ -19,13 +19,14 @@ import {
   MenuItem,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { CryptoApi, VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
+import type { CoreError, VerificationRequestView } from '@harrier/core';
 import { VerificationStatus } from '../../../hooks/useDeviceVerificationStatus';
 import { InfoCard } from '../../../components/info-card';
 import { ManualVerificationTile } from '../../../components/ManualVerification';
 import { SecretStorageKeyContent } from '../../../../types/matrix/accountData';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { useVerificationRequest } from '../../../hooks/useVerificationRequest';
 import { DeviceVerification } from '../../../components/DeviceVerification';
 import {
   DeviceVerificationReset,
@@ -163,20 +164,23 @@ export function VerifyCurrentDeviceTile({
 }
 
 type VerifyOtherDeviceTileProps = {
-  crypto: CryptoApi;
   deviceId: string;
 };
-export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTileProps) {
-  const mx = useMatrixClient();
-  const [requestState, setRequestState] = useState<AsyncState<VerificationRequest, Error>>({
+export function VerifyOtherDeviceTile({ deviceId }: VerifyOtherDeviceTileProps) {
+  const core = useCore();
+  const [requestState, setRequestState] = useState<AsyncState<VerificationRequestView, CoreError>>({
     status: AsyncStatus.Idle,
   });
+  const view = useVerificationRequest(
+    requestState.status === AsyncStatus.Success ? requestState.data.id : ''
+  );
 
-  const requestVerification = useAsync<VerificationRequest, Error, []>(
-    useCallback(() => {
-      const requestPromise = crypto.requestDeviceVerification(mx.getSafeUserId(), deviceId);
-      return requestPromise;
-    }, [mx, crypto, deviceId]),
+  const requestVerification = useAsync<VerificationRequestView, CoreError, []>(
+    useCallback(async () => {
+      const result = await core.crypto.verification.request(deviceId);
+      if (!result.ok) throw result.error;
+      return result.value;
+    }, [core, deviceId]),
     setRequestState
   );
 
@@ -210,8 +214,8 @@ export function VerifyOtherDeviceTile({ crypto, deviceId }: VerifyOtherDeviceTil
       {requestState.status === AsyncStatus.Error && (
         <Text size="T200">{requestState.error.message}</Text>
       )}
-      {requestState.status === AsyncStatus.Success && (
-        <DeviceVerification request={requestState.data} onExit={handleExit} />
+      {requestState.status === AsyncStatus.Success && view && (
+        <DeviceVerification view={view} onExit={handleExit} />
       )}
     </InfoCard>
   );

@@ -149,6 +149,30 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type VerificationPhaseView =
+  | 'unsent'
+  | 'requested'
+  | 'ready'
+  | 'started'
+  | 'cancelled'
+  | 'done';
+
+export type SasEmojiView = {
+  readonly emoji: string;
+  readonly name: string;
+};
+
+export type VerificationRequestView = {
+  readonly id: string;
+  readonly otherUserId: UserId;
+  readonly otherDeviceId?: string;
+  readonly isSelf: boolean;
+  readonly initiatedByMe: boolean;
+  readonly hasVerifier: boolean;
+  readonly phase: VerificationPhaseView;
+  readonly sas?: { readonly emoji: readonly SasEmojiView[] };
+};
+
 export type DeviceTrust = 'unknown' | 'unverified' | 'verified' | 'unsupported';
 
 export type DeviceView = {

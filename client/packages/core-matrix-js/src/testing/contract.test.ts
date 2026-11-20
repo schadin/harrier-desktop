@@ -5,6 +5,7 @@ import {
   receiptsTypingCases,
   uploadCases,
   cryptoCases,
+  verificationCases,
   roomsCases,
   sendCases,
   runCoreContractSuite,
@@ -40,6 +41,7 @@ runCoreContractSuite(matrixJsHarness, [
   ...receiptsTypingCases,
   ...uploadCases,
   ...cryptoCases,
+  ...verificationCases,
   ...notificationCases,
   ...authCases,
 ]);

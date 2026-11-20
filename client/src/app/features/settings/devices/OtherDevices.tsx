@@ -24,7 +24,6 @@ type OtherDevicesProps = {
 };
 export function OtherDevices({ devices, refreshDeviceList, showVerification }: OtherDevicesProps) {
   const mx = useMatrixClient();
-  const crypto = mx.getCrypto();
   const authMetadata = useAuthMetadata();
   const accountManagementActions = useAccountManagementActions();
 
@@ -166,11 +165,11 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                   )
                 }
               />
-              {showVerification && crypto && (
+              {showVerification && (
                 <DeviceVerificationStatus userId={mx.getSafeUserId()} deviceId={device.deviceId}>
                   {(status) =>
                     status === VerificationStatus.Unverified && (
-                      <VerifyOtherDeviceTile crypto={crypto} deviceId={device.deviceId} />
+                      <VerifyOtherDeviceTile deviceId={device.deviceId} />
                     )
                   }
                 </DeviceVerificationStatus>

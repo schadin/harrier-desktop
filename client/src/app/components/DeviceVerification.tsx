@@ -1,11 +1,5 @@
-import {
-  ShowSasCallbacks,
-  VerificationPhase,
-  VerificationRequest,
-  Verifier,
-} from 'matrix-js-sdk/lib/crypto-api';
-import React, { CSSProperties, useCallback, useEffect, useState } from 'react';
-import { VerificationMethod } from 'matrix-js-sdk/lib/types';
+import type { VerificationRequestView } from '@harrier/core';
+import React, { CSSProperties, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -22,12 +16,8 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import {
-  useVerificationRequestPhase,
-  useVerificationRequestReceived,
-  useVerifierCancel,
-  useVerifierShowSas,
-} from '../hooks/useVerificationRequest';
+import { useIncomingVerification, useVerificationRequest } from '../hooks/useVerificationRequest';
+import { useCore } from '../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { ContainerColor } from '../styles/ContainerColor.css';
 
@@ -105,7 +95,7 @@ type VerificationStartProps = {
   onStart: () => Promise<void>;
 };
 function AutoVerificationStart({ onStart }: VerificationStartProps) {
-  useEffect(() => {
+  React.useEffect(() => {
     onStart();
   }, [onStart]);
 
@@ -116,11 +106,34 @@ function AutoVerificationStart({ onStart }: VerificationStartProps) {
   );
 }
 
-function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
-  const [confirmState, confirm] = useAsyncCallback(useCallback(() => sasData.confirm(), [sasData]));
+type SasVerificationProps = {
+  view: VerificationRequestView;
+  onCancel: () => void;
+};
+function SasVerification({ view, onCancel }: SasVerificationProps) {
+  const core = useCore();
+  const { sas } = view;
 
+  const handleConfirm = useCallback(async () => {
+    const result = await core.crypto.verification.confirmSas(view.id);
+    if (!result.ok) throw result.error;
+  }, [core, view.id]);
+  const handleMismatch = useCallback(() => {
+    core.crypto.verification.mismatchSas(view.id).catch(() => undefined);
+    onCancel();
+  }, [core, view.id, onCancel]);
+
+  const [confirmState, confirm] = useAsyncCallback(handleConfirm);
   const confirming =
     confirmState.status === AsyncStatus.Loading || confirmState.status === AsyncStatus.Success;
+
+  if (!sas) {
+    return (
+      <Box direction="Column" gap="400">
+        <WaitingMessage message="Starting verification using emoji comparison..." />
+      </Box>
+    );
+  }
 
   return (
     <Box direction="Column" gap="400">
@@ -135,7 +148,7 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         wrap="Wrap"
         justifyContent="Center"
       >
-        {sasData.sas.emoji?.map(([emoji, name], index) => (
+        {sas.emoji.map(({ emoji, name }, index) => (
           <Box
             // eslint-disable-next-line react/no-array-index-key
             key={`${emoji}${name}${index}`}
@@ -159,40 +172,10 @@ function CompareEmoji({ sasData }: { sasData: ShowSasCallbacks }) {
         >
           <Text size="B400">They Match</Text>
         </Button>
-        <Button
-          variant="Primary"
-          fill="Soft"
-          onClick={() => sasData.mismatch()}
-          disabled={confirming}
-        >
+        <Button variant="Primary" fill="Soft" onClick={handleMismatch} disabled={confirming}>
           <Text size="B400">Do not Match</Text>
         </Button>
       </Box>
-    </Box>
-  );
-}
-
-type SasVerificationProps = {
-  verifier: Verifier;
-  onCancel: () => void;
-};
-function SasVerification({ verifier, onCancel }: SasVerificationProps) {
-  const [sasData, setSasData] = useState<ShowSasCallbacks>();
-
-  useVerifierShowSas(verifier, setSasData);
-  useVerifierCancel(verifier, onCancel);
-
-  useEffect(() => {
-    verifier.verify();
-  }, [verifier]);
-
-  if (sasData) {
-    return <CompareEmoji sasData={sasData} />;
-  }
-
-  return (
-    <Box direction="Column" gap="400">
-      <WaitingMessage message="Starting verification using emoji comparison..." />
     </Box>
   );
 }
@@ -228,23 +211,27 @@ function VerificationCanceled({ onClose }: VerificationCanceledProps) {
 }
 
 type DeviceVerificationProps = {
-  request: VerificationRequest;
+  view: VerificationRequestView;
   onExit: () => void;
 };
-export function DeviceVerification({ request, onExit }: DeviceVerificationProps) {
-  const phase = useVerificationRequestPhase(request);
+export function DeviceVerification({ view, onExit }: DeviceVerificationProps) {
+  const core = useCore();
 
   const handleCancel = useCallback(() => {
-    if (request.phase !== VerificationPhase.Done && request.phase !== VerificationPhase.Cancelled) {
-      request.cancel();
+    if (view.phase !== 'done' && view.phase !== 'cancelled') {
+      core.crypto.verification.cancel(view.id).catch(() => undefined);
     }
     onExit();
-  }, [request, onExit]);
+  }, [core, view.id, view.phase, onExit]);
 
-  const handleAccept = useCallback(() => request.accept(), [request]);
+  const handleAccept = useCallback(async () => {
+    const result = await core.crypto.verification.accept(view.id);
+    if (!result.ok) throw result.error;
+  }, [core, view.id]);
   const handleStart = useCallback(async () => {
-    await request.startVerification(VerificationMethod.Sas);
-  }, [request]);
+    const result = await core.crypto.verification.startSas(view.id);
+    if (!result.ok) throw result.error;
+  }, [core, view.id]);
 
   return (
     <Overlay open backdrop={<OverlayBackdrop />}>
@@ -266,31 +253,29 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
               </IconButton>
             </Header>
             <Box style={{ padding: config.space.S400 }} direction="Column" gap="400">
-              {phase === VerificationPhase.Requested &&
-                (request.initiatedByMe ? (
+              {view.phase === 'requested' &&
+                (view.initiatedByMe ? (
                   <VerificationWaitAccept />
                 ) : (
                   <VerificationAccept onAccept={handleAccept} />
                 ))}
-              {phase === VerificationPhase.Ready &&
-                (request.initiatedByMe ? (
+              {view.phase === 'ready' &&
+                (view.initiatedByMe ? (
                   <AutoVerificationStart onStart={handleStart} />
                 ) : (
                   <VerificationWaitStart />
                 ))}
-              {phase === VerificationPhase.Started &&
-                (request.verifier ? (
-                  <SasVerification verifier={request.verifier} onCancel={handleCancel} />
+              {view.phase === 'started' &&
+                (view.hasVerifier ? (
+                  <SasVerification view={view} onCancel={handleCancel} />
                 ) : (
                   <VerificationUnexpected
                     message="Unexpected Error! Verification is started but verifier is missing."
                     onClose={handleCancel}
                   />
                 ))}
-              {phase === VerificationPhase.Done && <VerificationDone onExit={onExit} />}
-              {phase === VerificationPhase.Cancelled && (
-                <VerificationCanceled onClose={handleCancel} />
-              )}
+              {view.phase === 'done' && <VerificationDone onExit={onExit} />}
+              {view.phase === 'cancelled' && <VerificationCanceled onClose={handleCancel} />}
             </Box>
           </Dialog>
         </FocusTrap>
@@ -300,19 +285,10 @@ export function DeviceVerification({ request, onExit }: DeviceVerificationProps)
 }
 
 export function ReceiveSelfDeviceVerification() {
-  const [request, setRequest] = useState<VerificationRequest>();
+  const incoming = useIncomingVerification();
+  const view = useVerificationRequest(incoming?.id ?? '');
 
-  useVerificationRequestReceived(setRequest);
+  if (!incoming || !incoming.isSelf || !view) return null;
 
-  const handleExit = useCallback(() => {
-    setRequest(undefined);
-  }, []);
-
-  if (!request) return null;
-
-  if (!request.isSelfVerification) {
-    return null;
-  }
-
-  return <DeviceVerification request={request} onExit={handleExit} />;
+  return <DeviceVerification view={view} onExit={() => undefined} />;
 }
