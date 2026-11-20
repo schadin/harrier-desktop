@@ -1,4 +1,5 @@
-import { IContent, MatrixClient, MsgType } from 'matrix-js-sdk';
+import { IContent, MsgType } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 import to from 'await-to-js';
 import {
   IThumbnailContent,
@@ -18,8 +19,35 @@ import { TUploadItem } from '../../state/room/roomInputDrafts';
 import { encodeBlurHash } from '../../utils/blurHash';
 import { scaleYDimension } from '../../utils/common';
 
+const uploadAndWait = async (
+  core: HarrierCore,
+  file: File | Blob,
+  filename: string
+): Promise<string> => {
+  const data = await file.arrayBuffer();
+  const result = core.uploads.start({
+    filename,
+    contentType: file.type,
+    data,
+  });
+  if (!result.ok) throw result.error;
+  const store = core.uploads.status(result.value);
+  return new Promise((resolve, reject) => {
+    let unsubscribe: (() => void) | undefined;
+    const apply = (): void => {
+      const view = store.getSnapshot().value;
+      if (!view || view.status === 'uploading') return;
+      unsubscribe?.();
+      if (view.status === 'done' && view.mxc) resolve(view.mxc);
+      else reject(new Error(view.error ?? 'Upload failed'));
+    };
+    unsubscribe = store.subscribe(apply);
+    apply();
+  });
+};
+
 const generateThumbnailContent = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   img: HTMLImageElement | HTMLVideoElement,
   dimensions: [number, number],
   encrypt: boolean
@@ -30,9 +58,7 @@ const generateThumbnailContent = async (
   const thumbnailFile = encThumbData?.file ?? thumbnail;
   if (!thumbnailFile) throw new Error('Can not create thumbnail!');
 
-  const data = await mx.uploadContent(thumbnailFile);
-  const thumbMxc = data?.content_uri;
-  if (!thumbMxc) throw new Error('Failed when uploading thumbnail!');
+  const thumbMxc = await uploadAndWait(core, thumbnailFile, 'thumbnail');
   const thumbnailContent = getThumbnailContent({
     thumbnail: thumbnailFile,
     encInfo: encThumbData?.encInfo,
@@ -44,7 +70,7 @@ const generateThumbnailContent = async (
 };
 
 export const getImageMsgContent = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   item: TUploadItem,
   mxc: string
 ): Promise<IContent> => {
@@ -78,7 +104,7 @@ export const getImageMsgContent = async (
 };
 
 export const getVideoMsgContent = async (
-  mx: MatrixClient,
+  core: HarrierCore,
   item: TUploadItem,
   mxc: string
 ): Promise<IContent> => {
@@ -96,7 +122,7 @@ export const getVideoMsgContent = async (
   if (videoEl) {
     const [thumbError, thumbContent] = await to(
       generateThumbnailContent(
-        mx,
+        core,
         videoEl,
         getThumbnailDimensions(videoEl.videoWidth, videoEl.videoHeight),
         !!encInfo

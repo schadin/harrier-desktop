@@ -22,6 +22,7 @@ import {
   type RoomView,
   type SendStatus,
   type SendStatusView,
+  type UploadView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -50,6 +51,7 @@ import {
   Method,
   ReceiptType,
   type ICreateRoomStateEvent,
+  type UploadResponse,
 } from 'matrix-js-sdk';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
@@ -871,6 +873,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const sendStores = new Map<string, WritableSnapshotStore<SendStatusView | null>>();
   const sendRooms = new Map<string, string>();
   const sendEvents = new Map<string, MatrixEvent>();
+  const uploadStores = new Map<string, WritableSnapshotStore<UploadView | null>>();
+  const uploadPromises = new Map<string, Promise<UploadResponse>>();
+  let uploadCounter = 0;
   let sendCounter = 0;
   const pendingEventOf = (localId: string): { room: Room; event: MatrixEvent } | undefined => {
     const roomId = sendRooms.get(localId);
@@ -1527,6 +1532,85 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore<SendStatusView | null>(null);
         sendStores.set(localId, store);
         publishSendStatus(localId);
+        return store;
+      },
+    },
+    uploads: {
+      start(input) {
+        uploadCounter += 1;
+        const localId = `harrier-upload-${uploadCounter}`;
+        const store = createSnapshotStore<UploadView | null>({
+          localId,
+          filename: input.filename,
+          status: 'uploading',
+          loaded: 0,
+          total: input.data.byteLength,
+        });
+        uploadStores.set(localId, store);
+        const publish = (view: UploadView | null) => store.publish(view);
+        const file = new Blob([input.data], {
+          type: input.contentType ?? 'application/octet-stream',
+        });
+        const promise = client.uploadContent(file, {
+          name: input.filename,
+          type: input.contentType ?? 'application/octet-stream',
+          progressHandler: (progress) => {
+            const current = store.getSnapshot().value;
+            if (current && current.status === 'uploading') {
+              publish({ ...current, loaded: progress.loaded, total: progress.total });
+            }
+          },
+        });
+        uploadPromises.set(localId, promise);
+        const forget = () => {
+          uploadPromises.delete(localId);
+        };
+        promise
+          .then((response) => {
+            forget();
+            const mxc = response.content_uri;
+            const current = store.getSnapshot().value;
+            if (current) {
+              publish({
+                ...current,
+                status: 'done',
+                loaded: current.total,
+                ...(mxc ? { mxc } : {}),
+              });
+            }
+          })
+          .catch((error: unknown) => {
+            forget();
+            const current = store.getSnapshot().value;
+            if (current && current.status === 'uploading') {
+              publish({
+                ...current,
+                status: 'failed',
+                error: error instanceof Error ? error.message : 'Upload failed',
+              });
+            }
+          });
+        return { ok: true, value: localId };
+      },
+      async cancel(localId) {
+        const promise = uploadPromises.get(localId);
+        if (!promise) {
+          return { ok: false, error: toCoreError(new Error(`Unknown upload ${localId}`)) };
+        }
+        try {
+          await client.cancelUpload(promise);
+          uploadPromises.delete(localId);
+          uploadStores.get(localId)?.publish(null);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      status(localId) {
+        const existing = uploadStores.get(localId);
+        if (existing) return existing;
+        const store = createSnapshotStore<UploadView | null>(null);
+        uploadStores.set(localId, store);
         return store;
       },
     },

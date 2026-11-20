@@ -17,6 +17,7 @@ import type {
   TimelineView,
   TimelineItem,
   SendStatusView,
+  UploadView,
   UnreadMapEntry,
   UserId,
 } from './views';
@@ -145,6 +146,12 @@ export type SendModule = {
   status(localId: string): SnapshotStore<SendStatusView | null>;
 };
 
+export type UploadModule = {
+  start(input: { filename: string; contentType?: string; data: ArrayBuffer }): CoreResult<string>;
+  cancel(localId: string): Promise<CoreResult<void>>;
+  status(localId: string): SnapshotStore<UploadView | null>;
+};
+
 export type HarrierCore = {
   readonly capabilities: CoreCapabilities;
   readonly auth: AuthModule;
@@ -152,4 +159,5 @@ export type HarrierCore = {
   readonly timeline: TimelineModule;
   readonly presence: PresenceModule;
   readonly send: SendModule;
+  readonly uploads: UploadModule;
 };

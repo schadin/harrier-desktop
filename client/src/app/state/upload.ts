@@ -1,9 +1,9 @@
 import { atom, useAtom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
-import { MatrixClient, UploadResponse, UploadProgress, MatrixError } from 'matrix-js-sdk';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type { HarrierCore, UploadView } from '@harrier/core';
 import { useThrottle } from '../hooks/useThrottle';
-import { uploadContent, TUploadContent } from '../utils/matrix';
+import { TUploadContent } from '../utils/matrix';
 
 export enum UploadStatus {
   Idle = 'idle',
@@ -20,8 +20,8 @@ export type UploadIdle = {
 export type UploadLoading = {
   file: TUploadContent;
   status: UploadStatus.Loading;
-  promise: Promise<UploadResponse>;
-  progress: UploadProgress;
+  localId: string;
+  progress: { loaded: number; total: number };
 };
 
 export type UploadSuccess = {
@@ -33,23 +33,23 @@ export type UploadSuccess = {
 export type UploadError = {
   file: TUploadContent;
   status: UploadStatus.Error;
-  error: MatrixError;
+  error: string;
 };
 
 export type Upload = UploadIdle | UploadLoading | UploadSuccess | UploadError;
 
 export type UploadAtomAction =
   | {
-      promise: Promise<UploadResponse>;
+      localId: string;
     }
   | {
-      progress: UploadProgress;
+      progress: { loaded: number; total: number };
     }
   | {
       mxc: string;
     }
   | {
-      error: MatrixError;
+      error: string;
     };
 
 export const createUploadAtom = (file: TUploadContent) => {
@@ -61,11 +61,11 @@ export const createUploadAtom = (file: TUploadContent) => {
     (get) => get(baseUploadAtom),
     (get, set, update) => {
       const uploadState = get(baseUploadAtom);
-      if ('promise' in update) {
+      if ('localId' in update) {
         set(baseUploadAtom, {
           status: UploadStatus.Loading,
           file,
-          promise: update.promise,
+          localId: update.localId,
           progress: { loaded: 0, total: file.size },
         });
         return;
@@ -98,35 +98,66 @@ export const createUploadAtom = (file: TUploadContent) => {
 export type TUploadAtom = ReturnType<typeof createUploadAtom>;
 
 export const useBindUploadAtom = (
-  mx: MatrixClient,
+  core: HarrierCore,
   uploadAtom: TUploadAtom,
   hideFilename?: boolean
 ) => {
   const [upload, setUpload] = useAtom(uploadAtom);
   const { file } = upload;
+  const localId = 'localId' in upload ? upload.localId : undefined;
+  const localIdRef = useRef<string | undefined>(undefined);
 
   const handleProgress = useThrottle(
-    useCallback((progress: UploadProgress) => setUpload({ progress }), [setUpload]),
+    useCallback(
+      (progress: { loaded: number; total: number }) => setUpload({ progress }),
+      [setUpload]
+    ),
     { immediate: true, wait: 200 }
   );
 
-  const startUpload = useCallback(
-    () =>
-      uploadContent(mx, file, {
-        hideFilename,
-        onPromise: (promise: Promise<UploadResponse>) => setUpload({ promise }),
-        onProgress: handleProgress,
-        onSuccess: (mxc) => setUpload({ mxc }),
-        onError: (error) => setUpload({ error }),
-      }),
-    [mx, file, hideFilename, setUpload, handleProgress]
-  );
+  useEffect(() => {
+    if (!localId) return undefined;
+    const store = core.uploads.status(localId);
+    const apply = (view: UploadView | null) => {
+      if (!view) return;
+      if (view.status === 'uploading') {
+        handleProgress({ loaded: view.loaded, total: view.total });
+      } else if (view.status === 'done' && view.mxc) {
+        setUpload({ mxc: view.mxc });
+      } else if (view.status === 'failed') {
+        setUpload({ error: view.error ?? 'Upload failed' });
+      }
+    };
+    apply(store.getSnapshot().value);
+    return store.subscribe(() => apply(store.getSnapshot().value));
+  }, [core, handleProgress, setUpload, localId]);
+
+  const startUpload = useCallback(async () => {
+    if (localIdRef.current) return;
+    const data = await file.arrayBuffer();
+    const result = core.uploads.start({
+      filename: hideFilename ? 'file' : file.name,
+      contentType: file.type,
+      data,
+    });
+    if (!result.ok) {
+      setUpload({ error: result.error.message });
+      return;
+    }
+    localIdRef.current = result.value;
+    setUpload({ localId: result.value });
+  }, [core, file, hideFilename, setUpload]);
 
   const cancelUpload = useCallback(async () => {
-    if (upload.status === UploadStatus.Loading) {
-      await mx.cancelUpload(upload.promise);
+    const id = localIdRef.current;
+    if (!id || upload.status !== UploadStatus.Loading) return;
+    const result = await core.uploads.cancel(id);
+    if (!result.ok) {
+      setUpload({ error: result.error.message });
+      return;
     }
-  }, [mx, upload]);
+    setUpload({ error: 'Upload cancelled' });
+  }, [core, upload.status, setUpload]);
 
   return {
     upload,

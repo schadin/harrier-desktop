@@ -227,6 +227,7 @@ export function createSyncDriver(): SyncDriver {
       return { room_id: decodeURIComponent(path.split('/join/')[1]?.split('/')[0] ?? '') };
     }
     if (path.endsWith('/leave')) return {};
+    if (path.includes('/upload')) return { content_uri: 'mxc://example.org/uploaded' };
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {

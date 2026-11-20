@@ -185,6 +185,18 @@ export type PublicRoomView = {
   readonly guestCanJoin: boolean;
 };
 
+export type UploadStatus = 'uploading' | 'done' | 'failed';
+
+export type UploadView = {
+  readonly localId: string;
+  readonly filename: string;
+  readonly status: UploadStatus;
+  readonly loaded: number;
+  readonly total: number;
+  readonly mxc?: string;
+  readonly error?: string;
+};
+
 export type SendStatusView = {
   readonly localId: string;
   readonly roomId: RoomId;

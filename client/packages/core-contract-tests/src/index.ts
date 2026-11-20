@@ -4,6 +4,7 @@ export * from './cases/rooms';
 export * from './cases/timeline';
 export * from './cases/send';
 export * from './cases/receipts-typing';
+export * from './cases/upload';
 export * from './cases/presence';
 export * from './cases/notifications';
 export * from './cases/auth';

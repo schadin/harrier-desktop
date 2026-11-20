@@ -3,6 +3,7 @@ import {
   notificationCases,
   presenceCases,
   receiptsTypingCases,
+  uploadCases,
   roomsCases,
   sendCases,
   runCoreContractSuite,
@@ -36,6 +37,7 @@ runCoreContractSuite(matrixJsHarness, [
   ...sendCases,
   ...presenceCases,
   ...receiptsTypingCases,
+  ...uploadCases,
   ...notificationCases,
   ...authCases,
 ]);

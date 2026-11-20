@@ -287,7 +287,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleCancelUpload = (uploads: Upload[]) => {
       uploads.forEach((upload) => {
         if (upload.status === UploadStatus.Loading) {
-          mx.cancelUpload(upload.promise);
+          core.uploads.cancel(upload.localId).catch(() => undefined);
         }
       });
       handleRemoveUpload(uploads.map((upload) => upload.file));
@@ -299,10 +299,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         if (!fileItem) throw new Error('Broken upload');
 
         if (fileItem.file.type.startsWith('image')) {
-          return getImageMsgContent(mx, fileItem, upload.mxc);
+          return getImageMsgContent(core, fileItem, upload.mxc);
         }
         if (fileItem.file.type.startsWith('video')) {
-          return getVideoMsgContent(mx, fileItem, upload.mxc);
+          return getVideoMsgContent(core, fileItem, upload.mxc);
         }
         if (fileItem.file.type.startsWith('audio')) {
           return getAudioMsgContent(fileItem, upload.mxc);
