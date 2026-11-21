@@ -14,6 +14,8 @@ import {
   type MessageAttachmentKind,
   type MessageAttachmentView,
   type NotificationMode,
+  type NotificationPreferencesView,
+  type RoomNotificationModeView,
   type PresenceView,
   type PublicRoomView,
   type PublicRoomsResult,
@@ -56,6 +58,8 @@ import {
   UserEvent,
   Method,
   ReceiptType,
+  ConditionKind,
+  PushRuleKind,
   type ICreateRoomStateEvent,
   type UploadResponse,
 } from 'matrix-js-sdk';
@@ -1218,6 +1222,49 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   };
 
+  const notificationPreferencesStore = createSnapshotStore<NotificationPreferencesView>({
+    mute: [],
+    specialMessages: [],
+    allMessages: [],
+  });
+  const modeFromActions = (actions: readonly unknown[]): RoomNotificationModeView => {
+    const hasNotify = actions.includes('notify');
+    if (!hasNotify) return 'mute';
+    const hasSound = actions.some(
+      (action) =>
+        typeof action === 'object' &&
+        action !== null &&
+        'set_tweak' in action &&
+        action.set_tweak === 'sound'
+    );
+    return hasSound ? 'all' : 'special';
+  };
+
+  const refreshNotificationPreferences = async (): Promise<CoreResult<void>> => {
+    const content = client
+      .getAccountData(EventType.PushRules)
+      ?.getContent<{ global?: { override?: PushRule[]; room?: PushRule[] } }>();
+    const isRoomId = (id: string) => /^!.*:.*$/.test(id);
+    const mute = (content?.global?.override ?? [])
+      .filter(
+        (rule) => isRoomId(rule.rule_id ?? '') && modeFromActions(rule.actions ?? []) === 'mute'
+      )
+      .map((rule) => rule.rule_id as string);
+    const room = content?.global?.room ?? [];
+    const specialMessages = room
+      .filter((rule) => modeFromActions(rule.actions ?? []) === 'special')
+      .map((rule) => rule.rule_id as string);
+    const allMessages = room
+      .filter((rule) => modeFromActions(rule.actions ?? []) === 'all')
+      .map((rule) => rule.rule_id as string);
+    notificationPreferencesStore.publish({ mute, specialMessages, allMessages });
+    return { ok: true, value: undefined };
+  };
+  refreshNotificationPreferences().catch(() => undefined);
+  client.on(ClientEvent.AccountData, () => {
+    refreshNotificationPreferences().catch(() => undefined);
+  });
+
   const keyRequestSentAt = new Map<string, number>();
   const backupKeyCachedListeners = new Set<() => void>();
   const backupStatusStore = createSnapshotStore<BackupStatusView>({
@@ -1822,6 +1869,35 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             user.emit(UserEvent.Presence, undefined, user);
           }
           return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+    },
+    notifications: {
+      preferences: notificationPreferencesStore,
+      refreshPreferences: refreshNotificationPreferences,
+      async setRoomMode(roomId, mode, previousMode) {
+        try {
+          if (previousMode === 'all' || previousMode === 'special') {
+            await client.deletePushRule('global', PushRuleKind.RoomSpecific, roomId);
+          }
+          if (previousMode === 'mute') {
+            await client.deletePushRule('global', PushRuleKind.Override, roomId);
+          }
+          if (mode === 'unset') return await refreshNotificationPreferences();
+          if (mode === 'mute') {
+            await client.addPushRule('global', PushRuleKind.Override, roomId, {
+              conditions: [{ kind: ConditionKind.EventMatch, key: 'room_id', pattern: roomId }],
+              actions: [],
+            });
+            return await refreshNotificationPreferences();
+          }
+          await client.addPushRule('global', PushRuleKind.RoomSpecific, roomId, {
+            actions:
+              mode === 'all' ? ['notify', { set_tweak: 'sound', value: 'default' }] : ['notify'],
+          } as never);
+          return await refreshNotificationPreferences();
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

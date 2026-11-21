@@ -253,6 +253,7 @@ export function createSyncDriver(): SyncDriver {
     if (path.includes('/upload')) return { content_uri: 'mxc://example.org/uploaded' };
     if (path.includes('/presence/')) return {};
     if (path.includes('/devices/') || path.endsWith('/delete_devices')) return {};
+    if (path.includes('/pushrules/')) return {};
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {

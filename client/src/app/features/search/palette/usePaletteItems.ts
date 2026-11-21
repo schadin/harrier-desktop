@@ -219,7 +219,6 @@ export type PaletteActionHandlers = {
 };
 
 const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): PaletteItem[] => {
-  const mx = useMatrixClient();
   const core = useCore();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -228,7 +227,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
   const [customPresets] = useSetting(settingsAtom, 'statusPresets');
   const [statusNoticeRoomId] = useSetting(settingsAtom, 'statusNoticeRoomId');
   const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
-  const currentStatus = useCustomStatus(mx.getSafeUserId());
+  const currentStatus = useCustomStatus(core.auth.session.getSnapshot().value?.userId ?? '');
   const roomToUnread = useAtomValue(roomToUnreadAtom);
   const selectedRoomId = useSelectedRoom();
   const notificationPreferences = useRoomsNotificationPreferences();
@@ -273,7 +272,7 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
           : t('CommandPalette.actions.muteRoom', 'Mute this room'),
         keywords: ['mute', 'unmute', 'notifications', 'уведомления'],
         icon: muted ? Icons.BellRing : Icons.BellMute,
-        run: () => setRoomNotificationPreference(mx, selectedRoomId, nextMode, previousMode),
+        run: () => setRoomNotificationPreference(core, selectedRoomId, nextMode, previousMode),
       });
     }
 
@@ -339,7 +338,6 @@ const useActionItems = ({ onLogout, onShowUnread }: PaletteActionHandlers): Pale
 
     return items;
   }, [
-    mx,
     core,
     t,
     navigate,

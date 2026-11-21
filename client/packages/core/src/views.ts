@@ -149,6 +149,14 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type RoomNotificationModeView = 'unset' | 'mute' | 'special' | 'all';
+
+export type NotificationPreferencesView = {
+  readonly mute: readonly string[];
+  readonly specialMessages: readonly string[];
+  readonly allMessages: readonly string[];
+};
+
 export type BackupTrustView = {
   readonly trusted: boolean;
   readonly matchesDecryptionKey: boolean;

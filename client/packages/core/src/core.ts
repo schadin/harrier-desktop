@@ -18,6 +18,8 @@ import type {
   VerificationRequestView,
   BackupStatusView,
   BackupProgressView,
+  NotificationPreferencesView,
+  RoomNotificationModeView,
   SessionView,
   SyncView,
   TimelineView,
@@ -169,6 +171,16 @@ export type BackupModule = {
   retryDecryption(): Promise<CoreResult<void>>;
 };
 
+export type NotificationsModule = {
+  readonly preferences: SnapshotStore<NotificationPreferencesView>;
+  setRoomMode(
+    roomId: RoomId,
+    mode: RoomNotificationModeView,
+    previousMode: RoomNotificationModeView
+  ): Promise<CoreResult<void>>;
+  refreshPreferences(): Promise<CoreResult<void>>;
+};
+
 export type CryptoModule = {
   readonly devices: SnapshotStore<readonly DeviceView[] | null>;
   readonly verification: VerificationModule;
@@ -209,6 +221,7 @@ export type HarrierCore = {
   readonly timeline: TimelineModule;
   readonly presence: PresenceModule;
   readonly crypto: CryptoModule;
+  readonly notifications: NotificationsModule;
   readonly send: SendModule;
   readonly uploads: UploadModule;
 };

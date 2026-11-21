@@ -2,6 +2,26 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const notificationCases = [
+  contractTest(
+    'notification preferences and room mode are available through core',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        expect(core.notifications.preferences.getSnapshot().value).toEqual({
+          mute: [],
+          specialMessages: [],
+          allMessages: [],
+        });
+        const result = await core.notifications.setRoomMode('!room:example.org', 'mute', 'unset');
+        expect(result.ok).toBe(true);
+        const refreshed = await core.notifications.refreshPreferences();
+        expect(refreshed.ok).toBe(true);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('unread counts are exposed on room summaries', async (harness) => {
     const core = await harness.create();
     try {
