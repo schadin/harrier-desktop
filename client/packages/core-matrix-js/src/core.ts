@@ -1218,6 +1218,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   };
 
+  const keyRequestSentAt = new Map<string, number>();
   const backupKeyCachedListeners = new Set<() => void>();
   const backupStatusStore = createSnapshotStore<BackupStatusView>({
     enabled: false,
@@ -1911,6 +1912,76 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           } catch (error) {
             return { ok: false, error: toCoreError(error) };
           }
+        },
+        async requestKey(roomId, eventId) {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          const room = client.getRoom(roomId);
+          const event = room?.findEventById(eventId);
+          if (!event) {
+            return { ok: false, error: toCoreError(new Error(`Unknown event ${eventId}`)) };
+          }
+          const lastSentAt = keyRequestSentAt.get(eventId);
+          if (lastSentAt && Date.now() - lastSentAt < 60_000) {
+            return { ok: true, value: undefined };
+          }
+          const wire = event.getWireContent() as {
+            algorithm?: string;
+            room_id?: string;
+            sender_key?: string;
+            session_id?: string;
+          };
+          const senderId = event.getSender();
+          if (!senderId || !wire.algorithm || !wire.sender_key || !wire.session_id) {
+            return { ok: false, error: toCoreError(new Error('Event has no key metadata')) };
+          }
+          const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+          const body = {
+            algorithm: wire.algorithm,
+            room_id: wire.room_id ?? roomId,
+            sender_key: wire.sender_key,
+            session_id: wire.session_id,
+          };
+          const contentMap: Record<string, Record<string, Record<string, unknown>>> = {};
+          event.getKeyRequestRecipients(senderId).forEach((recipient) => {
+            const deviceMap = contentMap[recipient.userId] ?? {};
+            deviceMap[recipient.deviceId] = { action: 'request', request_id: requestId, body };
+            contentMap[recipient.userId] = deviceMap;
+          });
+          try {
+            await client.sendToDevice(EventType.RoomKeyRequest, contentMap as never);
+            keyRequestSentAt.set(eventId, Date.now());
+            return { ok: true, value: undefined };
+          } catch (error) {
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        async retryDecryption() {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          const retryable = new Set([
+            'MEGOLM_UNKNOWN_INBOUND_SESSION_ID',
+            'HISTORICAL_MESSAGE_WORKING_BACKUP',
+          ]);
+          const events = client.getRooms().flatMap((room) =>
+            room
+              .getLiveTimeline()
+              .getEvents()
+              .filter(
+                (event) =>
+                  event.isDecryptionFailure() &&
+                  retryable.has(String(event.decryptionFailureReason ?? ''))
+              )
+          );
+          const results = await Promise.allSettled(
+            events.map((event) => event.attemptDecryption(crypto as never, { isRetry: true }))
+          );
+          const failed = results.some((result) => result.status === 'rejected');
+          if (failed)
+            return { ok: false, error: toCoreError(new Error('Decryption retry failed')) };
+          return { ok: true, value: undefined };
         },
         async unlockSecretStorage() {
           const crypto = client.getCrypto();

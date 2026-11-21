@@ -1,4 +1,15 @@
-import { DecryptionFailureCode } from 'matrix-js-sdk/lib/crypto-api';
+export type DecryptionFailureCodeView =
+  | 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID'
+  | 'MEGOLM_KEY_WITHHELD'
+  | 'MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE'
+  | 'OLM_UNKNOWN_MESSAGE_INDEX'
+  | 'HISTORICAL_MESSAGE_NO_KEY_BACKUP'
+  | 'HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED'
+  | 'HISTORICAL_MESSAGE_WORKING_BACKUP'
+  | 'HISTORICAL_MESSAGE_USER_NOT_JOINED'
+  | 'SENDER_IDENTITY_PREVIOUSLY_VERIFIED'
+  | 'UNSIGNED_SENDER_DEVICE'
+  | 'UNKNOWN_SENDER_DEVICE';
 
 export type DecryptionFailureActionId = 'requestKey' | 'verifyDevice' | 'restoreBackup';
 
@@ -12,29 +23,29 @@ const REASON_KEY_PREFIX = 'DecryptionFailure.Reason';
 const key = (name: string) => `${REASON_KEY_PREFIX}.${name}`;
 
 export const getDecryptionFailureReason = (
-  code: DecryptionFailureCode | null | undefined
+  code: DecryptionFailureCodeView | string | null | undefined
 ): DecryptionFailureReasonContent => {
   switch (code) {
-    case DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID:
+    case 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID':
       return { titleKey: key('KeyNotReceived'), action: 'requestKey' };
-    case DecryptionFailureCode.MEGOLM_KEY_WITHHELD:
+    case 'MEGOLM_KEY_WITHHELD':
       return { titleKey: key('KeyWithheld') };
-    case DecryptionFailureCode.MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE:
+    case 'MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE':
       return { titleKey: key('KeyWithheldUnverifiedDevice'), action: 'verifyDevice' };
-    case DecryptionFailureCode.OLM_UNKNOWN_MESSAGE_INDEX:
+    case 'OLM_UNKNOWN_MESSAGE_INDEX':
       return { titleKey: key('UnknownMessageIndex') };
-    case DecryptionFailureCode.HISTORICAL_MESSAGE_NO_KEY_BACKUP:
-    case DecryptionFailureCode.HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED:
+    case 'HISTORICAL_MESSAGE_NO_KEY_BACKUP':
+    case 'HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED':
       return { titleKey: key('HistoricalNoBackup'), action: 'restoreBackup' };
-    case DecryptionFailureCode.HISTORICAL_MESSAGE_WORKING_BACKUP:
+    case 'HISTORICAL_MESSAGE_WORKING_BACKUP':
       return { titleKey: key('HistoricalWorkingBackup') };
-    case DecryptionFailureCode.HISTORICAL_MESSAGE_USER_NOT_JOINED:
+    case 'HISTORICAL_MESSAGE_USER_NOT_JOINED':
       return { titleKey: key('HistoricalNotJoined') };
-    case DecryptionFailureCode.SENDER_IDENTITY_PREVIOUSLY_VERIFIED:
+    case 'SENDER_IDENTITY_PREVIOUSLY_VERIFIED':
       return { titleKey: key('SenderIdentityPreviouslyVerified') };
-    case DecryptionFailureCode.UNSIGNED_SENDER_DEVICE:
+    case 'UNSIGNED_SENDER_DEVICE':
       return { titleKey: key('UnsignedSenderDevice') };
-    case DecryptionFailureCode.UNKNOWN_SENDER_DEVICE:
+    case 'UNKNOWN_SENDER_DEVICE':
       return { titleKey: key('UnknownSenderDevice') };
     default:
       return { titleKey: key('Unknown') };
@@ -55,7 +66,6 @@ export const getDecryptionFailureActionLabelKey = (action: DecryptionFailureActi
 };
 
 export const isRetryableDecryptionFailureReason = (
-  code: DecryptionFailureCode | null | undefined
+  code: DecryptionFailureCodeView | string | null | undefined
 ): boolean =>
-  code === DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID ||
-  code === DecryptionFailureCode.HISTORICAL_MESSAGE_WORKING_BACKUP;
+  code === 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID' || code === 'HISTORICAL_MESSAGE_WORKING_BACKUP';

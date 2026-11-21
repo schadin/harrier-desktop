@@ -1068,7 +1068,9 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
                       linkifyOpts={linkifyOpts}
                       outlineAttachment={messageLayout === MessageLayout.Bubble}
                       decryptionFailureReason={mEvent.decryptionFailureReason}
-                      onRequestKey={() => requestRoomKey(mx, mEvent)}
+                      onRequestKey={() =>
+                        requestRoomKey(core, room.roomId, timelineItem.eventId ?? '')
+                      }
                       onVerifyDevice={() => openSettingsPage(SettingsPages.DevicesPage)}
                       onRestoreBackup={() => openSettingsPage(SettingsPages.DevicesPage)}
                     />

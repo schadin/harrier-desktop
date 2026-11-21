@@ -1,9 +1,9 @@
 import React from 'react';
 import { MsgType } from 'matrix-js-sdk';
-import { DecryptionFailureCode } from 'matrix-js-sdk/lib/crypto-api';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts } from 'linkifyjs';
 import { config } from 'folds';
+import type { DecryptionFailureCodeView } from '../utils/decryptionFailure';
 import {
   AudioContent,
   DownloadFile,
@@ -45,7 +45,7 @@ type RenderMessageContentProps = {
   htmlReactParserOptions: HTMLReactParserOptions;
   linkifyOpts: Opts;
   outlineAttachment?: boolean;
-  decryptionFailureReason?: DecryptionFailureCode | null;
+  decryptionFailureReason?: DecryptionFailureCodeView | string | null;
   onRequestKey?: () => void;
   onVerifyDevice?: () => void;
   onRestoreBackup?: () => void;

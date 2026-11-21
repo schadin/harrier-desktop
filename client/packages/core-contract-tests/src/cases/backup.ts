@@ -20,6 +20,10 @@ export const backupCases = [
       expect(decoded.ok).toBe(false);
       const unlocked = await core.crypto.backup.unlockSecretStorage();
       expect(unlocked.ok).toBe(false);
+      const keyRequest = await core.crypto.backup.requestKey('!room:example.org', '$unknown');
+      expect(keyRequest.ok).toBe(false);
+      const retried = await core.crypto.backup.retryDecryption();
+      expect(retried.ok).toBe(false);
     } finally {
       await harness.dispose(core);
     }

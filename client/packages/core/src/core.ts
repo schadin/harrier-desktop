@@ -165,6 +165,8 @@ export type BackupModule = {
     input: { recoveryKey?: string; passphrase?: string }
   ): Promise<CoreResult<void>>;
   unlockSecretStorage(): Promise<CoreResult<void>>;
+  requestKey(roomId: RoomId, eventId: EventId): Promise<CoreResult<void>>;
+  retryDecryption(): Promise<CoreResult<void>>;
 };
 
 export type CryptoModule = {

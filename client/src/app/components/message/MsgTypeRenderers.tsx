@@ -1,7 +1,7 @@
 import React, { CSSProperties, ReactNode, useState } from 'react';
 import { Box, Chip, Icon, Icons, Text, toRem } from 'folds';
 import { IContent } from 'matrix-js-sdk';
-import { DecryptionFailureCode } from 'matrix-js-sdk/lib/crypto-api';
+import type { DecryptionFailureCodeView } from '../../utils/decryptionFailure';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
 import { trimReplyFromBody } from '../../utils/room';
 import {
@@ -41,7 +41,7 @@ export function MBadEncrypted({
   onVerifyDevice,
   onRestoreBackup,
 }: {
-  decryptionFailureReason?: DecryptionFailureCode | null;
+  decryptionFailureReason?: DecryptionFailureCodeView | string | null;
   onRequestKey?: () => void;
   onVerifyDevice?: () => void;
   onRestoreBackup?: () => void;

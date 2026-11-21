@@ -339,7 +339,7 @@ function RoomNotificationsGroupComp({
                     htmlReactParserOptions={htmlReactParserOptions}
                     linkifyOpts={linkifyOpts}
                     decryptionFailureReason={mEvent.decryptionFailureReason}
-                    onRequestKey={() => requestRoomKey(mx, mEvent)}
+                    onRequestKey={() => requestRoomKey(core, room.roomId, evt.event_id)}
                   />
                 );
               }
