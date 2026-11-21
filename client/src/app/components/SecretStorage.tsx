@@ -1,53 +1,30 @@
 import React, { FormEventHandler, useCallback } from 'react';
 import { Box, Text, Button, Spinner, color } from 'folds';
-import { decodeRecoveryKey, deriveRecoveryKeyFromPassphrase } from 'matrix-js-sdk/lib/crypto-api';
 import { PasswordInput } from './password-input';
-import {
-  SecretStorageKeyContent,
-  SecretStoragePassphraseContent,
-} from '../../types/matrix/accountData';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
-import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useCore } from '../hooks/useCore';
 import { useAlive } from '../hooks/useAlive';
 
 type SecretStorageRecoveryPassphraseProps = {
   processing?: boolean;
-  keyContent: SecretStorageKeyContent;
-  passphraseContent: SecretStoragePassphraseContent;
-  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void;
+  keyId: string;
+  onDecoded: () => void;
 };
 export function SecretStorageRecoveryPassphrase({
   processing,
-  keyContent,
-  passphraseContent,
-  onDecodedRecoveryKey,
+  keyId,
+  onDecoded,
 }: SecretStorageRecoveryPassphraseProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
-  const [driveKeyState, submitPassphrase] = useAsyncCallback<
-    Uint8Array,
-    Error,
-    Parameters<typeof deriveRecoveryKeyFromPassphrase>
-  >(
+  const [driveKeyState, submitPassphrase] = useAsyncCallback<void, Error, [string]>(
     useCallback(
-      async (passphrase, salt, iterations, bits) => {
-        const decodedRecoveryKey = await deriveRecoveryKeyFromPassphrase(
-          passphrase,
-          salt,
-          iterations,
-          bits
-        );
-
-        const match = await mx.secretStorage.checkKey(decodedRecoveryKey, keyContent as any);
-
-        if (!match) {
-          throw new Error('Invalid recovery passphrase.');
-        }
-
-        return decodedRecoveryKey;
+      async (passphrase) => {
+        const result = await core.crypto.backup.decodeRecoveryKey(keyId, { passphrase });
+        if (!result.ok) throw result.error;
       },
-      [mx, keyContent]
+      [core, keyId]
     )
   );
 
@@ -64,11 +41,10 @@ export function SecretStorageRecoveryPassphrase({
     const recoveryPassphrase = recoveryPassphraseInput.value.trim();
     if (!recoveryPassphrase) return;
 
-    const { salt, iterations, bits } = passphraseContent;
-    submitPassphrase(recoveryPassphrase, salt, iterations, bits).then((decodedRecoveryKey) => {
+    submitPassphrase(recoveryPassphrase).then(() => {
       if (alive()) {
         recoveryPassphraseInput.value = '';
-        onDecodedRecoveryKey(decodedRecoveryKey);
+        onDecoded();
       }
     });
   };
@@ -115,31 +91,24 @@ export function SecretStorageRecoveryPassphrase({
 
 type SecretStorageRecoveryKeyProps = {
   processing?: boolean;
-  keyContent: SecretStorageKeyContent;
-  onDecodedRecoveryKey: (recoveryKey: Uint8Array) => void;
+  keyId: string;
+  onDecoded: () => void;
 };
 export function SecretStorageRecoveryKey({
   processing,
-  keyContent,
-  onDecodedRecoveryKey,
+  keyId,
+  onDecoded,
 }: SecretStorageRecoveryKeyProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
-  const [driveKeyState, submitRecoveryKey] = useAsyncCallback<Uint8Array, Error, [string]>(
+  const [driveKeyState, submitRecoveryKey] = useAsyncCallback<void, Error, [string]>(
     useCallback(
       async (recoveryKey) => {
-        const decodedRecoveryKey = decodeRecoveryKey(recoveryKey);
-
-        const match = await mx.secretStorage.checkKey(decodedRecoveryKey, keyContent as any);
-
-        if (!match) {
-          throw new Error('Invalid recovery key.');
-        }
-
-        return decodedRecoveryKey;
+        const result = await core.crypto.backup.decodeRecoveryKey(keyId, { recoveryKey });
+        if (!result.ok) throw result.error;
       },
-      [mx, keyContent]
+      [core, keyId]
     )
   );
 
@@ -155,10 +124,10 @@ export function SecretStorageRecoveryKey({
     const recoveryKey = recoveryKeyInput.value.trim();
     if (!recoveryKey) return;
 
-    submitRecoveryKey(recoveryKey).then((decodedRecoveryKey) => {
+    submitRecoveryKey(recoveryKey).then(() => {
       if (alive()) {
         recoveryKeyInput.value = '';
-        onDecodedRecoveryKey(decodedRecoveryKey);
+        onDecoded();
       }
     });
   };

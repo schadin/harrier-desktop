@@ -160,6 +160,11 @@ export type BackupModule = {
   restore(): Promise<CoreResult<void>>;
   prepareAndRestore(): Promise<CoreResult<void>>;
   onDecryptionKeyCached(listener: () => void): () => void;
+  decodeRecoveryKey(
+    keyId: string,
+    input: { recoveryKey?: string; passphrase?: string }
+  ): Promise<CoreResult<void>>;
+  unlockSecretStorage(): Promise<CoreResult<void>>;
 };
 
 export type CryptoModule = {

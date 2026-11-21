@@ -14,6 +14,12 @@ export const backupCases = [
       expect(refreshed.ok).toBe(true);
       const restored = await core.crypto.backup.restore();
       expect(restored.ok).toBe(false);
+      const decoded = await core.crypto.backup.decodeRecoveryKey('missing', {
+        recoveryKey: 'not a key',
+      });
+      expect(decoded.ok).toBe(false);
+      const unlocked = await core.crypto.backup.unlockSecretStorage();
+      expect(unlocked.ok).toBe(false);
     } finally {
       await harness.dispose(core);
     }

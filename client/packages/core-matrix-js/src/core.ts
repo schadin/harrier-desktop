@@ -66,11 +66,14 @@ import {
   VerifierEvent,
   ImportRoomKeyStage,
   type ImportRoomKeyProgressData,
+  decodeRecoveryKey,
+  deriveRecoveryKeyFromPassphrase,
   type ShowSasCallbacks,
   type VerificationRequest,
   type Verifier,
 } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
+import { storeSecretStorageKey } from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -1863,6 +1866,63 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             return { ok: true, value: undefined };
           } catch (error) {
             backupProgressStore.publish({ status: 'idle' });
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        async decodeRecoveryKey(keyId, input) {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          try {
+            const info = client
+              .getAccountData(`m.secret_storage.key.${keyId}`)
+              ?.getContent<Record<string, unknown>>();
+            if (!info) {
+              return { ok: false, error: toCoreError(new Error('Unknown secret storage key')) };
+            }
+            let decoded: Uint8Array;
+            if (input.recoveryKey !== undefined) {
+              decoded = decodeRecoveryKey(input.recoveryKey);
+            } else if (input.passphrase !== undefined) {
+              const passphrase = info.passphrase as
+                | { salt?: string; iterations?: number; bits?: number }
+                | undefined;
+              if (!passphrase?.salt || !passphrase.iterations) {
+                return {
+                  ok: false,
+                  error: toCoreError(new Error('Secret storage key has no passphrase')),
+                };
+              }
+              decoded = await deriveRecoveryKeyFromPassphrase(
+                input.passphrase,
+                passphrase.salt,
+                passphrase.iterations,
+                passphrase.bits
+              );
+            } else {
+              return { ok: false, error: toCoreError(new Error('No recovery input provided')) };
+            }
+            const matches = await client.secretStorage.checkKey(decoded, info as never);
+            if (!matches) {
+              return { ok: false, error: toCoreError(new Error('Invalid recovery key.')) };
+            }
+            storeSecretStorageKey(keyId, decoded);
+            return { ok: true, value: undefined };
+          } catch (error) {
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        async unlockSecretStorage() {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          try {
+            await crypto.bootstrapCrossSigning({});
+            await crypto.bootstrapSecretStorage({});
+            await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+            await refreshBackupStatus();
+            return { ok: true, value: undefined };
+          } catch (error) {
             return { ok: false, error: toCoreError(error) };
           }
         },

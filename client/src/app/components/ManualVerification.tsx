@@ -17,9 +17,8 @@ import { stopPropagation } from '../utils/keyboard';
 import { SettingTile } from './setting-tile';
 import { SecretStorageKeyContent } from '../../types/matrix/accountData';
 import { SecretStorageRecoveryKey, SecretStorageRecoveryPassphrase } from './SecretStorage';
-import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useCore } from '../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
-import { storePrivateKey } from '../../client/secretStorageKeys';
 
 export enum ManualVerificationMethod {
   RecoveryPassphrase = 'passphrase',
@@ -120,7 +119,7 @@ export function ManualVerificationTile({
   secretStorageKeyContent,
   options,
 }: ManualVerificationTileProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const hasPassphrase = !!secretStorageKeyContent.passphrase;
   const [method, setMethod] = useState(
@@ -129,25 +128,13 @@ export function ManualVerificationTile({
       : ManualVerificationMethod.RecoveryKey
   );
 
-  const verifyAndRestoreBackup = useCallback(
-    async (recoveryKey: Uint8Array) => {
-      const crypto = mx.getCrypto();
-      if (!crypto) {
-        throw new Error('Unexpected Error! Crypto object not found.');
-      }
+  const unlockSecretStorage = useCallback(async () => {
+    const result = await core.crypto.backup.unlockSecretStorage();
+    if (!result.ok) throw result.error;
+  }, [core]);
 
-      storePrivateKey(secretStorageKeyId, recoveryKey);
-
-      await crypto.bootstrapCrossSigning({});
-      await crypto.bootstrapSecretStorage({});
-
-      await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
-    },
-    [mx, secretStorageKeyId]
-  );
-
-  const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<void, Error, [Uint8Array]>(
-    verifyAndRestoreBackup
+  const [verifyState, handleDecodedRecoveryKey] = useAsyncCallback<void, Error, []>(
+    unlockSecretStorage
   );
   const verifying = verifyState.status === AsyncStatus.Loading;
 
@@ -174,17 +161,16 @@ export function ManualVerificationTile({
           {method === ManualVerificationMethod.RecoveryKey && (
             <SecretStorageRecoveryKey
               processing={verifying}
-              keyContent={secretStorageKeyContent}
-              onDecodedRecoveryKey={handleDecodedRecoveryKey}
+              keyId={secretStorageKeyId}
+              onDecoded={handleDecodedRecoveryKey}
             />
           )}
           {method === ManualVerificationMethod.RecoveryPassphrase &&
             secretStorageKeyContent.passphrase && (
               <SecretStorageRecoveryPassphrase
                 processing={verifying}
-                keyContent={secretStorageKeyContent}
-                passphraseContent={secretStorageKeyContent.passphrase}
-                onDecodedRecoveryKey={handleDecodedRecoveryKey}
+                keyId={secretStorageKeyId}
+                onDecoded={handleDecodedRecoveryKey}
               />
             )}
           {verifyState.status === AsyncStatus.Error && (
