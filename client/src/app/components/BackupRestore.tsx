@@ -1,6 +1,4 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
-import { useAtom } from 'jotai';
-import { CryptoApi, KeyBackupInfo } from 'matrix-js-sdk/lib/crypto-api';
 import {
   Badge,
   Box,
@@ -19,7 +17,7 @@ import {
   Text,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { BackupProgressStatus, backupRestoreProgressAtom } from '../state/backupRestore';
+import { useBackupProgress } from '../state/backupRestore';
 import { InfoCard } from './info-card';
 import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import {
@@ -30,6 +28,7 @@ import {
 } from '../hooks/useKeyBackup';
 import { stopPropagation } from '../utils/keyboard';
 import { useRestoreBackupOnVerification } from '../hooks/useRestoreBackupOnVerification';
+import { useCore } from '../hooks/useCore';
 
 type BackupStatusProps = {
   enabled: boolean;
@@ -98,12 +97,8 @@ function BackupProgress({ total, downloaded }: BackupProgressProps) {
   );
 }
 
-type BackupTrustInfoProps = {
-  crypto: CryptoApi;
-  backupInfo: KeyBackupInfo;
-};
-function BackupTrustInfo({ crypto, backupInfo }: BackupTrustInfoProps) {
-  const trust = useKeyBackupTrust(crypto, backupInfo);
+function BackupTrustInfo() {
+  const trust = useKeyBackupTrust();
 
   if (!trust) return null;
 
@@ -131,17 +126,13 @@ function BackupTrustInfo({ crypto, backupInfo }: BackupTrustInfoProps) {
   );
 }
 
-type BackupRestoreTileProps = {
-  crypto: CryptoApi;
-};
-export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
-  const [restoreProgress, setRestoreProgress] = useAtom(backupRestoreProgressAtom);
-  const restoring =
-    restoreProgress.status === BackupProgressStatus.Fetching ||
-    restoreProgress.status === BackupProgressStatus.Loading;
+export function BackupRestoreTile() {
+  const core = useCore();
+  const restoreProgress = useBackupProgress();
+  const restoring = restoreProgress.status === 'fetching' || restoreProgress.status === 'loading';
 
-  const backupEnabled = useKeyBackupStatus(crypto);
-  const backupInfo = useKeyBackupInfo(crypto);
+  const backupEnabled = useKeyBackupStatus();
+  const backupInfo = useKeyBackupInfo();
   const [remainingSession, syncFailure] = useKeyBackupSync();
 
   const [menuCords, setMenuCords] = useState<RectCords>();
@@ -152,12 +143,9 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
 
   const [restoreState, restoreBackup] = useAsyncCallback<void, Error, []>(
     useCallback(async () => {
-      await crypto.restoreKeyBackup({
-        progressCallback(progress) {
-          setRestoreProgress(progress);
-        },
-      });
-    }, [crypto, setRestoreProgress])
+      const result = await core.crypto.backup.restore();
+      if (!result.ok) throw result.error;
+    }, [core])
   );
 
   const handleRestore = () => {
@@ -254,12 +242,10 @@ export function BackupRestoreTile({ crypto }: BackupRestoreTileProps) {
           <b>No backup present on server!</b>
         </Text>
       )}
-      {!syncFailure && !backupEnabled && backupInfo && (
-        <BackupTrustInfo crypto={crypto} backupInfo={backupInfo} />
-      )}
+      {!syncFailure && !backupEnabled && backupInfo && <BackupTrustInfo />}
       {restoreState.status === AsyncStatus.Loading && !restoring && <BackupProgressFetching />}
-      {restoreProgress.status === BackupProgressStatus.Fetching && <BackupProgressFetching />}
-      {restoreProgress.status === BackupProgressStatus.Loading && (
+      {restoreProgress.status === 'fetching' && <BackupProgressFetching />}
+      {restoreProgress.status === 'loading' && (
         <BackupProgress
           total={restoreProgress.data.total}
           downloaded={restoreProgress.data.downloaded}

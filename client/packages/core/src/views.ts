@@ -149,6 +149,34 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type BackupTrustView = {
+  readonly trusted: boolean;
+  readonly matchesDecryptionKey: boolean;
+};
+
+export type BackupStatusView = {
+  readonly enabled: boolean;
+  readonly version?: string;
+  readonly count?: number;
+  readonly infoAbsent: boolean;
+  readonly sessionsRemaining: number;
+  readonly failure?: string;
+  readonly trust?: BackupTrustView;
+};
+
+export type BackupProgressDataView = {
+  readonly downloaded: number;
+  readonly successes: number;
+  readonly failures: number;
+  readonly total: number;
+};
+
+export type BackupProgressView =
+  | { readonly status: 'idle' }
+  | { readonly status: 'fetching' }
+  | { readonly status: 'loading'; readonly data: BackupProgressDataView }
+  | { readonly status: 'done' };
+
 export type VerificationPhaseView =
   | 'unsent'
   | 'requested'

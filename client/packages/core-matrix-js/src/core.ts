@@ -27,6 +27,8 @@ import {
   type UploadView,
   type VerificationPhaseView,
   type VerificationRequestView,
+  type BackupProgressView,
+  type BackupStatusView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -62,6 +64,8 @@ import {
   VerificationPhase,
   VerificationRequestEvent,
   VerifierEvent,
+  ImportRoomKeyStage,
+  type ImportRoomKeyProgressData,
   type ShowSasCallbacks,
   type VerificationRequest,
   type Verifier,
@@ -1211,6 +1215,83 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   };
 
+  const backupKeyCachedListeners = new Set<() => void>();
+  const backupStatusStore = createSnapshotStore<BackupStatusView>({
+    enabled: false,
+    infoAbsent: false,
+    sessionsRemaining: 0,
+  });
+  const backupProgressStore = createSnapshotStore<BackupProgressView>({ status: 'idle' });
+  let backupRemaining = 0;
+  let backupFailure: string | undefined;
+  let backupInfoAbsent = false;
+  let backupVersion: string | undefined;
+  let backupCount: number | undefined;
+  let backupTrust: BackupStatusView['trust'];
+
+  const publishBackupStatus = () => {
+    backupStatusStore.publish({
+      enabled: backupRemaining === 0 && !backupFailure && !backupInfoAbsent,
+      ...(backupVersion !== undefined ? { version: backupVersion } : {}),
+      ...(backupCount !== undefined ? { count: backupCount } : {}),
+      infoAbsent: backupInfoAbsent,
+      sessionsRemaining: backupRemaining,
+      ...(backupFailure !== undefined ? { failure: backupFailure } : {}),
+      ...(backupTrust !== undefined ? { trust: backupTrust } : {}),
+    });
+  };
+
+  const refreshBackupStatus = async (): Promise<CoreResult<void>> => {
+    const crypto = client.getCrypto();
+    if (!crypto) return { ok: true, value: undefined };
+    try {
+      const version = await crypto.getActiveSessionBackupVersion();
+      const info = await crypto.getKeyBackupInfo();
+      backupVersion = info?.version ?? version ?? undefined;
+      backupCount = info?.count ?? undefined;
+      backupInfoAbsent = info === null;
+      if (info && backupTrust === undefined) {
+        const trust = await crypto.isKeyBackupTrusted(info);
+        backupTrust = {
+          trusted: trust.trusted,
+          matchesDecryptionKey: trust.matchesDecryptionKey,
+        };
+      }
+      publishBackupStatus();
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: toCoreError(error) };
+    }
+  };
+
+  client.on(CryptoEvent.KeyBackupStatus, (enabled: boolean) => {
+    if (!enabled) {
+      backupInfoAbsent = false;
+      backupVersion = undefined;
+      backupCount = undefined;
+      backupTrust = undefined;
+    }
+    refreshBackupStatus().catch(() => undefined);
+  });
+  client.on(CryptoEvent.KeyBackupSessionsRemaining, (remaining: number) => {
+    backupRemaining = remaining;
+    backupFailure = undefined;
+    publishBackupStatus();
+    if (remaining === 0) refreshBackupStatus().catch(() => undefined);
+  });
+  client.on(CryptoEvent.KeyBackupFailed, (failure: string) => {
+    if (typeof failure === 'string') {
+      backupFailure = failure;
+      backupRemaining = 0;
+      publishBackupStatus();
+    }
+  });
+  client.on(CryptoEvent.KeyBackupDecryptionKeyCached, () => {
+    refreshBackupStatus().catch(() => undefined);
+    backupKeyCachedListeners.forEach((listener) => listener());
+  });
+  refreshBackupStatus().catch(() => undefined);
+
   const typingStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
   const buildTyping = (roomId: string): readonly string[] =>
     client
@@ -1745,6 +1826,63 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     crypto: {
       devices: devicesStore,
       refreshDevices,
+      backup: {
+        status: backupStatusStore,
+        progress: backupProgressStore,
+        refreshStatus: refreshBackupStatus,
+        async restore() {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          try {
+            backupProgressStore.publish({ status: 'fetching' });
+            await crypto.restoreKeyBackup({
+              progressCallback(progress: ImportRoomKeyProgressData) {
+                if (progress.stage === ImportRoomKeyStage.Fetch) {
+                  backupProgressStore.publish({ status: 'fetching' });
+                  return;
+                }
+                const downloaded = progress.successes + progress.failures;
+                if (downloaded === progress.total) {
+                  backupProgressStore.publish({ status: 'done' });
+                  return;
+                }
+                backupProgressStore.publish({
+                  status: 'loading',
+                  data: {
+                    downloaded,
+                    successes: progress.successes,
+                    failures: progress.failures,
+                    total: progress.total,
+                  },
+                });
+              },
+            });
+            backupProgressStore.publish({ status: 'done' });
+            await refreshBackupStatus();
+            return { ok: true, value: undefined };
+          } catch (error) {
+            backupProgressStore.publish({ status: 'idle' });
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        async prepareAndRestore() {
+          const crypto = client.getCrypto();
+          if (!crypto)
+            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+          try {
+            await crypto.bootstrapSecretStorage({});
+            await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
+            return await this.restore();
+          } catch (error) {
+            return { ok: false, error: toCoreError(error) };
+          }
+        },
+        onDecryptionKeyCached(listener) {
+          backupKeyCachedListeners.add(listener);
+          return () => backupKeyCachedListeners.delete(listener);
+        },
+      },
       verification: {
         incoming: incomingVerificationStore,
         async request(deviceId) {

@@ -16,6 +16,8 @@ import type {
   DeviceTrust,
   DeviceView,
   VerificationRequestView,
+  BackupStatusView,
+  BackupProgressView,
   SessionView,
   SyncView,
   TimelineView,
@@ -151,9 +153,19 @@ export type VerificationModule = {
   mismatchSas(id: string): Promise<CoreResult<void>>;
 };
 
+export type BackupModule = {
+  readonly status: SnapshotStore<BackupStatusView>;
+  readonly progress: SnapshotStore<BackupProgressView>;
+  refreshStatus(): Promise<CoreResult<void>>;
+  restore(): Promise<CoreResult<void>>;
+  prepareAndRestore(): Promise<CoreResult<void>>;
+  onDecryptionKeyCached(listener: () => void): () => void;
+};
+
 export type CryptoModule = {
   readonly devices: SnapshotStore<readonly DeviceView[] | null>;
   readonly verification: VerificationModule;
+  readonly backup: BackupModule;
   refreshDevices(): Promise<CoreResult<void>>;
   trust(userId: string, deviceId: string): SnapshotStore<DeviceTrust>;
   unverifiedCount(userId: string, deviceIds: readonly string[]): SnapshotStore<number | undefined>;

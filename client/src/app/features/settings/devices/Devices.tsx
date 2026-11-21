@@ -131,7 +131,7 @@ export function Devices({ requestClose }: DevicesProps) {
                         />
                       )}
                     {crypto && verificationStatus === VerificationStatus.Verified && (
-                      <BackupRestoreTile crypto={crypto} />
+                      <BackupRestoreTile />
                     )}
                   </SequenceCard>
                 ) : (
