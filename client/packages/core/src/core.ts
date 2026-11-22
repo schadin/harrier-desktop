@@ -20,6 +20,10 @@ import type {
   BackupProgressView,
   NotificationPreferencesView,
   RoomNotificationModeView,
+  MediaConfigView,
+  MediaRef,
+  MediaSourceView,
+  UrlPreviewView,
   SessionView,
   SyncView,
   TimelineView,
@@ -171,6 +175,16 @@ export type BackupModule = {
   retryDecryption(): Promise<CoreResult<void>>;
 };
 
+export type MediaModule = {
+  readonly config: SnapshotStore<MediaConfigView>;
+  readonly authenticated: SnapshotStore<boolean>;
+  resolve(ref: MediaRef): Promise<CoreResult<MediaSourceView>>;
+  thumbnail(ref: MediaRef): Promise<CoreResult<MediaSourceView>>;
+  download(ref: MediaRef, filename: string): Promise<CoreResult<Blob>>;
+  getUrlPreview(url: string, ts: number): Promise<CoreResult<UrlPreviewView>>;
+  refreshConfig(): Promise<CoreResult<void>>;
+};
+
 export type NotificationsModule = {
   readonly preferences: SnapshotStore<NotificationPreferencesView>;
   setRoomMode(
@@ -222,6 +236,7 @@ export type HarrierCore = {
   readonly presence: PresenceModule;
   readonly crypto: CryptoModule;
   readonly notifications: NotificationsModule;
+  readonly media: MediaModule;
   readonly send: SendModule;
   readonly uploads: UploadModule;
 };

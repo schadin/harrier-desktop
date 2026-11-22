@@ -16,6 +16,7 @@ import {
   type NotificationMode,
   type NotificationPreferencesView,
   type RoomNotificationModeView,
+  type MediaConfigView,
   type PresenceView,
   type PublicRoomView,
   type PublicRoomsResult,
@@ -77,6 +78,7 @@ import {
   type Verifier,
 } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
+import { decryptAttachment } from 'browser-encrypt-attachment';
 import { storeSecretStorageKey } from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
@@ -1222,6 +1224,31 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   };
 
+  const mediaConfigStore = createSnapshotStore<MediaConfigView>({});
+  const mediaAuthenticatedStore = createSnapshotStore(false);
+  const refreshMediaConfig = async (): Promise<CoreResult<void>> => {
+    try {
+      const config = await client.getMediaConfig();
+      const maxUploadSize = (config as { 'm.upload.size'?: number })['m.upload.size'];
+      mediaConfigStore.publish(typeof maxUploadSize === 'number' ? { maxUploadSize } : {});
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: toCoreError(error) };
+    }
+  };
+  refreshMediaConfig().catch(() => undefined);
+  client
+    .getVersions()
+    .then((versions) => {
+      mediaAuthenticatedStore.publish(
+        versions.versions.includes('v1.11') ||
+          !!(versions.unstable_features as Record<string, boolean> | undefined)?.[
+            'org.matrix.msc3916.stable'
+          ]
+      );
+    })
+    .catch(() => undefined);
+
   const notificationPreferencesStore = createSnapshotStore<NotificationPreferencesView>({
     mute: [],
     specialMessages: [],
@@ -1869,6 +1896,84 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             user.emit(UserEvent.Presence, undefined, user);
           }
           return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+    },
+    media: {
+      config: mediaConfigStore,
+      authenticated: mediaAuthenticatedStore,
+      refreshConfig: refreshMediaConfig,
+      async resolve(ref) {
+        try {
+          const url = client.mxcUrlToHttp(
+            ref.mxcUrl,
+            ref.width,
+            ref.height,
+            ref.resizeMethod,
+            undefined,
+            undefined,
+            mediaAuthenticatedStore.getSnapshot().value
+          );
+          if (!url) return { ok: false, error: toCoreError(new Error('Invalid MXC URL')) };
+          if (!ref.encrypted) return { ok: true, value: { kind: 'url', url } };
+          const response = await fetch(url, { method: 'GET' });
+          if (!response.ok) {
+            return {
+              ok: false,
+              error: toCoreError(new Error(`Media request failed: ${response.status}`)),
+            };
+          }
+          const data = await response.arrayBuffer();
+          const decrypted = await decryptAttachment(data, ref.encrypted as never);
+          return {
+            ok: true,
+            value: {
+              kind: 'blob',
+              blob: new Blob([decrypted], {
+                type: ref.mimeType ?? ref.encrypted.type ?? 'application/octet-stream',
+              }),
+            },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async thumbnail(ref) {
+        return this.resolve(ref);
+      },
+      async download(ref, filename) {
+        if (filename.length === 0) {
+          return { ok: false, error: toCoreError(new Error('Filename is required')) };
+        }
+        const result = await this.resolve(ref);
+        if (!result.ok) return result;
+        if (result.value.kind === 'blob') return { ok: true, value: result.value.blob };
+        const response = await fetch(result.value.url, { method: 'GET' });
+        if (!response.ok) {
+          return {
+            ok: false,
+            error: toCoreError(new Error(`Media request failed: ${response.status}`)),
+          };
+        }
+        return { ok: true, value: await response.blob() };
+      },
+      async getUrlPreview(url, ts) {
+        try {
+          const preview = await client.getUrlPreview(url, ts);
+          const imageUrl = preview['og:image'];
+          return {
+            ok: true,
+            value: {
+              ...(typeof preview['og:site_name'] === 'string'
+                ? { siteName: preview['og:site_name'] }
+                : {}),
+              ...(preview['og:title'] ? { title: preview['og:title'] } : {}),
+              ...(preview['og:description'] ? { description: preview['og:description'] } : {}),
+              ...(imageUrl ? { image: { mxcUrl: imageUrl } } : {}),
+            },
+          };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

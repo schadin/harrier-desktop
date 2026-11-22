@@ -20,6 +20,7 @@ describe('raw SDK access is absent from the public root', () => {
       | 'presence'
       | 'crypto'
       | 'notifications'
+      | 'media'
       | 'send'
       | 'uploads'
     >();

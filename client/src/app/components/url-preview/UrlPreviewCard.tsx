@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { IPreviewUrlResponse } from 'matrix-js-sdk';
+import type { UrlPreviewView } from '@harrier/core';
 import { Box, Icon, IconButton, Icons, Scroll, Spinner, Text, as, color, config } from 'folds';
 import { ImageOverlay } from '../ImageOverlay';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { UrlPreview, UrlPreviewContent, UrlPreviewDescription, UrlPreviewImg } from './UrlPreview';
 import {
   getIntersectionObserverEntry,
@@ -11,8 +11,7 @@ import {
 } from '../../hooks/useIntersectionObserver';
 import * as css from './UrlPreviewCard.css';
 import { tryDecodeURIComponent } from '../../utils/dom';
-import { mxcUrlToHttp } from '../../utils/matrix';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { useMediaSource } from '../../utils/coreMedia';
 import { ImageViewer } from '../image-viewer';
 import { onEnterOrSpace } from '../../utils/keyboard';
 
@@ -20,39 +19,39 @@ const linkStyles = { color: color.Success.Main };
 
 export const UrlPreviewCard = as<'div', { url: string; ts: number }>(
   ({ url, ts, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
+    const core = useCore();
     const [viewer, setViewer] = useState(false);
     const [previewStatus, loadPreview] = useAsyncCallback(
-      useCallback(() => mx.getUrlPreview(url, ts), [url, ts, mx])
+      useCallback(async () => {
+        const result = await core.media.getUrlPreview(url, ts);
+        if (!result.ok) throw result.error;
+        return result.value;
+      }, [core, url, ts])
     );
 
     useEffect(() => {
       loadPreview();
     }, [loadPreview]);
 
+    const preview = previewStatus.status === AsyncStatus.Success ? previewStatus.data : undefined;
+    const imageRef = preview?.image;
+    const mediaSrc = useMediaSource(
+      imageRef ? { ...imageRef, width: 256, height: 256, resizeMethod: 'scale' } : undefined
+    );
+
     if (previewStatus.status === AsyncStatus.Error) return null;
 
-    const renderContent = (prev: IPreviewUrlResponse) => {
-      const thumbUrl = mxcUrlToHttp(
-        mx,
-        prev['og:image'] || '',
-        useAuthentication,
-        256,
-        256,
-        'scale',
-        false
-      );
-
-      const imgUrl = mxcUrlToHttp(mx, prev['og:image'] || '', useAuthentication);
+    const renderContent = (prev: UrlPreviewView) => {
+      const thumbUrl = mediaSrc;
+      const imgUrl = mediaSrc;
 
       return (
         <>
           {thumbUrl && (
             <UrlPreviewImg
               src={thumbUrl}
-              alt={prev['og:title']}
-              title={prev['og:title']}
+              alt={prev.title ?? ''}
+              title={prev.title ?? ''}
               tabIndex={0}
               onKeyDown={(evt: React.KeyboardEvent<HTMLElement>) =>
                 onEnterOrSpace(() => setViewer(true))(evt)
@@ -63,7 +62,7 @@ export const UrlPreviewCard = as<'div', { url: string; ts: number }>(
           {imgUrl && (
             <ImageOverlay
               src={imgUrl}
-              alt={prev['og:title']}
+              alt={prev.title ?? ''}
               viewer={viewer}
               requestClose={() => {
                 setViewer(false);
@@ -82,14 +81,14 @@ export const UrlPreviewCard = as<'div', { url: string; ts: number }>(
               size="T200"
               priority="300"
             >
-              {typeof prev['og:site_name'] === 'string' && `${prev['og:site_name']} | `}
+              {prev.siteName && `${prev.siteName} | `}
               {tryDecodeURIComponent(url)}
             </Text>
             <Text truncate priority="400">
-              <b>{prev['og:title']}</b>
+              <b>{prev.title}</b>
             </Text>
             <Text size="T200" priority="300">
-              <UrlPreviewDescription>{prev['og:description']}</UrlPreviewDescription>
+              <UrlPreviewDescription>{prev.description}</UrlPreviewDescription>
             </Text>
           </UrlPreviewContent>
         </>

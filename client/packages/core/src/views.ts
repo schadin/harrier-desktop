@@ -149,6 +149,41 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type MediaConfigView = {
+  readonly maxUploadSize?: number;
+};
+
+export type MediaResizeMethod = 'crop' | 'scale';
+
+export type EncryptedAttachmentView = {
+  readonly url: string;
+  readonly key: JsonObject | string;
+  readonly iv: string;
+  readonly hashes?: Readonly<Record<string, string>>;
+  readonly name?: string;
+  readonly type?: string;
+};
+
+export type MediaRef = {
+  readonly mxcUrl: string;
+  readonly encrypted?: EncryptedAttachmentView;
+  readonly mimeType?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly resizeMethod?: MediaResizeMethod;
+};
+
+export type MediaSourceView =
+  | { readonly kind: 'url'; readonly url: string }
+  | { readonly kind: 'blob'; readonly blob: Blob };
+
+export type UrlPreviewView = {
+  readonly siteName?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly image?: MediaRef;
+};
+
 export type RoomNotificationModeView = 'unset' | 'mute' | 'special' | 'all';
 
 export type NotificationPreferencesView = {

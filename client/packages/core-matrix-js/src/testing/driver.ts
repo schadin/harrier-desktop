@@ -244,6 +244,10 @@ export function createSyncDriver(): SyncDriver {
   const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
 
+  client.getVersions = (async () => ({
+    versions: ['v1.11'],
+    unstable_features: {},
+  })) as typeof client.getVersions;
   client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
     if (path.endsWith('/logout')) return {};
     if (path.includes('/join/')) {
@@ -254,6 +258,8 @@ export function createSyncDriver(): SyncDriver {
     if (path.includes('/presence/')) return {};
     if (path.includes('/devices/') || path.endsWith('/delete_devices')) return {};
     if (path.includes('/pushrules/')) return {};
+    if (path.endsWith('/config') || path.includes('/media/config')) return {};
+    if (path.includes('/preview_url')) return {};
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {
