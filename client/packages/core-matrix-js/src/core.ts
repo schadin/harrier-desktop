@@ -32,6 +32,7 @@ import {
   type VerificationRequestView,
   type BackupProgressView,
   type BackupStatusView,
+  type CapabilitiesView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -1381,6 +1382,18 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     typingStores.get(member.roomId)?.publish(buildTyping(member.roomId));
   });
 
+  const capabilitiesStore = createSnapshotStore<CapabilitiesView>({});
+  const refreshCapabilities = async (): Promise<CoreResult<void>> => {
+    try {
+      const capabilities = await client.getCapabilities();
+      capabilitiesStore.publish(capabilities as JsonObject);
+      return { ok: true, value: undefined };
+    } catch (error) {
+      return { ok: false, error: toCoreError(error) };
+    }
+  };
+  refreshCapabilities().catch(() => undefined);
+
   const sessionStore = createSnapshotStore<SessionView | null>({
     userId: client.getSafeUserId(),
     deviceId: client.getDeviceId() ?? '',
@@ -1404,6 +1417,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     capabilities: { calls: false, threads: false },
     auth: {
       session: sessionStore,
+      capabilities: capabilitiesStore,
+      refreshCapabilities,
       sync: syncStore,
       async start(): Promise<CoreResult<void>> {
         try {

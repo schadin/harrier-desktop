@@ -149,6 +149,17 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type CapabilitiesView = {
+  readonly 'm.room_versions'?: {
+    readonly default?: string;
+    readonly available?: Readonly<Record<string, unknown>>;
+  };
+  readonly 'm.change_password'?: { readonly enabled?: boolean };
+  readonly 'm.set_avatar_url'?: { readonly enabled?: boolean };
+  readonly 'm.set_displayname'?: { readonly enabled?: boolean };
+  readonly [key: string]: unknown;
+};
+
 export type MediaConfigView = {
   readonly maxUploadSize?: number;
 };

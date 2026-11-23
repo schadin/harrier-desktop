@@ -1,12 +1,13 @@
-import { Capabilities } from 'matrix-js-sdk';
-import { createContext, useContext } from 'react';
+import type { CapabilitiesView } from '@harrier/core';
+import { createContext, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
-const CapabilitiesContext = createContext<Capabilities | null>(null);
+const CapabilitiesContext = createContext<CapabilitiesView | null>(null);
 
 export const CapabilitiesProvider = CapabilitiesContext.Provider;
 
-export function useCapabilities(): Capabilities {
-  const capabilities = useContext(CapabilitiesContext);
-  if (!capabilities) throw new Error('Capabilities are not provided!');
-  return capabilities;
+export function useCapabilities(): CapabilitiesView {
+  const core = useCore();
+  const store = core.auth.capabilities;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 }

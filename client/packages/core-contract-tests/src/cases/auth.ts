@@ -2,6 +2,17 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const authCases = [
+  contractTest('capabilities are exposed as a plain view', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(core.auth.capabilities.getSnapshot().value).toEqual({});
+      const refreshed = await core.auth.refreshCapabilities();
+      expect(refreshed.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('logout clears the session and stops sync', async (harness) => {
     const core = await harness.create();
     try {

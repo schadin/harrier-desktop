@@ -18,6 +18,7 @@ import type {
   VerificationRequestView,
   BackupStatusView,
   BackupProgressView,
+  CapabilitiesView,
   NotificationPreferencesView,
   NotificationPageView,
   RoomNotificationModeView,
@@ -45,6 +46,8 @@ export type CoreResult<T> = { ok: true; value: T } | { ok: false; error: CoreErr
 export type AuthModule = {
   readonly session: SnapshotStore<SessionView | null>;
   readonly sync: SnapshotStore<SyncView>;
+  readonly capabilities: SnapshotStore<CapabilitiesView>;
+  refreshCapabilities(): Promise<CoreResult<void>>;
   start(): Promise<CoreResult<void>>;
   stop(): Promise<void>;
   logout(): Promise<CoreResult<void>>;
