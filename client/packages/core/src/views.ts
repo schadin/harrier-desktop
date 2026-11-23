@@ -184,6 +184,29 @@ export type UrlPreviewView = {
   readonly image?: MediaRef;
 };
 
+export type NotificationView = {
+  readonly id: string;
+  readonly roomId: string;
+  readonly eventId?: string;
+  readonly senderId?: string;
+  readonly type: string;
+  readonly content: JsonObject;
+  readonly event: {
+    readonly event_id: string;
+    readonly sender: string;
+    readonly type: string;
+    readonly content: JsonObject;
+    readonly origin_server_ts: number;
+  };
+  readonly timestamp: number;
+  readonly read: boolean;
+};
+
+export type NotificationPageView = {
+  readonly items: readonly NotificationView[];
+  readonly nextToken?: string;
+};
+
 export type RoomNotificationModeView = 'unset' | 'mute' | 'special' | 'all';
 
 export type NotificationPreferencesView = {

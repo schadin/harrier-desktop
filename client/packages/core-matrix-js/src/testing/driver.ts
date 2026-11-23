@@ -260,6 +260,7 @@ export function createSyncDriver(): SyncDriver {
     if (path.includes('/pushrules/')) return {};
     if (path.endsWith('/config') || path.includes('/media/config')) return {};
     if (path.includes('/preview_url')) return {};
+    if (path.includes('/notifications')) return { notifications: [], next_token: 't1' };
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {

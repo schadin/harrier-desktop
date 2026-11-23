@@ -14,15 +14,8 @@ import {
   toRem,
 } from 'folds';
 import { useSearchParams } from 'react-router-dom';
-import {
-  INotification,
-  INotificationsResponse,
-  IRoomEvent,
-  JoinRule,
-  Method,
-  RelationType,
-  Room,
-} from 'matrix-js-sdk';
+import { IRoomEvent, JoinRule, RelationType, Room } from 'matrix-js-sdk';
+import type { NotificationView } from '@harrier/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts as LinkifyOpts } from 'linkifyjs';
@@ -102,7 +95,7 @@ import { useRoomCreators } from '../../../hooks/useRoomCreators';
 
 type RoomNotificationsGroup = {
   roomId: string;
-  notifications: INotification[];
+  notifications: NotificationView[];
 };
 type NotificationTimeline = {
   nextToken?: string;
@@ -112,21 +105,21 @@ type LoadTimeline = (from?: string) => Promise<void>;
 type SilentReloadTimeline = () => Promise<void>;
 
 const groupNotifications = (
-  notifications: INotification[],
+  notifications: NotificationView[],
   allowRooms: Set<string>
 ): RoomNotificationsGroup[] => {
   const groups: RoomNotificationsGroup[] = [];
   notifications.forEach((notification) => {
-    if (!allowRooms.has(notification.room_id)) return;
+    if (!allowRooms.has(notification.roomId)) return;
 
     const groupIndex = groups.length - 1;
     const lastAddedGroup: RoomNotificationsGroup | undefined = groups[groupIndex];
-    if (lastAddedGroup && notification.room_id === lastAddedGroup.roomId) {
+    if (lastAddedGroup && notification.roomId === lastAddedGroup.roomId) {
       lastAddedGroup.notifications.push(notification);
       return;
     }
     groups.push({
-      roomId: notification.room_id,
+      roomId: notification.roomId,
       notifications: [notification],
     });
   });
@@ -137,7 +130,7 @@ const useNotificationTimeline = (
   paginationLimit: number,
   onlyHighlight?: boolean
 ): [NotificationTimeline, LoadTimeline, SilentReloadTimeline] => {
-  const mx = useMatrixClient();
+  const core = useCore();
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
 
@@ -146,15 +139,12 @@ const useNotificationTimeline = (
   });
 
   const fetchNotifications = useCallback(
-    (from?: string, limit?: number, only?: 'highlight') => {
-      const queryParams = { from, limit, only };
-      return mx.http.authedRequest<INotificationsResponse>(
-        Method.Get,
-        '/notifications',
-        queryParams
-      );
+    async (from?: string, limit?: number) => {
+      const result = await core.notifications.list(from, limit, onlyHighlight);
+      if (!result.ok) throw result.error;
+      return result.value;
     },
-    [mx]
+    [core, onlyHighlight]
   );
 
   const loadTimeline: LoadTimeline = useCallback(
@@ -162,24 +152,20 @@ const useNotificationTimeline = (
       if (!from) {
         setNotificationTimeline({ groups: [] });
       }
-      const data = await fetchNotifications(
-        from,
-        paginationLimit,
-        onlyHighlight ? 'highlight' : undefined
-      );
-      const groups = groupNotifications(data.notifications, allJoinedRooms);
+      const data = await fetchNotifications(from, paginationLimit);
+      const groups = groupNotifications([...data.items], allJoinedRooms);
 
       setNotificationTimeline((currentTimeline) => {
         if (currentTimeline.nextToken === from) {
           return {
-            nextToken: data.next_token,
+            nextToken: data.nextToken,
             groups: from ? currentTimeline.groups.concat(groups) : groups,
           };
         }
         return currentTimeline;
       });
     },
-    [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms]
+    [paginationLimit, fetchNotifications, allJoinedRooms]
   );
 
   /**
@@ -187,24 +173,20 @@ const useNotificationTimeline = (
    * before fetching notifications from start
    */
   const silentReloadTimeline: SilentReloadTimeline = useCallback(async () => {
-    const data = await fetchNotifications(
-      undefined,
-      paginationLimit,
-      onlyHighlight ? 'highlight' : undefined
-    );
-    const groups = groupNotifications(data.notifications, allJoinedRooms);
+    const data = await fetchNotifications(undefined, paginationLimit);
+    const groups = groupNotifications([...data.items], allJoinedRooms);
     setNotificationTimeline({
-      nextToken: data.next_token,
+      nextToken: data.nextToken,
       groups,
     });
-  }, [paginationLimit, onlyHighlight, fetchNotifications, allJoinedRooms]);
+  }, [paginationLimit, fetchNotifications, allJoinedRooms]);
 
   return [notificationTimeline, loadTimeline, silentReloadTimeline];
 };
 
 type RoomNotificationsGroupProps = {
   room: Room;
-  notifications: INotification[];
+  notifications: NotificationView[];
   mediaAutoLoad?: boolean;
   urlPreview?: boolean;
   hideActivity: boolean;
@@ -459,7 +441,13 @@ function RoomNotificationsGroupComp({
           const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);
           const getContent = (() => event.content) as GetContentCallback;
 
-          const relation = event.content['m.relates_to'];
+          const relation = event.content['m.relates_to'] as
+            | {
+                rel_type?: string;
+                event_id?: string;
+                'm.in_reply_to'?: { event_id?: string };
+              }
+            | undefined;
           const replyEventId = relation?.['m.in_reply_to']?.event_id;
           const threadRootId =
             relation?.rel_type === RelationType.Thread ? relation.event_id : undefined;
@@ -476,7 +464,7 @@ function RoomNotificationsGroupComp({
 
           return (
             <SequenceCard
-              key={notification.event.event_id}
+              key={notification.id}
               style={{ padding: config.space.S400 }}
               variant="SurfaceVariant"
               direction="Column"

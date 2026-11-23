@@ -2,6 +2,17 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const notificationCases = [
+  contractTest('inbox notifications are exposed as plain views', async (harness) => {
+    const core = await harness.create();
+    try {
+      const page = await core.notifications.list(undefined, 10);
+      expect(page.ok).toBe(true);
+      if (page.ok) expect(Array.isArray(page.value.items)).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest(
     'notification preferences and room mode are available through core',
     async (harness) => {

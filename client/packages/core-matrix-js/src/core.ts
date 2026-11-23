@@ -1982,6 +1982,56 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     notifications: {
       preferences: notificationPreferencesStore,
       refreshPreferences: refreshNotificationPreferences,
+      async list(from, limit, onlyHighlight) {
+        try {
+          const response = await client.http.authedRequest<{
+            notifications?: {
+              room_id: string;
+              event?: {
+                event_id?: string;
+                sender?: string;
+                type?: string;
+                origin_server_ts?: number;
+                content?: Record<string, unknown>;
+              };
+              ts?: number;
+              read?: boolean;
+            }[];
+            next_token?: string;
+          }>(Method.Get, '/notifications', {
+            from,
+            limit,
+            only: onlyHighlight ? 'highlight' : undefined,
+          });
+          const items = (response.notifications ?? []).map((item) => {
+            const event = item.event ?? {};
+            const eventId = event.event_id ?? '';
+            return {
+              id: eventId,
+              roomId: item.room_id,
+              ...(eventId ? { eventId } : {}),
+              ...(event.sender ? { senderId: event.sender } : {}),
+              type: event.type ?? '',
+              content: (event.content ?? {}) as JsonObject,
+              event: {
+                event_id: eventId,
+                sender: event.sender ?? '',
+                type: event.type ?? '',
+                content: (event.content ?? {}) as JsonObject,
+                origin_server_ts: event.origin_server_ts ?? item.ts ?? 0,
+              },
+              timestamp: item.ts ?? event.origin_server_ts ?? 0,
+              read: item.read ?? false,
+            };
+          });
+          return {
+            ok: true,
+            value: { items, ...(response.next_token ? { nextToken: response.next_token } : {}) },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async setRoomMode(roomId, mode, previousMode) {
         try {
           if (previousMode === 'all' || previousMode === 'special') {

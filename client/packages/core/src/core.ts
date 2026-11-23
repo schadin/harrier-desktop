@@ -19,6 +19,7 @@ import type {
   BackupStatusView,
   BackupProgressView,
   NotificationPreferencesView,
+  NotificationPageView,
   RoomNotificationModeView,
   MediaConfigView,
   MediaRef,
@@ -193,6 +194,11 @@ export type NotificationsModule = {
     previousMode: RoomNotificationModeView
   ): Promise<CoreResult<void>>;
   refreshPreferences(): Promise<CoreResult<void>>;
+  list(
+    from?: string,
+    limit?: number,
+    onlyHighlight?: boolean
+  ): Promise<CoreResult<NotificationPageView>>;
 };
 
 export type CryptoModule = {
