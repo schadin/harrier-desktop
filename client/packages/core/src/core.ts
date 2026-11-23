@@ -54,6 +54,7 @@ export type AuthModule = {
   start(): Promise<CoreResult<void>>;
   stop(): Promise<void>;
   logout(): Promise<CoreResult<void>>;
+  clearCache(): Promise<CoreResult<void>>;
 };
 
 export type DirectorySearchParams = {

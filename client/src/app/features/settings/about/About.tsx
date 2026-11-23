@@ -6,13 +6,13 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import HarrierSVG from '../../../../../public/res/svg/harrier.svg';
 import { clearCacheAndReload } from '../../../../client/initMatrix';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 
 type AboutProps = {
   requestClose: () => void;
 };
 export function About({ requestClose }: AboutProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   return (
     <Page>
@@ -81,7 +81,7 @@ export function About({ requestClose }: AboutProps) {
                     description="Clear all your locally stored data and reload from server."
                     after={
                       <Button
-                        onClick={() => clearCacheAndReload(mx)}
+                        onClick={() => clearCacheAndReload(core)}
                         variant="Secondary"
                         fill="Soft"
                         size="300"

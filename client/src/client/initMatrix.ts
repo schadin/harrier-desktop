@@ -1,11 +1,7 @@
-import { MatrixClient, SetPresence } from 'matrix-js-sdk';
+import type { HarrierCore } from '@harrier/core';
 import { createMatrixJsClient } from '@harrier/core-matrix-js';
 
-import {
-  cryptoCallbacks,
-  loadSecretStorageKeys,
-  clearSecretStorageKeys,
-} from './secretStorageKeys';
+import { cryptoCallbacks, loadSecretStorageKeys } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { pushSessionToSW } from '../sw-session';
 
@@ -16,35 +12,21 @@ type Session = {
   deviceId: string;
 };
 
-export const initClient = async (session: Session): Promise<MatrixClient> => {
+export const initClient = async (session: Session) => {
   await loadSecretStorageKeys();
   return createMatrixJsClient(session, { cryptoCallbacks });
 };
 
-export const startClient = async (mx: MatrixClient) => {
-  mx.setSyncPresence(SetPresence.Online);
-  await mx.startClient({
-    lazyLoadMembers: true,
-  });
-};
-
-export const clearCacheAndReload = async (mx: MatrixClient) => {
-  mx.stopClient();
-  clearNavToActivePathStore(mx.getSafeUserId());
-  await mx.store.deleteAllData();
+export const clearCacheAndReload = async (core: HarrierCore) => {
+  const userId = core.auth.session.getSnapshot().value?.userId;
+  await core.auth.clearCache();
+  if (userId) clearNavToActivePathStore(userId);
   window.location.reload();
 };
 
-export const logoutClient = async (mx: MatrixClient) => {
+export const logoutClient = async (core: HarrierCore) => {
   pushSessionToSW();
-  mx.stopClient();
-  try {
-    await mx.logout();
-  } catch {
-    // ignore if failed to logout
-  }
-  await mx.clearStores();
-  clearSecretStorageKeys();
+  await core.auth.logout();
   window.localStorage.clear();
   window.location.reload();
 };

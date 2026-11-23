@@ -2,6 +2,18 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const authCases = [
+  contractTest('logout and cache clearing are available through core', async (harness) => {
+    const core = await harness.create();
+    try {
+      const cleared = await core.auth.clearCache();
+      expect(cleared.ok).toBe(true);
+      const loggedOut = await core.auth.logout();
+      expect(loggedOut.ok).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('auth metadata is exposed as a plain view', async (harness) => {
     const core = await harness.create();
     try {

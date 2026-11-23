@@ -81,7 +81,7 @@ import {
 } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
 import { decryptAttachment } from 'browser-encrypt-attachment';
-import { storeSecretStorageKey } from './secretStorageKeys';
+import { clearSecretStorageKeys, storeSecretStorageKey } from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -1458,9 +1458,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           // Local cleanup continues even if the server logout fails.
         }
         await client.clearStores();
+        clearSecretStorageKeys();
         sessionStore.publish(null);
         syncStore.publish({ phase: 'stopped' });
         return { ok: true, value: undefined };
+      },
+      async clearCache() {
+        client.stopClient();
+        try {
+          await client.store.deleteAllData();
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
       },
     },
     rooms: {
