@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, color, Spinner, Switch, Text } from 'folds';
-import { JoinRule, MatrixError } from 'matrix-js-sdk';
+import { JoinRule } from 'matrix-js-sdk';
 import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
+import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -66,13 +67,13 @@ export function RoomPublish({ permissions }: RoomPublishProps) {
       >
         {visibilityState.status === AsyncStatus.Error && (
           <Text style={{ color: color.Critical.Main }} size="T200">
-            {(visibilityState.error as MatrixError).message}
+            {(visibilityState.error as CoreError).message}
           </Text>
         )}
 
         {toggleState.status === AsyncStatus.Error && (
           <Text style={{ color: color.Critical.Main }} size="T200">
-            {(toggleState.error as MatrixError).message}
+            {(toggleState.error as CoreError).message}
           </Text>
         )}
       </SettingTile>

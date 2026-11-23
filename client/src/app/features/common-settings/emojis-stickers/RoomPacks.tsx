@@ -16,7 +16,8 @@ import {
   IconButton,
   Menu,
 } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
+
+import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import {
   ImagePack,
@@ -51,7 +52,7 @@ function CreatePackTile({ packs, roomId }: CreatePackTileProps) {
   const core = useCore();
   const alive = useAlive();
 
-  const [addState, addPack] = useAsyncCallback<void, MatrixError, [string, string]>(
+  const [addState, addPack] = useAsyncCallback<void, CoreError, [string, string]>(
     useCallback(
       async (stateKey, name) => {
         const content: PackContent = {

@@ -16,7 +16,8 @@ import {
   Button,
   Spinner,
 } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
+
+import type { CoreError } from '@harrier/core';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../utils/keyboard';
@@ -29,7 +30,7 @@ type LeaveSpacePromptProps = {
 export function LeaveSpacePrompt({ roomId, onDone, onCancel }: LeaveSpacePromptProps) {
   const mx = useMatrixClient();
 
-  const [leaveState, leaveRoom] = useAsyncCallback<undefined, MatrixError, []>(
+  const [leaveState, leaveRoom] = useAsyncCallback<undefined, CoreError, []>(
     useCallback(async () => {
       mx.leave(roomId);
     }, [mx, roomId])

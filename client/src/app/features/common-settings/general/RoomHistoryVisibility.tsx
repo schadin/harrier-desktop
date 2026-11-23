@@ -12,9 +12,10 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { HistoryVisibility, MatrixError } from 'matrix-js-sdk';
+import { HistoryVisibility } from 'matrix-js-sdk';
 import { RoomHistoryVisibilityEventContent } from 'matrix-js-sdk/lib/types';
 import FocusTrap from 'focus-trap-react';
+import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -160,7 +161,7 @@ export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProp
       >
         {submitState.status === AsyncStatus.Error && (
           <Text style={{ color: color.Critical.Main }} size="T200">
-            {(submitState.error as MatrixError).message}
+            {(submitState.error as CoreError).message}
           </Text>
         )}
       </SettingTile>

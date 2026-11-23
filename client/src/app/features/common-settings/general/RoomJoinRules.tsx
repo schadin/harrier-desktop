@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo } from 'react';
 import { color, Text } from 'folds';
-import { JoinRule, MatrixError, RestrictedAllowType } from 'matrix-js-sdk';
+import { JoinRule, RestrictedAllowType } from 'matrix-js-sdk';
 import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
 import { useAtomValue } from 'jotai';
+import type { CoreError } from '@harrier/core';
 import {
   ExtendedJoinRules,
   JoinRulesSwitcher,
@@ -150,7 +151,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
       >
         {submitState.status === AsyncStatus.Error && (
           <Text style={{ color: color.Critical.Main }} size="T200">
-            {(submitState.error as MatrixError).message}
+            {(submitState.error as CoreError).message}
           </Text>
         )}
       </SettingTile>

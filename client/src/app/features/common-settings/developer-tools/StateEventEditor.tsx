@@ -13,8 +13,8 @@ import {
   Spinner,
   Button,
 } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
-import type { JsonObject } from '@harrier/core';
+
+import type { JsonObject, CoreError } from '@harrier/core';
 import { Page, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { TextViewerContent } from '../../../components/text-viewer';
@@ -60,7 +60,7 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
     EDITOR_INTENT_SPACE_COUNT
   );
 
-  const [submitState, submit] = useAsyncCallback<object, MatrixError, [object]>(
+  const [submitState, submit] = useAsyncCallback<object, CoreError, [object]>(
     useCallback(
       async (c) => {
         await sendRoomState(core, room.roomId, type, c as JsonObject, stateKey);
