@@ -1,17 +1,17 @@
 import React, { ReactNode } from 'react';
-import { AuthDict, AuthType, IAuthData, UIAFlow } from 'matrix-js-sdk';
+import { AuthDict, IAuthData, UIAFlow } from 'matrix-js-sdk';
 import { getUIAFlowForStages } from '../utils/matrix-uia';
 import { useSupportedUIAFlows, useUIACompleted, useUIAFlow } from '../hooks/useUIAFlows';
 import { UIAFlowOverlay } from './UIAFlowOverlay';
 import { PasswordStage, SSOStage } from './uia-stages';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 
-export const SUPPORTED_IN_APP_UIA_STAGES = [AuthType.Password, AuthType.Sso];
+export const SUPPORTED_IN_APP_UIA_STAGES = ['m.login.password', 'm.login.sso'];
 
 export const pickUIAFlow = (uiaFlows: UIAFlow[]): UIAFlow | undefined => {
-  const passwordFlow = getUIAFlowForStages(uiaFlows, [AuthType.Password]);
+  const passwordFlow = getUIAFlowForStages(uiaFlows, ['m.login.password']);
   if (passwordFlow) return passwordFlow;
-  return getUIAFlowForStages(uiaFlows, [AuthType.Sso]);
+  return getUIAFlowForStages(uiaFlows, ['m.login.sso']);
 };
 
 type ActionUIAProps = {
@@ -34,7 +34,7 @@ export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIA
       stepCount={ongoingFlow.stages.length}
       onCancel={onCancel}
     >
-      {stageToComplete.type === AuthType.Password && (
+      {stageToComplete.type === 'm.login.password' && (
         <PasswordStage
           userId={mx.getUserId()!}
           stageData={stageToComplete}
@@ -42,9 +42,9 @@ export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIA
           submitAuthDict={action}
         />
       )}
-      {stageToComplete.type === AuthType.Sso && stageToComplete.session && (
+      {stageToComplete.type === 'm.login.sso' && stageToComplete.session && (
         <SSOStage
-          ssoRedirectURL={mx.getFallbackAuthUrl(AuthType.Sso, stageToComplete.session)}
+          ssoRedirectURL={mx.getFallbackAuthUrl('m.login.sso', stageToComplete.session)}
           stageData={stageToComplete}
           onCancel={onCancel}
           submitAuthDict={action}

@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, FormEventHandler } from 'react';
 import { Dialog, Text, Box, Button, config, Input, color, Spinner } from 'folds';
-import { AuthType, MatrixError } from 'matrix-js-sdk';
+import { MatrixError } from 'matrix-js-sdk';
 import { StageComponentProps } from './types';
 import { AsyncState, AsyncStatus } from '../../hooks/useAsyncCallback';
 import { RequestEmailTokenCallback, RequestEmailTokenResponse } from '../../hooks/types';
@@ -89,7 +89,7 @@ export function EmailStageDialog({
         client_secret: clientSecret,
       };
       submitAuthDict({
-        type: AuthType.Email,
+        type: 'm.login.email.identity',
         threepid_creds: threepIDCreds,
         threepidCreds: threepIDCreds,
         session,

@@ -1,6 +1,6 @@
 import { Box, Button, color, config, Dialog, Header, Icon, IconButton, Icons, Text } from 'folds';
 import React, { FormEventHandler } from 'react';
-import { AuthType } from 'matrix-js-sdk';
+
 import { StageComponentProps } from './types';
 import { ErrorCode } from '../../cs-errorcode';
 import { PasswordInput } from '../password-input';
@@ -23,7 +23,7 @@ export function PasswordStage({
     const password = passwordInput.value;
     if (!password) return;
     submitAuthDict({
-      type: AuthType.Password,
+      type: 'm.login.password',
       identifier: {
         type: 'm.id.user',
         user: userId,

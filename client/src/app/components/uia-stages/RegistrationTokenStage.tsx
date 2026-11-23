@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, FormEventHandler } from 'react';
 import { Dialog, Text, Box, Button, config, Input } from 'folds';
-import { AuthType } from 'matrix-js-sdk';
+
 import { StageComponentProps } from './types';
 
 function RegistrationTokenErrorDialog({
@@ -77,7 +77,7 @@ export function RegistrationTokenStageDialog({
   const handleSubmit = useCallback(
     (t: string) => {
       submitAuthDict({
-        type: AuthType.RegistrationToken,
+        type: 'm.login.registration_token',
         token: t,
         session,
       });

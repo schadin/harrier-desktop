@@ -14,7 +14,7 @@ import {
 } from 'folds';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
-import { AuthDict, AuthType, MatrixError, createClient } from 'matrix-js-sdk';
+import { AuthDict, MatrixError, createClient } from 'matrix-js-sdk';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAuthServer } from '../../../hooks/useAuthServer';
@@ -112,7 +112,7 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
     if (formData && ongoingAuthData && !flowErrorCode) {
       handleResetPassword(
         {
-          type: AuthType.Password,
+          type: 'm.login.password',
           identifier: {
             type: 'm.id.thirdparty',
             medium: 'email',
@@ -243,7 +243,7 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
         <UIAFlowOverlay currentStep={1} stepCount={1} onCancel={handleCancel}>
           <EmailStageDialog
             stageData={{
-              type: AuthType.Email,
+              type: 'm.login.email.identity',
               errorCode: flowErrorCode,
               error: flowError,
               session: ongoingAuthData?.session,

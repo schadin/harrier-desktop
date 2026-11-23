@@ -1,4 +1,4 @@
-import { AuthType, IAuthData, MatrixError, UIAFlow } from 'matrix-js-sdk';
+import { IAuthData, MatrixError, UIAFlow } from 'matrix-js-sdk';
 import { useCallback, useMemo } from 'react';
 import {
   getSupportedUIAFlows,
@@ -10,12 +10,12 @@ import {
 } from '../utils/matrix-uia';
 
 export const SUPPORTED_FLOW_TYPES = [
-  AuthType.Dummy,
-  AuthType.Password,
-  AuthType.Email,
-  AuthType.Terms,
-  AuthType.Recaptcha,
-  AuthType.RegistrationToken,
+  'm.login.dummy',
+  'm.login.password',
+  'm.login.email.identity',
+  'm.login.terms',
+  'm.login.recaptcha',
+  'm.login.registration_token',
 ] as const;
 
 export const useSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: string[]): UIAFlow[] =>

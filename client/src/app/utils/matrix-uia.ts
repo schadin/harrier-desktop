@@ -1,4 +1,4 @@
-import { AuthType, IAuthData, UIAFlow } from 'matrix-js-sdk';
+import { IAuthData, UIAFlow } from 'matrix-js-sdk';
 
 export const getSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: string[]): UIAFlow[] => {
   const supportedUIAFlows = uiaFlows.filter((flow) =>
@@ -46,8 +46,8 @@ export const getUIAFlowForStages = (uiaFlows: UIAFlow[], stages: string[]): UIAF
         // As a valid flow can also have m.login.dummy type,
         // we will pick one extra length flow only if it has dummy
         if (flow.stages.length > stages.length + 1) return false;
-        if (stages.includes(AuthType.Dummy)) return false;
-        if (flow.stages.includes(AuthType.Dummy)) return true;
+        if (stages.includes('m.login.dummy')) return false;
+        if (flow.stages.includes('m.login.dummy')) return true;
         return false;
       }
       return true;
@@ -67,7 +67,7 @@ export const requiredStageInFlows = (uiaFlows: UIAFlow[], stage: string) =>
   uiaFlows.every((flow) => flow.stages.includes(stage));
 
 export const getLoginTermUrl = (params: UIAParams): string | undefined => {
-  const terms = params[AuthType.Terms];
+  const terms = params['m.login.terms'];
   if (terms && 'policies' in terms && typeof terms.policies === 'object') {
     if (terms.policies === null) return undefined;
     if ('privacy_policy' in terms.policies && typeof terms.policies.privacy_policy === 'object') {

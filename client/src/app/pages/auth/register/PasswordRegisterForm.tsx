@@ -13,7 +13,6 @@ import {
 import React, { ChangeEventHandler, useCallback, useMemo, useState } from 'react';
 import {
   AuthDict,
-  AuthType,
   IAuthData,
   MatrixError,
   RegisterRequest,
@@ -45,11 +44,11 @@ import { UIAFlowOverlay } from '../../../components/UIAFlowOverlay';
 import { RequestEmailTokenCallback, RequestEmailTokenResponse } from '../../../hooks/types';
 
 export const SUPPORTED_REGISTER_STAGES = [
-  AuthType.RegistrationToken,
-  AuthType.Terms,
-  AuthType.Recaptcha,
-  AuthType.Email,
-  AuthType.Dummy,
+  'm.login.registration_token',
+  'm.login.terms',
+  'm.login.recaptcha',
+  'm.login.email.identity',
+  'm.login.dummy',
 ];
 type RegisterFormInputs = {
   usernameInput: HTMLInputElement;
@@ -71,11 +70,11 @@ type FormData = {
 
 const pickStages = (uiaFlows: UIAFlow[], formData: FormData): string[] => {
   const pickedStages: string[] = [];
-  if (formData.token) pickedStages.push(AuthType.RegistrationToken);
-  if (formData.email) pickedStages.push(AuthType.Email);
-  if (formData.terms) pickedStages.push(AuthType.Terms);
-  if (hasStageInFlows(uiaFlows, AuthType.Recaptcha)) {
-    pickedStages.push(AuthType.Recaptcha);
+  if (formData.token) pickedStages.push('m.login.registration_token');
+  if (formData.email) pickedStages.push('m.login.email.identity');
+  if (formData.terms) pickedStages.push('m.login.terms');
+  if (hasStageInFlows(uiaFlows, 'm.login.recaptcha')) {
+    pickedStages.push('m.login.recaptcha');
   }
 
   return pickedStages;
@@ -126,7 +125,7 @@ function RegisterUIAFlow({
       stepCount={flow.stages.length}
       onCancel={handleCancel}
     >
-      {stageToComplete.type === AuthType.RegistrationToken && (
+      {stageToComplete.type === 'm.login.registration_token' && (
         <RegistrationTokenStageDialog
           token={formData.token}
           stageData={stageToComplete}
@@ -134,21 +133,21 @@ function RegisterUIAFlow({
           onCancel={handleCancel}
         />
       )}
-      {stageToComplete.type === AuthType.Terms && (
+      {stageToComplete.type === 'm.login.terms' && (
         <AutoTermsStageDialog
           stageData={stageToComplete}
           submitAuthDict={handleAuthDict}
           onCancel={handleCancel}
         />
       )}
-      {stageToComplete.type === AuthType.Recaptcha && (
+      {stageToComplete.type === 'm.login.recaptcha' && (
         <ReCaptchaStageDialog
           stageData={stageToComplete}
           submitAuthDict={handleAuthDict}
           onCancel={handleCancel}
         />
       )}
-      {stageToComplete.type === AuthType.Email && (
+      {stageToComplete.type === 'm.login.email.identity' && (
         <EmailStageDialog
           email={formData.email}
           clientSecret={formData.clientSecret}
@@ -159,7 +158,7 @@ function RegisterUIAFlow({
           onCancel={handleCancel}
         />
       )}
-      {stageToComplete.type === AuthType.Dummy && (
+      {stageToComplete.type === 'm.login.dummy' && (
         <AutoDummyStageDialog
           stageData={stageToComplete}
           submitAuthDict={handleAuthDict}
@@ -330,10 +329,10 @@ export function PasswordRegisterForm({
             </>
           )}
         </ConfirmPasswordMatch>
-        {hasStageInFlows(uiaFlows, AuthType.RegistrationToken) && (
+        {hasStageInFlows(uiaFlows, 'm.login.registration_token') && (
           <Box direction="Column" gap="100">
             <Text as="label" size="L400" priority="300">
-              {requiredStageInFlows(uiaFlows, AuthType.RegistrationToken)
+              {requiredStageInFlows(uiaFlows, 'm.login.registration_token')
                 ? 'Registration Token'
                 : 'Registration Token (Optional)'}
             </Text>
@@ -342,15 +341,17 @@ export function PasswordRegisterForm({
               defaultValue={defaultRegisterToken}
               name="tokenInput"
               size="500"
-              required={requiredStageInFlows(uiaFlows, AuthType.RegistrationToken)}
+              required={requiredStageInFlows(uiaFlows, 'm.login.registration_token')}
               outlined
             />
           </Box>
         )}
-        {hasStageInFlows(uiaFlows, AuthType.Email) && (
+        {hasStageInFlows(uiaFlows, 'm.login.email.identity') && (
           <Box direction="Column" gap="100">
             <Text as="label" size="L400" priority="300">
-              {requiredStageInFlows(uiaFlows, AuthType.Email) ? 'Email' : 'Email (Optional)'}
+              {requiredStageInFlows(uiaFlows, 'm.login.email.identity')
+                ? 'Email'
+                : 'Email (Optional)'}
             </Text>
             <Input
               variant="Background"
@@ -358,13 +359,13 @@ export function PasswordRegisterForm({
               name="emailInput"
               type="email"
               size="500"
-              required={requiredStageInFlows(uiaFlows, AuthType.Email)}
+              required={requiredStageInFlows(uiaFlows, 'm.login.email.identity')}
               outlined
             />
           </Box>
         )}
 
-        {hasStageInFlows(uiaFlows, AuthType.Terms) && termUrl && (
+        {hasStageInFlows(uiaFlows, 'm.login.terms') && termUrl && (
           <Box alignItems="Center" gap="200">
             <Checkbox name="termsInput" size="300" variant="Primary" required />
             <Text size="T300">
