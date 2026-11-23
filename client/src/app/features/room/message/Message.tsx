@@ -325,9 +325,10 @@ export const MessageCopyLinkItem = as<
     onClose?: () => void;
   }
 >(({ room, eventId, onClose, ...props }, ref) => {
+  const core = useCore();
   const handleCopy = () => {
     if (!eventId) return;
-    copyToClipboard(getMatrixToRoomEvent(room.roomId, eventId, getViaServers(room)));
+    copyToClipboard(getMatrixToRoomEvent(room.roomId, eventId, getViaServers(core, room.roomId)));
     onClose?.();
   };
 

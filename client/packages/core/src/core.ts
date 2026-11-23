@@ -101,6 +101,7 @@ export type RoomsModule = {
   members(roomId: RoomId): SnapshotStore<readonly MemberView[]>;
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
+  viaServers(roomId: RoomId): readonly string[];
   accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
   setAccountData(roomId: RoomId, type: string, content: JsonObject): Promise<CoreResult<void>>;
   parents(roomId: RoomId): SnapshotStore<readonly RoomId[]>;

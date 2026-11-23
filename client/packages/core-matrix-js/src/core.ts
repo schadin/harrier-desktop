@@ -1470,6 +1470,32 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         creatorStores.set(roomId, store);
         return store;
       },
+      viaServers(roomId) {
+        const serverOf = (userId: string) => userId.split(':')[1] ?? '';
+        const powerLevels = buildPowerLevels(roomId);
+        const creators = buildCreators(roomId);
+        let highestPowerUserId = creators[0];
+        if (!highestPowerUserId && powerLevels.users) {
+          let top = -Infinity;
+          Object.entries(powerLevels.users).forEach(([userId, power]) => {
+            if (power <= (powerLevels.users_default ?? 0) || power <= top) return;
+            top = power;
+            highestPowerUserId = userId;
+          });
+        }
+        const serverToPop: Record<string, number> = {};
+        buildMembers(roomId).forEach((member) => {
+          const server = serverOf(member.userId);
+          if (!server) return;
+          serverToPop[server] = (serverToPop[server] ?? 0) + 1;
+        });
+        const mostPop3 = Object.keys(serverToPop)
+          .sort((a, b) => serverToPop[b] - serverToPop[a])
+          .slice(0, 3);
+        const via = highestPowerUserId ? [serverOf(highestPowerUserId)].filter(Boolean) : [];
+        if (via.length === 0) return mostPop3;
+        return via.concat(mostPop3.filter((server) => server !== via[0]).slice(0, 2));
+      },
       accountData(roomId) {
         const existing = accountDataStores.get(roomId);
         if (existing) return existing;

@@ -129,7 +129,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
 
   const handleCopyLink = () => {
     const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
     copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
     requestClose();
   };
@@ -355,16 +355,17 @@ function SpaceHeader() {
 type SpaceTombstoneProps = { roomId: string; replacementRoomId: string };
 export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const { navigateSpace } = useRoomNavigate();
 
   const [joinState, handleJoin] = useAsyncCallback(
     useCallback(() => {
       const currentRoom = mx.getRoom(roomId);
-      const via = currentRoom ? getViaServers(currentRoom) : [];
+      const via = currentRoom ? getViaServers(core, currentRoom.roomId) : [];
       return mx.joinRoom(replacementRoomId, {
         viaServers: via,
       });
-    }, [mx, roomId, replacementRoomId])
+    }, [mx, core, roomId, replacementRoomId])
   );
   const replacementRoom = mx.getRoom(replacementRoomId);
 

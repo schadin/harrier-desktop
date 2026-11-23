@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { Box, Button, Spinner, Text, color } from 'folds';
+import { useCore } from '../../hooks/useCore';
 
 import * as css from './RoomTombstone.css';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -12,16 +13,17 @@ import { getViaServers } from '../../plugins/via-servers';
 type RoomTombstoneProps = { roomId: string; body?: string; replacementRoomId: string };
 export function RoomTombstone({ roomId, body, replacementRoomId }: RoomTombstoneProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const { navigateRoom } = useRoomNavigate();
 
   const [joinState, handleJoin] = useAsyncCallback(
     useCallback(() => {
       const currentRoom = mx.getRoom(roomId);
-      const via = currentRoom ? getViaServers(currentRoom) : [];
+      const via = currentRoom ? getViaServers(core, currentRoom.roomId) : [];
       return mx.joinRoom(replacementRoomId, {
         viaServers: via,
       });
-    }, [mx, roomId, replacementRoomId])
+    }, [mx, core, roomId, replacementRoomId])
   );
   const replacementRoom = mx.getRoom(replacementRoomId);
 

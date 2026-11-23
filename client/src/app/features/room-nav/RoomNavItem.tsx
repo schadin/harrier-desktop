@@ -98,7 +98,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
 
     const handleCopyLink = () => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
       copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
       requestClose();
     };

@@ -3,6 +3,7 @@ import { Editor } from 'slate';
 import { Avatar, Icon, Icons, MenuItem, Text } from 'folds';
 import { JoinRule, MatrixClient } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
+import { useCore } from '../../../hooks/useCore';
 
 import { createMentionElement, moveCursor, replaceWithElement } from '../utils';
 import { getDirectRoomAvatarUrl } from '../../../utils/room';
@@ -77,6 +78,7 @@ export function RoomMentionAutocomplete({
   requestClose,
 }: RoomMentionAutocompleteProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const mDirects = useAtomValue(mDirectAtom);
 
   const allRooms = useAtomValue(allRoomsAtom).sort(factoryRoomIdByActivity(mx));
@@ -105,7 +107,7 @@ export function RoomMentionAutocomplete({
 
   const handleAutocomplete: MentionAutoCompleteHandler = (roomAliasOrId, name) => {
     const mentionRoom = mx.getRoom(roomAliasOrId);
-    const viaServers = mentionRoom ? getViaServers(mentionRoom) : undefined;
+    const viaServers = mentionRoom ? getViaServers(core, mentionRoom.roomId) : undefined;
     const mentionEl = createMentionElement(
       roomAliasOrId,
       name.startsWith('#') ? name : `#${name}`,

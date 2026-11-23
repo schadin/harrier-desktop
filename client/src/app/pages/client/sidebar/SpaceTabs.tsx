@@ -103,7 +103,7 @@ type SpaceMenuProps = {
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
   ({ room, requestClose, onUnpin }, ref) => {
     const mx = useMatrixClient();
-  const core = useCore();
+    const core = useCore();
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
     const roomToParents = useAtomValue(roomToParentsAtom);
     const powerLevels = usePowerLevels(room);
@@ -134,7 +134,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
 
     const handleCopyLink = () => {
       const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(room);
+      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
       copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
       requestClose();
     };

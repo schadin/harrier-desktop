@@ -62,7 +62,7 @@ export const createRoom = async (core: HarrierCore, data: CreateRoomData): Promi
     allowFederation: data.allowFederation,
     additionalCreators: data.additionalCreators,
     parent: data.parent
-      ? { roomId: data.parent.roomId, via: getViaServers(data.parent) }
+      ? { roomId: data.parent.roomId, via: getViaServers(core, data.parent.roomId) }
       : undefined,
   });
   if (!result.ok) throw result.error;

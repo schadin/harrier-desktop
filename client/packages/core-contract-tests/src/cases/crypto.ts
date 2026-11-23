@@ -2,6 +2,15 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const cryptoCases = [
+  contractTest('via servers are exposed as plain strings', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(Array.isArray(core.rooms.viaServers('!unknown:example.org'))).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('device list is exposed as plain device views', async (harness) => {
     const core = await harness.create();
     try {
