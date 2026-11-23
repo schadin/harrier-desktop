@@ -42,7 +42,6 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useSyncState } from '../../hooks/useSyncState';
 import { stopPropagation } from '../../utils/keyboard';
 import { SyncStatus } from './SyncStatus';
-import { AuthMetadataProvider } from '../../hooks/useAuthMetadata';
 import { getFallbackSession } from '../../state/sessions';
 import { clearSecretStorageKeys } from '../../../client/secretStorageKeys';
 import { AutoDiscovery } from './AutoDiscovery';
@@ -240,9 +239,7 @@ export function ClientRoot({ children }: ClientRootProps) {
                 {(serverConfigs) => (
                   <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
                     <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
-                      <AuthMetadataProvider value={serverConfigs.authMetadata}>
-                        {children}
-                      </AuthMetadataProvider>
+                      {children}
                     </MediaConfigProvider>
                   </CapabilitiesProvider>
                 )}

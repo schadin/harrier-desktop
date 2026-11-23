@@ -1,12 +1,9 @@
-import { ValidatedAuthMetadata } from 'matrix-js-sdk';
-import { createContext, useContext } from 'react';
+import type { AuthMetadataView } from '@harrier/core';
+import { useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
-const AuthMetadataContext = createContext<ValidatedAuthMetadata | undefined>(undefined);
-
-export const AuthMetadataProvider = AuthMetadataContext.Provider;
-
-export const useAuthMetadata = (): ValidatedAuthMetadata | undefined => {
-  const metadata = useContext(AuthMetadataContext);
-
-  return metadata;
+export const useAuthMetadata = (): AuthMetadataView | null => {
+  const core = useCore();
+  const store = core.auth.authMetadata;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 };

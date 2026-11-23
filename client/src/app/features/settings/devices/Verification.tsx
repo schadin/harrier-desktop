@@ -275,8 +275,8 @@ export function DeviceVerificationOptions() {
   const handleReset = () => {
     setMenuCords(undefined);
 
-    if (authMetadata) {
-      const authUrl = authMetadata.account_management_uri ?? authMetadata.issuer;
+    const authUrl = authMetadata?.account_management_uri ?? authMetadata?.issuer;
+    if (authUrl) {
       window.open(
         withSearchParam(authUrl, {
           action: accountManagementActions.crossSigningReset,

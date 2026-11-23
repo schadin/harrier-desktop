@@ -19,6 +19,7 @@ import type {
   BackupStatusView,
   BackupProgressView,
   CapabilitiesView,
+  AuthMetadataView,
   NotificationPreferencesView,
   NotificationPageView,
   RoomNotificationModeView,
@@ -47,7 +48,9 @@ export type AuthModule = {
   readonly session: SnapshotStore<SessionView | null>;
   readonly sync: SnapshotStore<SyncView>;
   readonly capabilities: SnapshotStore<CapabilitiesView>;
+  readonly authMetadata: SnapshotStore<AuthMetadataView | null>;
   refreshCapabilities(): Promise<CoreResult<void>>;
+  refreshAuthMetadata(): Promise<CoreResult<void>>;
   start(): Promise<CoreResult<void>>;
   stop(): Promise<void>;
   logout(): Promise<CoreResult<void>>;

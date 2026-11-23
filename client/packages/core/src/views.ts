@@ -149,6 +149,13 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type AuthMetadataView = {
+  readonly issuer?: string;
+  readonly account_management_uri?: string;
+  readonly account_management_actions_supported?: Readonly<Record<string, unknown>>;
+  readonly [key: string]: unknown;
+};
+
 export type CapabilitiesView = {
   readonly 'm.room_versions'?: {
     readonly default?: string;

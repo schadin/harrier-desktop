@@ -2,6 +2,17 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const authCases = [
+  contractTest('auth metadata is exposed as a plain view', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.auth.refreshAuthMetadata();
+      expect(result.ok).toBe(true);
+      expect(core.auth.authMetadata.getSnapshot().value === null).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('capabilities are exposed as a plain view', async (harness) => {
     const core = await harness.create();
     try {
