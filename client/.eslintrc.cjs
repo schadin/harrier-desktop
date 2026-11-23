@@ -57,8 +57,26 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': 'error',
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-shadow': 'error',
+
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            group: ['matrix-js-sdk/lib/crypto-api', 'matrix-js-sdk/lib/crypto-api/*'],
+            message: 'crypto-api допустим только в @harrier/core-matrix-js; используйте core.crypto.',
+          },
+        ],
+      },
+    ],
   },
   overrides: [
+    {
+      files: ['packages/core-matrix-js/**/*.ts', 'packages/core-matrix-js/**/*.tsx'],
+      rules: {
+        'no-restricted-imports': 'off',
+      },
+    },
     {
       files: ['*.ts'],
       rules: {

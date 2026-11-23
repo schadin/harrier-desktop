@@ -244,6 +244,7 @@ export function createSyncDriver(): SyncDriver {
   const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
 
+  client.getAuthMetadata = (async () => undefined) as unknown as typeof client.getAuthMetadata;
   client.getVersions = (async () => ({
     versions: ['v1.11'],
     unstable_features: {},
