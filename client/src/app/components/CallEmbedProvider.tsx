@@ -25,7 +25,6 @@ import {
   RoomEvent,
 } from 'matrix-js-sdk';
 import { IRTCNotificationContent, RTCNotificationType } from 'matrix-js-sdk/lib/matrixrtc/types';
-import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import {
   CallEmbedContextProvider,
   CallEmbedRefContextProvider,
@@ -243,7 +242,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
 
       if (event.isEncrypted()) {
         if (!event.isBeingDecrypted()) {
-          await event.attemptDecryption(mx.getCrypto() as CryptoBackend);
+          await event.attemptDecryption(mx.getCrypto() as never);
         }
         await event.getDecryptionPromise();
       }

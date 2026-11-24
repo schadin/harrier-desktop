@@ -18,7 +18,6 @@ import {
   RoomMember,
 } from 'matrix-js-sdk';
 import type { TimelineItem } from '@harrier/core';
-import { CryptoBackend } from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   IRoomCreateContent,
@@ -29,7 +28,6 @@ import {
   StateEvent,
   UnreadInfo,
 } from '../../types/matrix/room';
-import { isRetryableDecryptionFailureReason } from './decryptionFailure';
 
 export const getStateEvent = (
   room: Room,
@@ -396,42 +394,6 @@ export const isMembershipContentChanged = (
 
 export const isMembershipChanged = (mEvent: MatrixEvent): boolean =>
   isMembershipContentChanged(mEvent.getContent(), mEvent.getPrevContent());
-
-export const decryptAllTimelineEvent = async (mx: MatrixClient, timeline: EventTimeline) => {
-  const crypto = mx.getCrypto();
-  if (!crypto) return;
-  const decryptionPromises = timeline
-    .getEvents()
-    .filter((event) => event.isEncrypted())
-    .reverse()
-    .map((event) => event.attemptDecryption(crypto as CryptoBackend, { isRetry: true }));
-  await Promise.allSettled(decryptionPromises);
-};
-
-export const retryFailedTimelineEvents = async (mx: MatrixClient, roomId?: string) => {
-  const crypto = mx.getCrypto();
-  if (!crypto) return;
-  const rooms = roomId ? [mx.getRoom(roomId)].filter((r): r is Room => !!r) : mx.getRooms();
-  const events: MatrixEvent[] = [];
-  rooms.forEach((room) => {
-    if (!room.hasEncryptionStateEvent()) return;
-    room
-      .getLiveTimeline()
-      .getEvents()
-      .forEach((event) => {
-        if (
-          event.isDecryptionFailure() &&
-          isRetryableDecryptionFailureReason(event.decryptionFailureReason)
-        ) {
-          events.push(event);
-        }
-      });
-  });
-  const decryptionPromises = events.map((event) =>
-    event.attemptDecryption(crypto as CryptoBackend, { isRetry: true })
-  );
-  await Promise.allSettled(decryptionPromises);
-};
 
 export const getReactionContent = (eventId: string, key: string, shortcode?: string) => ({
   'm.relates_to': {
