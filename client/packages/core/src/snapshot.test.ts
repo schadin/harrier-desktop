@@ -46,4 +46,26 @@ describe('structural sharing', () => {
     expect(listener).not.toHaveBeenCalled();
     expect(store.getSnapshot().revision).toBe(0);
   });
+
+  it('does not bump revision for a structurally equal new value', () => {
+    const store = createSnapshotStore({ a: 1, nested: { b: [2, 3] } });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.publish({ a: 1, nested: { b: [2, 3] } });
+    expect(listener).not.toHaveBeenCalled();
+    expect(store.getSnapshot().revision).toBe(0);
+  });
+
+  it('reuses unchanged object and array branches', () => {
+    const unchanged = { id: 'stable' };
+    const previous = { left: unchanged, right: { count: 1 }, list: [unchanged] };
+    const store = createSnapshotStore(previous);
+    store.publish({ left: { id: 'stable' }, right: { count: 2 }, list: [{ id: 'stable' }] });
+    const next = store.getSnapshot().value;
+    expect(next).not.toBe(previous);
+    expect(next.left).toBe(unchanged);
+    expect(next.list).toBe(previous.list);
+    expect(next.right).not.toBe(previous.right);
+    expect(store.getSnapshot().revision).toBe(1);
+  });
 });
