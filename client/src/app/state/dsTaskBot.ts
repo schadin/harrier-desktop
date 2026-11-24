@@ -1,7 +1,7 @@
 import { atom, useAtomValue, useSetAtom, WritableAtom } from 'jotai';
 import { atomFamily } from 'jotai/utils';
 import { useCallback } from 'react';
-import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useCoreSession } from '../hooks/useCoreSession';
 import {
   atomWithLocalStorage,
   getLocalStorageItem,
@@ -49,8 +49,8 @@ export const dsTaskBotSettingsAtomFamily = atomFamily<string, DsTaskBotSettingsA
 );
 
 export const useDsTaskBotSettingsAtom = (): DsTaskBotSettingsAtom => {
-  const mx = useMatrixClient();
-  const userId = mx.getUserId() ?? '';
+  const session = useCoreSession();
+  const userId = session?.userId ?? '';
 
   return dsTaskBotSettingsAtomFamily(userId);
 };

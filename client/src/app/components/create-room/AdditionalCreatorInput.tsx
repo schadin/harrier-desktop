@@ -27,19 +27,19 @@ import React, {
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../utils/matrix';
 import { useDirectUsers } from '../../hooks/useDirectUsers';
 import { SettingTile } from '../setting-tile';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
 import { stopPropagation } from '../../utils/keyboard';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
 import { highlightText, makeHighlightRegex } from '../../plugins/react-custom-html-parser';
 
 export const useAdditionalCreators = (defaultCreators?: string[]) => {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const [additionalCreators, setAdditionalCreators] = useState<string[]>(
-    () => defaultCreators?.filter((id) => id !== mx.getSafeUserId()) ?? []
+    () => defaultCreators?.filter((id) => id !== (session?.userId ?? '')) ?? []
   );
 
   const addAdditionalCreator = (userId: string) => {
-    if (userId === mx.getSafeUserId()) return;
+    if (userId === (session?.userId ?? '')) return;
 
     setAdditionalCreators((creators) => {
       const creatorsSet = new Set(creators);
@@ -83,7 +83,7 @@ export function AdditionalCreatorInput({
   onRemove,
   disabled,
 }: AdditionalCreatorInputProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const [menuCords, setMenuCords] = useState<RectCords>();
   const directUsers = useDirectUsers();
 
@@ -156,7 +156,7 @@ export function AdditionalCreatorInput({
       <Box shrink="No" direction="Column" gap="100">
         <Box gap="200" wrap="Wrap">
           <Chip type="button" variant="Primary" radii="Pill" outlined>
-            <Text size="B300">{mx.getSafeUserId()}</Text>
+            <Text size="B300">{session?.userId ?? ''}</Text>
           </Chip>
           {additionalCreators.map((creator) => (
             <Chip

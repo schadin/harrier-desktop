@@ -31,7 +31,7 @@ import {
   useExploreFeaturedSelected,
   useExploreServer,
 } from '../../../hooks/router/useExploreSelected';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { getMxIdServer } from '../../../utils/matrix';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -164,9 +164,9 @@ export function AddServer() {
 }
 
 export function Explore() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   useNavToActivePathMapper('explore');
-  const userId = mx.getUserId();
+  const userId = session?.userId ?? null;
   const clientConfig = useClientConfig();
   const userServer = userId ? getMxIdServer(userId) : undefined;
   const servers =

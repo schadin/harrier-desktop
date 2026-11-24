@@ -3,7 +3,7 @@ import { Box, Icon, IconButton, Icons, Scroll, Text } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { useRoom } from '../../../hooks/useRoom';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { StateEvent } from '../../../../types/matrix/room';
 import { usePermissionGroups } from './usePermissionItems';
 import { PermissionGroups, Powers, PowersEditor } from '../../common-settings/permissions';
@@ -14,15 +14,18 @@ type PermissionsProps = {
   requestClose: () => void;
 };
 export function Permissions({ requestClose }: PermissionsProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
 
-  const canEditPowers = permissions.stateEvent(StateEvent.PowerLevelTags, mx.getSafeUserId());
-  const canEditPermissions = permissions.stateEvent(StateEvent.RoomPowerLevels, mx.getSafeUserId());
+  const canEditPowers = permissions.stateEvent(StateEvent.PowerLevelTags, session?.userId ?? '');
+  const canEditPermissions = permissions.stateEvent(
+    StateEvent.RoomPowerLevels,
+    session?.userId ?? ''
+  );
   const permissionGroups = usePermissionGroups();
 
   const [powerEditor, setPowerEditor] = useState(false);

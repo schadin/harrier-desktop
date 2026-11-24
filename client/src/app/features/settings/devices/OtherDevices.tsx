@@ -7,7 +7,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { ActionUIA, ActionUIAFlowsLoader } from '../../../components/ActionUIA';
 import { DeviceDeleteBtn, DeviceTile } from './DeviceTile';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useUIAMatrixError } from '../../../hooks/useUIAFlows';
 import { DeviceVerificationStatus } from '../../../components/DeviceVerificationStatus';
@@ -24,7 +24,7 @@ type OtherDevicesProps = {
   showVerification?: boolean;
 };
 export function OtherDevices({ devices, refreshDeviceList, showVerification }: OtherDevicesProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
   const authMetadata = useAuthMetadata();
   const accountManagementActions = useAccountManagementActions();
@@ -169,7 +169,7 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
                 }
               />
               {showVerification && (
-                <DeviceVerificationStatus userId={mx.getSafeUserId()} deviceId={device.deviceId}>
+                <DeviceVerificationStatus userId={session?.userId ?? ''} deviceId={device.deviceId}>
                   {(status) =>
                     status === VerificationStatus.Unverified && (
                       <VerifyOtherDeviceTile deviceId={device.deviceId} />

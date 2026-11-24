@@ -22,7 +22,7 @@ import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../../types/matrix/room';
@@ -37,11 +37,11 @@ type RoomEncryptionProps = {
   permissions: RoomPermissionsAPI;
 };
 export function RoomEncryption({ permissions }: RoomEncryptionProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
   const room = useRoom();
 
-  const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, mx.getSafeUserId());
+  const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, session?.userId ?? '');
   const content = useCoreRoomState(room, StateEvent.RoomEncryption);
   const enabled = content?.algorithm === ROOM_ENC_ALGO;
 

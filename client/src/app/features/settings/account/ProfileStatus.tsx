@@ -10,7 +10,7 @@ import { Box, Button, color, config, Icon, Icons, Input, PopOut, RectCords, Text
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import { useSetting } from '../../../state/hooks/settings';
@@ -28,9 +28,9 @@ import { EmojiBoard } from '../../../components/emoji-board';
 const MAX_STATUS_LENGTH = 60;
 
 export function StatusEditor() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
-  const userId = mx.getUserId()!;
+  const userId = session?.userId ?? '';
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
   const currentText = currentStatus?.text ?? '';

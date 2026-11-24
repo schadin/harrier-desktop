@@ -8,7 +8,7 @@ import { useRoom } from '../../../hooks/useRoom';
 import { useRoomDirectoryVisibility } from '../../../hooks/useRoomDirectoryVisibility';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { StateEvent } from '../../../../types/matrix/room';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { ExtendedJoinRules, JoinRule } from '../../../components/JoinRulesSwitcher';
 import type { RoomJoinRulesEventContent } from './RoomJoinRules';
@@ -18,12 +18,12 @@ type RoomPublishProps = {
   permissions: RoomPermissionsAPI;
 };
 export function RoomPublish({ permissions }: RoomPublishProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
-    mx.getSafeUserId()
+    session?.userId ?? ''
   );
   const content = useCoreRoomState<RoomJoinRulesEventContent>(room, StateEvent.RoomJoinRules);
   const rule: ExtendedJoinRules = (content?.join_rule as ExtendedJoinRules) ?? JoinRule.Invite;

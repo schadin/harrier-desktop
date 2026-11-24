@@ -18,7 +18,7 @@ import type { CoreError } from '@harrier/core';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useRoom } from '../../../hooks/useRoom';
 import {
   useLocalAliases,
@@ -39,12 +39,12 @@ type RoomPublishedAddressesProps = {
 };
 
 export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
-    mx.getSafeUserId()
+    session?.userId ?? ''
   );
 
   const [canonicalAlias, publishedAliases] = usePublishedAliases(room);
@@ -133,8 +133,8 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
 }
 
 function LocalAddressInput({ addLocalAlias }: { addLocalAlias: (alias: string) => Promise<void> }) {
-  const mx = useMatrixClient();
-  const userId = mx.getSafeUserId();
+  const session = useCoreSession();
+  const userId = session?.userId ?? '';
   const server = getMxIdServer(userId);
   const alive = useAlive();
 
@@ -364,12 +364,12 @@ function LocalAddressesList({
 }
 
 export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissionsAPI }) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
-    mx.getSafeUserId()
+    session?.userId ?? ''
   );
 
   const [expand, setExpand] = useState(false);

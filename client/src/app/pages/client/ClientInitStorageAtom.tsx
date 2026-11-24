@@ -1,5 +1,5 @@
 import React, { ReactNode, useMemo } from 'react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
 import { makeClosedNavCategoriesAtom } from '../../state/closedNavCategories';
 import { ClosedNavCategoriesProvider } from '../../state/hooks/closedNavCategories';
 import { makeClosedLobbyCategoriesAtom } from '../../state/closedLobbyCategories';
@@ -15,8 +15,8 @@ type ClientInitStorageAtomProps = {
   children: ReactNode;
 };
 export function ClientInitStorageAtom({ children }: ClientInitStorageAtomProps) {
-  const mx = useMatrixClient();
-  const userId = mx.getUserId()!;
+  const session = useCoreSession();
+  const userId = session?.userId ?? '';
 
   const closedNavCategoriesAtom = useMemo(() => makeClosedNavCategoriesAtom(userId), [userId]);
 

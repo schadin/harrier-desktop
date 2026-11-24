@@ -17,7 +17,7 @@ import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoom } from '../../../hooks/useRoom';
@@ -63,11 +63,11 @@ type RoomHistoryVisibilityProps = {
   permissions: RoomPermissionsAPI;
 };
 export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
   const room = useRoom();
 
-  const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, mx.getSafeUserId());
+  const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, session?.userId ?? '');
 
   const visibilityContent = useCoreRoomState<RoomHistoryVisibilityEventContent>(
     room,

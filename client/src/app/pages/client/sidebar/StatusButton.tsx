@@ -1,7 +1,7 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
 import { Box, color, config, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import {
@@ -15,9 +15,9 @@ import { settingsAtom } from '../../../state/settings';
 import { stopPropagation } from '../../../utils/keyboard';
 
 export function StatusButton() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
-  const userId = mx.getUserId()!;
+  const userId = session?.userId ?? '';
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
   const currentText = currentStatus?.text ?? '';

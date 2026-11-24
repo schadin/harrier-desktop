@@ -7,7 +7,7 @@ import {
   SidebarItemTooltip,
 } from '../../../components/sidebar';
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import * as css from './UnverifiedTab.css';
 import {
   useDeviceVerificationStatus,
@@ -19,20 +19,20 @@ import { Modal500 } from '../../../components/Modal500';
 import { Settings, SettingsPages } from '../../../features/settings';
 
 function UnverifiedIndicator() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
 
   const [devices] = useDeviceList();
 
   const [currentDevice, otherDevices] = useSplitCurrentDevice(devices);
 
   const verificationStatus = useDeviceVerificationStatus(
-    mx.getSafeUserId(),
+    session?.userId ?? '',
     currentDevice?.deviceId
   );
   const unverified = verificationStatus === VerificationStatus.Unverified;
 
   const otherDevicesId = useDeviceIds(otherDevices);
-  const unverifiedDeviceCount = useUnverifiedDeviceCount(mx.getSafeUserId(), otherDevicesId);
+  const unverifiedDeviceCount = useUnverifiedDeviceCount(session?.userId ?? '', otherDevicesId);
 
   const [settings, setSettings] = useState(false);
   const closeSettings = () => setSettings(false);

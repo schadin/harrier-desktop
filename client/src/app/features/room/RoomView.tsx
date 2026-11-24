@@ -6,7 +6,7 @@ import { useAtomValue } from 'jotai';
 import { useCoreRoomState } from '../../hooks/useCoreRoomState';
 import { MessageEvent, StateEvent } from '../../../types/matrix/room';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
 import { useEditor } from '../../components/editor';
 import { RoomInputPlaceholder } from './RoomInputPlaceholder';
 import { RoomTimeline } from './RoomTimeline';
@@ -82,7 +82,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const { roomId } = room;
   const editor = useEditor();
 
-  const mx = useMatrixClient();
+  const session = useCoreSession();
 
   const tombstoneContent = useCoreRoomState<{ body?: string; replacement_room?: string }>(
     room,
@@ -92,7 +92,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canMessage = permissions.event(MessageEvent.RoomMessage, mx.getSafeUserId());
+  const canMessage = permissions.event(MessageEvent.RoomMessage, session?.userId ?? '');
 
   const paletteOpened = useAtomValue(searchModalAtom);
   const messageInputFocusToken = useAtomValue(messageInputFocusAtom);

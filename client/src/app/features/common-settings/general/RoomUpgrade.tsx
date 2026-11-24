@@ -22,7 +22,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { useRoom } from '../../../hooks/useRoom';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { IRoomCreateContent, StateEvent } from '../../../../types/matrix/room';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
@@ -168,7 +168,7 @@ type RoomUpgradeProps = {
   requestClose: () => void;
 };
 export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
   const { navigateRoom, navigateSpace } = useRoomNavigate();
   const createContent = useCoreRoomState<IRoomCreateContent>(room, StateEvent.RoomCreate);
@@ -181,7 +181,7 @@ export function RoomUpgrade({ permissions, requestClose }: RoomUpgradeProps) {
   );
   const replacementRoom = tombstoneContent?.replacement_room;
 
-  const canUpgrade = permissions.stateEvent(StateEvent.RoomTombstone, mx.getSafeUserId());
+  const canUpgrade = permissions.stateEvent(StateEvent.RoomTombstone, session?.userId ?? '');
 
   const handleOpenRoom = () => {
     if (replacementRoom) {

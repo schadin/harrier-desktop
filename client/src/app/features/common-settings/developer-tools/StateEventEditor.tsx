@@ -21,7 +21,7 @@ import { TextViewerContent } from '../../../components/text-viewer';
 import { useStateEvent } from '../../../hooks/useStateEvent';
 import { useRoom } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useAlive } from '../../../hooks/useAlive';
@@ -247,7 +247,7 @@ export type StateEventEditorProps = StateEventInfo & {
 };
 
 export function StateEventEditor({ type, stateKey, requestClose }: StateEventEditorProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
   const stateEvent = useStateEvent(room, type as unknown as StateEvent, stateKey);
   const [editContent, setEditContent] = useState<object>();
@@ -255,7 +255,7 @@ export function StateEventEditor({ type, stateKey, requestClose }: StateEventEdi
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canEdit = permissions.stateEvent(type, mx.getSafeUserId());
+  const canEdit = permissions.stateEvent(type, session?.userId ?? '');
 
   const eventJSONStr = useMemo(() => {
     if (!stateEvent) return '';

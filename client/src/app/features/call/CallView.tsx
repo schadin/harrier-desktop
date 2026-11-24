@@ -7,7 +7,7 @@ import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { useRoom } from '../../hooks/useRoom';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
 import { StateEvent } from '../../../types/matrix/room';
 import { useCoreCallMembers } from '../../hooks/useCall';
 import { CallMemberRenderer } from './CallMemberCard';
@@ -75,7 +75,7 @@ function AlreadyInCallMessage() {
 }
 
 function CallPrescreen() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const room = useRoom();
   const livekitSupported = useLivekitSupport();
   const rtcSupported = webRTCSupported();
@@ -86,7 +86,7 @@ function CallPrescreen() {
   const permissions = useRoomPermissions(creators, powerLevels);
   const hasPermission = permissions.stateEvent(
     StateEvent.GroupCallMemberPrefix,
-    mx.getSafeUserId()
+    session?.userId ?? ''
   );
 
   const callMembers = useCoreCallMembers(room.roomId);
