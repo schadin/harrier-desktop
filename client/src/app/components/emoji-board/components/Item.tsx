@@ -1,11 +1,11 @@
 import React from 'react';
 import { Box } from 'folds';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MediaRef } from '@harrier/core';
 import { EmojiItemInfo, EmojiType } from '../types';
 import * as css from './styles.css';
 import { PackImageReader } from '../../../plugins/custom-emoji';
 import { IEmoji } from '../../../plugins/emoji';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
 
 export const getEmojiItemInfo = (element: Element): EmojiItemInfo | undefined => {
   const label = element.getAttribute('title');
@@ -45,12 +45,17 @@ export function EmojiItem({ emoji }: EmojiItemProps) {
   );
 }
 
+const usePackImageSource = (image: PackImageReader): string => {
+  const mediaRef = React.useMemo<MediaRef>(() => toMediaRef(image.url), [image.url]);
+  return useMediaSource(mediaRef) ?? '';
+};
+
 type CustomEmojiItemProps = {
-  mx: MatrixClient;
-  useAuthentication?: boolean;
   image: PackImageReader;
 };
-export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiItemProps) {
+export function CustomEmojiItem({ image }: CustomEmojiItemProps) {
+  const src = usePackImageSource(image);
+
   return (
     <Box
       as="button"
@@ -68,19 +73,19 @@ export function CustomEmojiItem({ mx, useAuthentication, image }: CustomEmojiIte
         loading="lazy"
         className={css.CustomEmojiImg}
         alt={image.body || image.shortcode}
-        src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
+        src={src}
       />
     </Box>
   );
 }
 
 type StickerItemProps = {
-  mx: MatrixClient;
-  useAuthentication?: boolean;
   image: PackImageReader;
 };
 
-export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) {
+export function StickerItem({ image }: StickerItemProps) {
+  const src = usePackImageSource(image);
+
   return (
     <Box
       as="button"
@@ -98,7 +103,7 @@ export function StickerItem({ mx, useAuthentication, image }: StickerItemProps) 
         loading="lazy"
         className={css.StickerImg}
         alt={image.body || image.shortcode}
-        src={mxcUrlToHttp(mx, image.url, useAuthentication) ?? ''}
+        src={src}
       />
     </Box>
   );

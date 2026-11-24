@@ -12,29 +12,29 @@ import {
   toRem,
 } from 'folds';
 import classNames from 'classnames';
-import { Room } from 'matrix-js-sdk';
 import type { ReactionCountView } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { Reaction, ReactionTooltipMsg } from '../../../components/message';
 import * as css from './styles.css';
 import { ReactionViewer } from '../reaction-viewer';
 import { stopPropagation } from '../../../utils/keyboard';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 
 export type ReactionsProps = {
-  room: Room;
+  roomId: string;
   mEventId: string;
   canSendReaction?: boolean;
   reactions: readonly ReactionCountView[];
   onReactionToggle: (targetEventId: string, key: string, shortcode?: string) => void;
 };
 export const Reactions = as<'div', ReactionsProps>(
-  ({ className, room, reactions, mEventId, canSendReaction, onReactionToggle, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
+  (
+    { className, roomId, reactions, mEventId, canSendReaction, onReactionToggle, ...props },
+    ref
+  ) => {
+    const session = useCoreSession();
     const [viewer, setViewer] = useState<boolean | string>(false);
-    const myUserId = mx.getUserId();
+    const myUserId = session?.userId ?? null;
 
     const handleViewReaction: MouseEventHandler<HTMLButtonElement> = (evt) => {
       evt.stopPropagation();
@@ -65,7 +65,7 @@ export const Reactions = as<'div', ReactionsProps>(
                 <Tooltip style={{ maxWidth: toRem(200) }}>
                   <Text className={css.ReactionsTooltipText} size="T300">
                     <ReactionTooltipMsg
-                      room={room}
+                      roomId={roomId}
                       reaction={key}
                       senders={senders}
                       shortcode={shortcode}
@@ -80,7 +80,6 @@ export const Reactions = as<'div', ReactionsProps>(
                   data-reaction-key={key}
                   aria-pressed={isPressed}
                   key={key}
-                  mx={mx}
                   reaction={key}
                   count={count}
                   onClick={
@@ -88,7 +87,6 @@ export const Reactions = as<'div', ReactionsProps>(
                   }
                   onContextMenu={handleViewReaction}
                   aria-disabled={!canSendReaction}
-                  useAuthentication={useAuthentication}
                 />
               )}
             </TooltipProvider>
@@ -96,7 +94,7 @@ export const Reactions = as<'div', ReactionsProps>(
         })}
         {reactions.length > 0 && (
           <Overlay
-            onContextMenu={(evt: any) => {
+            onContextMenu={(evt: React.MouseEvent<HTMLElement>) => {
               evt.stopPropagation();
             }}
             open={!!viewer}
@@ -114,7 +112,7 @@ export const Reactions = as<'div', ReactionsProps>(
               >
                 <Modal variant="Surface" size="300">
                   <ReactionViewer
-                    room={room}
+                    roomId={roomId}
                     initialKey={typeof viewer === 'string' ? viewer : undefined}
                     reactions={reactions}
                     requestClose={() => setViewer(false)}

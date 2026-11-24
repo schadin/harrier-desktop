@@ -3,9 +3,7 @@ import { Box, Chip, Icon, IconButton, Icons, Line, Scroll, Spinner, Text, config
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import { JoinRule, RestrictedAllowType, Room } from 'matrix-js-sdk';
-import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
-import type { PublicRoomView } from '@harrier/core';
+import type { HarrierCore, JsonObject, PublicRoomView } from '@harrier/core';
 import produce from 'immer';
 import { useSpace } from '../../hooks/useSpace';
 import { Page, PageContent, PageContentCenter, PageHeroSection } from '../../components/page';
@@ -35,24 +33,20 @@ import {
 import { mDirectAtom } from '../../state/mDirectList';
 import { makeLobbyCategoryId } from '../../state/closedLobbyCategories';
 import { useCategoryHandler } from '../../hooks/useCategoryHandler';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useCore } from '../../hooks/useCore';
 import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { allRoomsAtom } from '../../state/room-list/roomList';
-import { getCanonicalAliasOrRoomId, rateLimitedActions } from '../../utils/matrix';
+import { rateLimitedActions } from '../../utils/matrix';
 import { getSpaceRoomPath } from '../../pages/pathUtils';
 import { StateEvent } from '../../../types/matrix/room';
 import { CanDropCallback, useDnDMonitor } from './DnD';
 import { ASCIILexicalTable, orderKeys } from '../../utils/ASCIILexicalTable';
-import { getStateEvent } from '../../utils/room';
 import { useClosedLobbyCategoriesAtom } from '../../state/hooks/closedLobbyCategories';
 import {
-  makeCinnySpacesContent,
+  InCinnySpacesContent,
   sidebarItemWithout,
   useSidebarItems,
 } from '../../hooks/useSidebarItems';
-import { useOrphanSpaces } from '../../state/hooks/roomList';
-import { roomToParentsAtom } from '../../state/room/roomToParents';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { SpaceHierarchy } from './SpaceHierarchy';
@@ -62,13 +56,37 @@ import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { getRoomPermissionsAPI } from '../../hooks/useRoomPermissions';
 import { getRoomCreatorsForRoomId } from '../../hooks/useRoomCreators';
 
+type RestrictedAllow = {
+  type?: string;
+  room_id?: string;
+};
+
+const getCanonicalAliasOrRoomId = (
+  core: HarrierCore,
+  roomId: string,
+  roomIds: readonly string[]
+): string => {
+  const room = core.rooms.room(roomId).getSnapshot().value;
+  if (!room) return roomId;
+  if (core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().value) return roomId;
+  if (!room.canonicalAlias) return roomId;
+
+  const aliasedRoomId = roomIds.find((id) => {
+    const candidate = core.rooms.room(id).getSnapshot().value;
+    const tombstoned =
+      core.rooms.stateEntry(id, StateEvent.RoomTombstone).getSnapshot().value !== null;
+    return candidate?.canonicalAlias === room.canonicalAlias && !tombstoned;
+  });
+  return aliasedRoomId === roomId ? room.canonicalAlias : roomId;
+};
+
 const useCanDropLobbyItem = (
-  space: Room,
+  space: { roomId: string },
   roomsPowerLevels: Map<string, IPowerLevels>,
-  getRoom: (roomId: string) => Room | undefined
+  getRoom: (roomId: string) => unknown
 ): CanDropCallback => {
-  const mx = useMatrixClient();
   const core = useCore();
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
 
   const canDropSpace: CanDropCallback = useCallback(
     (item, container) => {
@@ -86,14 +104,14 @@ const useCanDropLobbyItem = (
 
       if (
         getRoom(containerSpaceId) === undefined ||
-        !permissions.stateEvent(StateEvent.SpaceChild, mx.getSafeUserId())
+        !permissions.stateEvent(StateEvent.SpaceChild, userId)
       ) {
         return false;
       }
 
       return true;
     },
-    [space, roomsPowerLevels, getRoom, mx, core]
+    [space, roomsPowerLevels, getRoom, userId, core]
   );
 
   const canDropRoom: CanDropCallback = useCallback(
@@ -102,7 +120,8 @@ const useCanDropLobbyItem = (
         'space' in container.item ? container.item.roomId : container.item.parentId;
 
       const draggingOutsideSpace = item.parentId !== containerSpaceId;
-      const restrictedItem = mx.getRoom(item.roomId)?.getJoinRule() === JoinRule.Restricted;
+      const restrictedItem =
+        core.rooms.room(item.roomId).getSnapshot().value?.joinRule === 'restricted';
 
       // check and do not allow restricted room to be dragged outside
       // current space if can't change `m.room.join_rules` `content.allow`
@@ -111,10 +130,7 @@ const useCanDropLobbyItem = (
         const itemCreators = getRoomCreatorsForRoomId(core, item.roomId);
         const itemPermissions = getRoomPermissionsAPI(itemCreators, itemPowerLevels);
 
-        const canChangeJoinRuleAllow = itemPermissions.stateEvent(
-          StateEvent.RoomJoinRules,
-          mx.getSafeUserId()
-        );
+        const canChangeJoinRuleAllow = itemPermissions.stateEvent(StateEvent.RoomJoinRules, userId);
         if (!canChangeJoinRuleAllow) {
           return false;
         }
@@ -125,13 +141,13 @@ const useCanDropLobbyItem = (
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
       if (
         getRoom(containerSpaceId) === undefined ||
-        !permissions.stateEvent(StateEvent.SpaceChild, mx.getSafeUserId())
+        !permissions.stateEvent(StateEvent.SpaceChild, userId)
       ) {
         return false;
       }
       return true;
     },
-    [mx, core, getRoom, roomsPowerLevels]
+    [userId, core, getRoom, roomsPowerLevels]
   );
 
   const canDrop: CanDropCallback = useCallback(
@@ -156,8 +172,8 @@ const useCanDropLobbyItem = (
 
 export function Lobby() {
   const navigate = useNavigate();
-  const mx = useMatrixClient();
   const core = useCore();
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
   const mDirects = useAtomValue(mDirectAtom);
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
@@ -174,9 +190,15 @@ export function Lobby() {
   const screenSize = useScreenSizeContext();
   const [onTop, setOnTop] = useState(true);
   const [closedCategories, setClosedCategories] = useAtom(useClosedLobbyCategoriesAtom());
-  const [sidebarItems] = useSidebarItems(
-    useOrphanSpaces(mx, allRoomsAtom, useAtomValue(roomToParentsAtom))
+  const orphanSpaces = useMemo(
+    () =>
+      allRooms.filter((roomId) => {
+        const room = core.rooms.room(roomId).getSnapshot().value;
+        return room?.isSpace && core.rooms.parents(roomId).getSnapshot().value.length === 0;
+      }),
+    [core, allRooms]
   );
+  const [sidebarItems] = useSidebarItems(orphanSpaces);
   const sidebarSpaces = useMemo(() => {
     const sideSpaces = sidebarItems.flatMap((item) => {
       if (typeof item === 'string') return item;
@@ -239,7 +261,7 @@ export function Lobby() {
 
             return [getRoom(i.space.roomId), ...childRooms];
           })
-          .filter((r) => !!r) as Room[],
+          .filter((r): r is NonNullable<typeof r> => !!r),
       [hierarchy, getRoom]
     )
   );
@@ -293,7 +315,7 @@ export function Lobby() {
 
             const creators = getRoomCreatorsForRoomId(core, reorder.item.parentId);
             const permissions = getRoomPermissionsAPI(creators, parentPL);
-            const canEdit = permissions.stateEvent(StateEvent.SpaceChild, mx.getSafeUserId());
+            const canEdit = permissions.stateEvent(StateEvent.SpaceChild, userId);
             return canEdit && reorder.orderKey !== currentOrders[index];
           });
 
@@ -310,7 +332,7 @@ export function Lobby() {
           });
         }
       },
-      [core, mx, hierarchy, lex, roomsPowerLevels]
+      [core, userId, hierarchy, lex, roomsPowerLevels]
     )
   );
   const reorderingSpace = reorderSpaceState.status === AsyncStatus.Loading;
@@ -318,7 +340,7 @@ export function Lobby() {
   const [reorderRoomState, reorderRoom] = useAsyncCallback(
     useCallback(
       async (item: HierarchyItem, containerItem: HierarchyItem) => {
-        const itemRoom = mx.getRoom(item.roomId);
+        const itemRoom = core.rooms.room(item.roomId).getSnapshot().value;
         if (!item.parentId) {
           return;
         }
@@ -331,23 +353,17 @@ export function Lobby() {
           sendRoomState(core, item.parentId, StateEvent.SpaceChild, {}, item.roomId);
         }
 
-        if (
-          itemRoom &&
-          itemRoom.getJoinRule() === JoinRule.Restricted &&
-          item.parentId !== containerParentId
-        ) {
+        if (itemRoom && itemRoom.joinRule === 'restricted' && item.parentId !== containerParentId) {
           // change join rule allow parameter when dragging
           // restricted room from one space to another
-          const joinRuleContent = getStateEvent(
-            itemRoom,
-            StateEvent.RoomJoinRules
-          )?.getContent<RoomJoinRulesEventContent>();
+          const { joinRuleContent } = itemRoom;
 
           if (joinRuleContent) {
-            const allow =
-              joinRuleContent.allow?.filter((allowRule) => allowRule.room_id !== item.parentId) ??
-              [];
-            allow.push({ type: RestrictedAllowType.RoomMembership, room_id: containerParentId });
+            const currentAllow = Array.isArray(joinRuleContent.allow)
+              ? (joinRuleContent.allow as RestrictedAllow[])
+              : [];
+            const allow = currentAllow.filter((allowRule) => allowRule.room_id !== item.parentId);
+            allow.push({ type: 'm.room_membership', room_id: containerParentId });
             sendRoomState(core, itemRoom.roomId, StateEvent.RoomJoinRules, {
               ...joinRuleContent,
               allow,
@@ -398,7 +414,7 @@ export function Lobby() {
           });
         }
       },
-      [core, mx, hierarchy, lex]
+      [core, hierarchy, lex]
     )
   );
   const reorderingRoom = reorderRoomState.status === AsyncStatus.Loading;
@@ -442,8 +458,8 @@ export function Lobby() {
   const handleOpenRoom: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const rId = evt.currentTarget.getAttribute('data-room-id');
     if (!rId) return;
-    const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
-    navigate(getSpaceRoomPath(pSpaceIdOrAlias, getCanonicalAliasOrRoomId(mx, rId)));
+    const pSpaceIdOrAlias = getCanonicalAliasOrRoomId(core, space.roomId, allRooms);
+    navigate(getSpaceRoomPath(pSpaceIdOrAlias, getCanonicalAliasOrRoomId(core, rId, allRooms)));
   };
 
   const togglePinToSidebar = useCallback(
@@ -452,10 +468,18 @@ export function Lobby() {
       if (!sidebarSpaces.has(rId)) {
         newItems.push(rId);
       }
-      const newSpacesContent = makeCinnySpacesContent(mx, newItems);
-      mx.setAccountData(AccountDataEvent.CinnySpaces as any, newSpacesContent as any);
+      const currentContent = core.auth.accountData(AccountDataEvent.CinnySpaces).getSnapshot()
+        .value as unknown as InCinnySpacesContent | null;
+      const newSpacesContent: InCinnySpacesContent = {
+        ...(currentContent ?? {}),
+        sidebar: newItems,
+      };
+      core.auth.setAccountData(
+        AccountDataEvent.CinnySpaces,
+        newSpacesContent as unknown as JsonObject
+      );
     },
-    [mx, sidebarItems, sidebarSpaces]
+    [core, sidebarItems, sidebarSpaces]
   );
 
   return (
@@ -530,7 +554,6 @@ export function Lobby() {
                             disabledReorder={reordering}
                             disabledRoomReorder={sortType !== 'manual'}
                             nextSpaceId={nextSpaceId}
-                            getRoom={getRoom}
                             pinned={sidebarSpaces.has(item.space.roomId)}
                             togglePinToSidebar={togglePinToSidebar}
                             onSpacesFound={handleSpacesFound}

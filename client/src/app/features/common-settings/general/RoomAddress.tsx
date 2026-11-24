@@ -14,7 +14,7 @@ import {
   Text,
   toRem,
 } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
@@ -50,7 +50,9 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
   const [canonicalAlias, publishedAliases] = usePublishedAliases(room);
   const setMainAlias = useSetMainAlias(room);
 
-  const [mainState, setMain] = useAsyncCallback(setMainAlias);
+  const [mainState, setMain] = useAsyncCallback<void, CoreError, [string | undefined]>(
+    setMainAlias
+  );
   const loading = mainState.status === AsyncStatus.Loading;
 
   return (
@@ -120,7 +122,7 @@ export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesPr
 
             {mainState.status === AsyncStatus.Error && (
               <Text size="T200" style={{ color: color.Critical.Main }}>
-                {(mainState.error as MatrixError).message}
+                {mainState.error.message}
               </Text>
             )}
           </Box>
@@ -136,7 +138,7 @@ function LocalAddressInput({ addLocalAlias }: { addLocalAlias: (alias: string) =
   const server = getMxIdServer(userId);
   const alive = useAlive();
 
-  const [addState, addAlias] = useAsyncCallback(addLocalAlias);
+  const [addState, addAlias] = useAsyncCallback<void, CoreError, [string]>(addLocalAlias);
   const adding = addState.status === AsyncStatus.Loading;
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
@@ -189,9 +191,9 @@ function LocalAddressInput({ addLocalAlias }: { addLocalAlias: (alias: string) =
       </Box>
       {addState.status === AsyncStatus.Error && (
         <Text style={{ color: color.Critical.Main }} size="T200">
-          {(addState.error as MatrixError).httpStatus === 409
+          {addState.error.httpStatus === 409
             ? 'Address is already in use!'
-            : (addState.error as MatrixError).message}
+            : addState.error.message}
         </Text>
       )}
     </Box>
@@ -232,7 +234,7 @@ function LocalAddressesList({
     }
   };
 
-  const [deleteState, deleteAliases] = useAsyncCallback(
+  const [deleteState, deleteAliases] = useAsyncCallback<void, CoreError, [string[]]>(
     useCallback(
       async (aliases: string[]) => {
         for (let i = 0; i < aliases.length; i += 1) {
@@ -244,8 +246,10 @@ function LocalAddressesList({
       [removeLocalAlias]
     )
   );
-  const [publishState, publish] = useAsyncCallback(publishAliases);
-  const [unpublishState, unpublish] = useAsyncCallback(unpublishAliases);
+  const [publishState, publish] = useAsyncCallback<void, CoreError, [string[]]>(publishAliases);
+  const [unpublishState, unpublish] = useAsyncCallback<void, CoreError, [string[]]>(
+    unpublishAliases
+  );
 
   const handleDelete = () => {
     deleteAliases(selectedAliases).then(clearSelected);
@@ -261,10 +265,10 @@ function LocalAddressesList({
     deleteState.status === AsyncStatus.Loading ||
     publishState.status === AsyncStatus.Loading ||
     unpublishState.status === AsyncStatus.Loading;
-  let error: MatrixError | undefined;
-  if (deleteState.status === AsyncStatus.Error) error = deleteState.error as MatrixError;
-  if (publishState.status === AsyncStatus.Error) error = publishState.error as MatrixError;
-  if (unpublishState.status === AsyncStatus.Error) error = unpublishState.error as MatrixError;
+  let error: CoreError | undefined;
+  if (deleteState.status === AsyncStatus.Error) error = deleteState.error;
+  if (publishState.status === AsyncStatus.Error) error = publishState.error;
+  if (unpublishState.status === AsyncStatus.Error) error = unpublishState.error;
 
   return (
     <Box direction="Column" gap="300">

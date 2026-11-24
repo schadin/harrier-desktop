@@ -1,22 +1,18 @@
-import { Room } from 'matrix-js-sdk';
+import type { RoomView } from '@harrier/core';
 import { useMemo } from 'react';
 import { getAllParents } from '../utils/room';
-import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 
 export const useImagePackRooms = (
   roomId: string,
   roomToParents: Map<string, Set<string>>
-): Room[] => {
-  const mx = useMatrixClient();
+): RoomView[] => {
+  const core = useCore();
 
-  const imagePackRooms: Room[] = useMemo(() => {
+  return useMemo(() => {
     const allParentSpaces = [roomId].concat(Array.from(getAllParents(roomToParents, roomId)));
-    return allParentSpaces.reduce<Room[]>((list, rId) => {
-      const r = mx.getRoom(rId);
-      if (r) list.push(r);
-      return list;
-    }, []);
-  }, [mx, roomId, roomToParents]);
-
-  return imagePackRooms;
+    return allParentSpaces
+      .map((id) => core.rooms.room(id).getSnapshot().value)
+      .filter((room): room is RoomView => !!room);
+  }, [core, roomId, roomToParents]);
 };

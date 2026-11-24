@@ -23,7 +23,7 @@ import {
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue } from 'jotai';
-import { Room, WritableAccountDataEvents } from 'matrix-js-sdk';
+import type { JsonObject } from '@harrier/core';
 import { useGlobalImagePacks, useRoomsImagePacks } from '../../../hooks/useImagePacks';
 import { SequenceCardStyle } from '../styles.css';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -31,6 +31,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { mxcUrlToHttp } from '../../../utils/matrix';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import {
   EmoteRoomsContent,
   ImagePack,
@@ -54,6 +55,7 @@ function GlobalPackSelector({
   onSelect: (addresses: PackAddress[]) => void;
 }) {
   const mx = useMatrixClient();
+  const core = useCore();
   const roomToPacks = useMemo(() => {
     const rToP = new Map<string, ImagePack[]>();
     packs
@@ -135,7 +137,7 @@ function GlobalPackSelector({
             }}
           >
             {Array.from(roomToPacks.entries()).map(([roomId, roomPacks]) => {
-              const room = mx.getRoom(roomId);
+              const room = core.rooms.room(roomId).getSnapshot().value;
               if (!room) return null;
               const roomPackAddresses = roomPacks
                 .map((pack) => pack.address)
@@ -252,19 +254,19 @@ type GlobalPacksProps = {
 };
 export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const globalPacks = useGlobalImagePacks();
   const [menuCords, setMenuCords] = useState<RectCords>();
 
   const roomIds = useAtomValue(allRoomsAtom);
   const rooms = useMemo(() => {
-    const rs: Room[] = [];
-    roomIds.forEach((rId) => {
-      const r = mx.getRoom(rId);
-      if (r) rs.push(r);
+    const rs = roomIds.flatMap((roomId) => {
+      const room = core.rooms.room(roomId).getSnapshot().value;
+      return room ? [room] : [];
     });
     return rs;
-  }, [mx, roomIds]);
+  }, [core, roomIds]);
   const roomsImagePack = useRoomsImagePacks(rooms);
   const nonGlobalPacks = useMemo(
     () =>
@@ -303,9 +305,8 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
   const [applyState, applyChanges] = useAsyncCallback(
     useCallback(async () => {
       const content =
-        mx
-          .getAccountData(AccountDataEvent.PoniesEmoteRooms as keyof WritableAccountDataEvents)
-          ?.getContent<EmoteRoomsContent>() ?? {};
+        (core.auth.accountData(AccountDataEvent.PoniesEmoteRooms).getSnapshot()
+          .value as unknown as EmoteRoomsContent | null) ?? {};
       const updatedContent: EmoteRoomsContent = JSON.parse(JSON.stringify(content));
 
       selectedPacks.forEach((addr) => {
@@ -322,11 +323,12 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
         }
       });
 
-      await mx.setAccountData(
-        AccountDataEvent.PoniesEmoteRooms as keyof WritableAccountDataEvents,
-        updatedContent
+      const result = await core.auth.setAccountData(
+        AccountDataEvent.PoniesEmoteRooms,
+        updatedContent as unknown as JsonObject
       );
-    }, [mx, selectedPacks, removedPacks])
+      if (!result.ok) throw result.error;
+    }, [core, selectedPacks, removedPacks])
   );
 
   const resetChanges = useCallback(() => {

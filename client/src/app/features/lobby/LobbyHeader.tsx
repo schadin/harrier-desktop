@@ -71,7 +71,7 @@ const LobbyMenu = forwardRef<HTMLDivElement, LobbyMenuProps>(
       <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
         {invitePrompt && (
           <InviteUserPrompt
-            room={space}
+            roomId={space.roomId}
             requestClose={() => {
               setInvitePrompt(false);
               requestClose();

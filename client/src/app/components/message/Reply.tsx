@@ -1,9 +1,8 @@
 import { Box, Icon, Icons, Text, as, color, toRem } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import React, { MouseEventHandler, ReactNode, useMemo } from 'react';
 import classNames from 'classnames';
 import type { TimelineItem } from '@harrier/core';
-import { getMemberDisplayName, trimReplyFromBody } from '../../utils/room';
+import { trimReplyFromBody } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { LinePlaceholder } from './placeholder';
 import { randomNumberBetween } from '../../utils/common';
@@ -11,6 +10,7 @@ import * as css from './Reply.css';
 import { MessageBadEncryptedContent, MessageDeletedContent, MessageFailedContent } from './content';
 import { scaleSystemEmoji } from '../../plugins/react-custom-html-parser';
 import { useCoreEvent } from '../../hooks/useCoreTimeline';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import colorMXID from '../../../util/colorMXID';
 import { GetMemberPowerTag } from '../../hooks/useMemberPowerTag';
 
@@ -62,7 +62,7 @@ const itemBody = (item: TimelineItem | undefined): string | undefined => {
 };
 
 type ReplyProps = {
-  room: Room;
+  roomId: string;
   replyEventId: string;
   replyItem?: TimelineItem | undefined;
   threadRootId?: string | undefined;
@@ -75,7 +75,7 @@ type ReplyProps = {
 export const Reply = as<'div', ReplyProps>(
   (
     {
-      room,
+      roomId,
       replyEventId,
       replyItem,
       threadRootId,
@@ -88,15 +88,27 @@ export const Reply = as<'div', ReplyProps>(
     ref
   ) => {
     const placeholderWidth = useMemo(() => randomNumberBetween(40, 400), []);
+    const members = useRoomMembers(roomId);
     // Без replyItem (поиск, закрепы, уведомления) событие резолвится
     // через core (`timeline.event`), а не через SDK-фетч.
-    const fetchedItem = useCoreEvent(room.roomId, replyEventId, !replyItem);
+    const fetchedItem = useCoreEvent(roomId, replyEventId, !replyItem);
     const resolvedItem = replyItem ?? fetchedItem ?? undefined;
 
     const body = itemBody(resolvedItem);
     const sender = resolvedItem?.sender;
     const powerTag = sender ? getMemberPowerTag?.(sender) : undefined;
     const tagColor = powerTag?.color ? accessibleTagColors?.get(powerTag.color) : undefined;
+
+    const rawDisplayName = sender
+      ? members.find((member) => member.userId === sender)?.rawDisplayName
+      : undefined;
+    let senderName: string | undefined;
+    if (sender) {
+      senderName =
+        rawDisplayName !== undefined && rawDisplayName !== sender
+          ? rawDisplayName
+          : getMxIdLocalPart(sender);
+    }
 
     const usernameColor = legacyUsernameColor ? colorMXID(sender ?? replyEventId) : tagColor;
 
@@ -121,7 +133,7 @@ export const Reply = as<'div', ReplyProps>(
           username={
             sender && (
               <Text size="T300" truncate>
-                <b>{getMemberDisplayName(room, sender) ?? getMxIdLocalPart(sender)}</b>
+                <b>{senderName}</b>
               </Text>
             )
           }

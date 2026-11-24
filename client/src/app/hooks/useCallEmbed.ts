@@ -1,6 +1,6 @@
 import { createContext, RefObject, useCallback, useContext, useEffect, useState } from 'react';
-import { MatrixClient, Room } from 'matrix-js-sdk';
 import { useSetAtom } from 'jotai';
+import type { MatrixClientCallLike, RoomLike } from '../../types/matrix/legacyStructural';
 import {
   CallEmbed,
   ElementCallThemeKind,
@@ -36,8 +36,8 @@ export const useCallEmbedRef = (): RefObject<HTMLDivElement> => {
 };
 
 export const createCallEmbed = (
-  mx: MatrixClient,
-  room: Room,
+  mx: MatrixClientCallLike,
+  room: RoomLike,
   dm: boolean,
   themeKind: ElementCallThemeKind,
   container: HTMLElement,
@@ -62,7 +62,7 @@ export const useCallStart = (dm = false) => {
   const callEmbedRef = useCallEmbedRef();
 
   const startCall = useCallback(
-    (room: Room, pref?: CallPreferences) => {
+    (room: RoomLike, pref?: CallPreferences) => {
       const container = callEmbedRef.current;
       if (!container) {
         throw new Error('Failed to start call, No embed container element found!');

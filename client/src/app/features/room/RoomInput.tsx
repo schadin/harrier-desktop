@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { isKeyHotkey } from 'is-hotkey';
-import { EventType, IContent, MsgType, RelationType, Room } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { Descendant, Transforms, Editor } from 'slate';
 import {
@@ -123,12 +122,14 @@ import { useTheme } from '../../hooks/useTheme';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { usePowerLevelTags } from '../../hooks/usePowerLevelTags';
 import { useComposingCheck } from '../../hooks/useComposingCheck';
+import { EventType, RelationType, type RoomLike } from '../../../types/matrix/legacyStructural';
+import { MsgType, type IContent } from '../../../types/matrix/protocol';
 
 interface RoomInputProps {
   editor: Editor;
   fileDropContainerRef: RefObject<HTMLElement>;
   roomId: string;
-  room: Room;
+  room: RoomLike;
 }
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   ({ editor, fileDropContainerRef, roomId, room }, ref) => {
@@ -175,7 +176,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
     const uploadBoardHandlers = useRef<UploadBoardImperativeHandlers>();
 
-    const imagePackRooms: Room[] = useImagePackRooms(roomId, roomToParents);
+    const imagePackRooms = useImagePackRooms(roomId, roomToParents);
 
     const [toolbar, setToolbar] = useSetting(settingsAtom, 'editorToolbar');
     const [autocompleteQuery, setAutocompleteQuery] =
@@ -326,7 +327,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           allowInlineMarkdown: isMarkdown,
         })
       );
-      let msgType = MsgType.Text;
+      let msgType: MsgType = MsgType.Text;
 
       if (commandName) {
         plainText = trimCommand(commandName, plainText);
@@ -360,7 +361,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
 
       const body = plainText;
       const formattedBody = customHtml;
-      const mentionData = getMentions(mx, roomId, editor);
+      const mentionData = getMentions(mx.getUserId(), editor);
 
       const content: IContent = {
         msgtype: msgType,
@@ -559,7 +560,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.UserMention && (
           <UserMentionAutocomplete
-            room={room}
+            roomId={roomId}
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
@@ -575,7 +576,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.Command && (
           <CommandAutocomplete
-            room={room}
+            commands={commands}
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}
@@ -583,7 +584,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.BotCommand && (
           <BotCommandAutocomplete
-            room={room}
+            roomId={roomId}
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}

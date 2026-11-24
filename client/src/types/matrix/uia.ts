@@ -18,3 +18,7 @@ export type AuthDict = {
   session?: string;
   [key: string]: unknown;
 };
+
+export type UIAuthCallback<T> = (
+  makeRequest: (authData: AuthDict | null) => Promise<T>
+) => Promise<T>;

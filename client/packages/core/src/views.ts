@@ -57,6 +57,9 @@ export type RoomAliasesView = {
 export type RoomView = RoomSummaryView & {
   readonly topic?: string;
   readonly encrypted: boolean;
+  readonly guestCanJoin?: boolean;
+  readonly memberCount?: number;
+  readonly historyVisibility?: string;
   readonly joinRule?: string;
   readonly joinRuleContent?: JsonObject;
   readonly roomType?: string;

@@ -1,5 +1,5 @@
 import React, { FormEventHandler, useCallback, useEffect, useState } from 'react';
-import { MatrixError, Room } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
 import {
   Box,
   Button,
@@ -39,6 +39,7 @@ import {
   useAdditionalCreators,
 } from '../../components/create-room';
 import { RoomType } from '../../../types/matrix/room';
+import { getCoreErrorData } from '../../utils/coreRoomActions';
 
 const getCreateSpaceAccessToIcon = (access: CreateRoomAccess) => {
   if (access === CreateRoomAccess.Private) return Icons.SpaceLock;
@@ -48,7 +49,7 @@ const getCreateSpaceAccessToIcon = (access: CreateRoomAccess) => {
 
 type CreateSpaceFormProps = {
   defaultAccess?: CreateRoomAccess;
-  space?: Room;
+  space?: { roomId: string };
   onCreate?: (roomId: string) => void;
 };
 export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceFormProps) {
@@ -87,11 +88,12 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
     selectRoomVersion(version);
   };
 
-  const [createState, create] = useAsyncCallback<string, Error | MatrixError, [CreateRoomData]>(
+  const [createState, create] = useAsyncCallback<string, CoreError, [CreateRoomData]>(
     useCallback((data) => createRoom(core, data), [core])
   );
   const loading = createState.status === AsyncStatus.Loading;
   const error = createState.status === AsyncStatus.Error ? createState.error : undefined;
+  const retryAfterMs = getCoreErrorData(error)?.retry_after_ms;
   const disabled = createState.status === AsyncStatus.Loading;
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = (evt) => {
@@ -253,9 +255,9 @@ export function CreateSpaceForm({ defaultAccess, space, onCreate }: CreateSpaceF
           <Icon src={Icons.Warning} filled size="100" />
           <Text size="T300" style={{ color: color.Critical.Main }}>
             <b>
-              {error instanceof MatrixError && error.name === ErrorCode.M_LIMIT_EXCEEDED
+              {error.errcode === ErrorCode.M_LIMIT_EXCEEDED
                 ? `Server rate-limited your request for ${millisecondsToMinutes(
-                    (error.data.retry_after_ms as number | undefined) ?? 0
+                    typeof retryAfterMs === 'number' ? retryAfterMs : 0
                   )} minutes!`
                 : error.message}
             </b>

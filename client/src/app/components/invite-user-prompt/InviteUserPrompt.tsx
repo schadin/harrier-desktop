@@ -29,15 +29,15 @@ import {
   Scroll,
   MenuItem,
 } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import { isKeyHotkey } from 'is-hotkey';
 import { CoreError } from '@harrier/core';
+import type { MemberView } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '../../utils/keyboard';
 import { useDirectUsers } from '../../hooks/useDirectUsers';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../utils/matrix';
-import { Membership } from '../../../types/matrix/room';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { highlightText, makeHighlightRegex } from '../../plugins/react-custom-html-parser';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { useCore } from '../../hooks/useCore';
@@ -53,24 +53,25 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 const getUserIdString = (userId: string) => getMxIdLocalPart(userId) ?? userId;
 
 type InviteUserProps = {
-  room: Room;
+  roomId: string;
   requestClose: () => void;
 };
-export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
+export function InviteUserPrompt({ roomId, requestClose }: InviteUserProps) {
   const core = useCore();
   const alive = useAlive();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const directUsers = useDirectUsers();
+  const roomMembers = useRoomMembers(roomId);
+  const memberById = useMemo(
+    () => new Map<string, MemberView>(roomMembers.map((member) => [member.userId, member])),
+    [roomMembers]
+  );
   const [validUserId, setValidUserId] = useState<string>();
 
   const filteredUsers = useMemo(
-    () =>
-      directUsers.filter((userId) => {
-        const membership = room.getMember(userId)?.membership;
-        return membership !== Membership.Join;
-      }),
-    [directUsers, room]
+    () => directUsers.filter((userId) => memberById.get(userId)?.membership !== 'join'),
+    [directUsers, memberById]
   );
   const [result, search, resetSearch] = useAsyncSearch(
     filteredUsers,
@@ -84,10 +85,10 @@ export function InviteUserPrompt({ room, requestClose }: InviteUserProps) {
   const [inviteState, invite] = useAsyncCallback<void, CoreError, [string, string | undefined]>(
     useCallback(
       async (userId, reason) => {
-        const inviteResult = await core.rooms.invite(room.roomId, userId, reason);
+        const inviteResult = await core.rooms.invite(roomId, userId, reason);
         if (!inviteResult.ok) throw inviteResult.error;
       },
-      [core, room]
+      [core, roomId]
     )
   );
 

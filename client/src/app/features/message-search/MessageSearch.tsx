@@ -273,9 +273,6 @@ export function MessageSearch({
             {vItems.map((vItem) => {
               const group = groups[vItem.index];
               if (!group) return null;
-              const groupRoom = mx.getRoom(group.roomId);
-              if (!groupRoom) return null;
-
               return (
                 <VirtualTile
                   virtualItem={vItem}
@@ -284,13 +281,13 @@ export function MessageSearch({
                   key={vItem.index}
                 >
                   <SearchResultGroup
-                    room={groupRoom}
+                    roomId={group.roomId}
                     highlights={highlights}
                     items={group.items}
                     mediaAutoLoad={mediaAutoLoad}
                     urlPreview={urlPreview}
                     onOpen={navigateRoom}
-                    legacyUsernameColor={legacyUsernameColor || mDirects.has(groupRoom.roomId)}
+                    legacyUsernameColor={legacyUsernameColor || mDirects.has(group.roomId)}
                     hour24Clock={hour24Clock}
                     dateFormatString={dateFormatString}
                   />

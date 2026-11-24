@@ -1,4 +1,3 @@
-import { MatrixEvent } from 'matrix-js-sdk';
 import { PackAddress } from './PackAddress';
 import { PackImageReader } from './PackImageReader';
 import { PackImagesReader } from './PackImagesReader';
@@ -29,20 +28,6 @@ export class ImagePack {
 
     this.meta = new PackMetaReader(content.pack ?? {});
     this.images = new PackImagesReader(content.images ?? {});
-  }
-
-  static fromMatrixEvent(id: string, matrixEvent: MatrixEvent) {
-    const roomId = matrixEvent.getRoomId();
-    const stateKey = matrixEvent.getStateKey();
-
-    const address =
-      roomId && typeof stateKey === 'string' ? new PackAddress(roomId, stateKey) : undefined;
-
-    const content = matrixEvent.getContent<PackContent>();
-
-    const imagePack: ImagePack = new ImagePack(id, content, address);
-
-    return imagePack;
   }
 
   public getImages(usage: ImageUsage): PackImageReader[] {

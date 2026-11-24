@@ -15,17 +15,16 @@ import {
   Text,
   toRem,
 } from 'folds';
-import type { CallParticipantView } from '@harrier/core';
+import type { CallParticipantView, MemberView } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
-import { Room } from 'matrix-js-sdk';
 import * as css from './styles.css';
 import { stopPropagation } from '../../utils/keyboard';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../../components/user-avatar';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { getMouseEventCords } from '../../utils/dom';
 import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 
 type LiveMemberAvatarProps = {
   userId: string;
@@ -49,12 +48,16 @@ function LiveMemberAvatar({ userId, avatarMxc, name }: LiveMemberAvatarProps) {
 }
 
 type LiveChipProps = {
-  room: Room;
+  roomId: string;
   members: readonly CallParticipantView[];
   count: number;
 };
-export function LiveChip({ count, room, members }: LiveChipProps) {
+export function LiveChip({ count, roomId, members }: LiveChipProps) {
   const openUserProfile = useOpenUserRoomProfile();
+  const roomMembers = useRoomMembers(roomId);
+  const memberById = new Map<string, MemberView>(
+    roomMembers.map((member) => [member.userId, member])
+  );
 
   const [cords, setCords] = useState<RectCords>();
 
@@ -91,9 +94,12 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
                   {members.map((callMember) => {
                     const { userId } = callMember;
                     if (!userId) return null;
+                    const member = memberById.get(userId);
                     const name =
-                      getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
-                    const avatarMxc = getMemberAvatarMxc(room, userId);
+                      member?.rawDisplayName !== undefined && member.rawDisplayName !== userId
+                        ? member.rawDisplayName
+                        : getMxIdLocalPart(userId) ?? userId;
+                    const avatarMxc = member?.avatarMxc;
 
                     return (
                       <MenuItem
@@ -104,7 +110,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
                         style={{ paddingLeft: config.space.S200 }}
                         onClick={(evt: React.MouseEvent<HTMLElement>) =>
                           openUserProfile(
-                            room.roomId,
+                            roomId,
                             undefined,
                             userId,
                             getMouseEventCords(evt.nativeEvent),

@@ -1,30 +1,35 @@
 import React from 'react';
 import { Box, Icon, IconButton, Icons, Text, as } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import classNames from 'classnames';
 import { useSetAtom } from 'jotai';
 import { roomIdToTypingMembersAtom } from '../../state/typingMembers';
 import { TypingIndicator } from '../../components/typing-indicator';
-import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './RoomViewTyping.css';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { useRoomTypingMember } from '../../hooks/useRoomTypingMembers';
 
 export type RoomViewTypingProps = {
-  room: Room;
+  roomId: string;
 };
 export const RoomViewTyping = as<'div', RoomViewTypingProps>(
-  ({ className, room, ...props }, ref) => {
+  ({ className, roomId, ...props }, ref) => {
     const setTypingMembers = useSetAtom(roomIdToTypingMembersAtom);
-    const mx = useMatrixClient();
-    const typingMembers = useRoomTypingMember(room.roomId);
+    const session = useCoreSession();
+    const members = useRoomMembers(roomId);
+    const typingMembers = useRoomTypingMember(roomId);
 
     const typingNames = typingMembers
-      .filter((receipt) => receipt.userId !== mx.getUserId())
-      .map(
-        (receipt) => getMemberDisplayName(room, receipt.userId) ?? getMxIdLocalPart(receipt.userId)
-      )
+      .filter((receipt) => receipt.userId !== session?.userId)
+      .map((receipt) => {
+        const rawDisplayName = members.find(
+          (member) => member.userId === receipt.userId
+        )?.rawDisplayName;
+        return rawDisplayName !== undefined && rawDisplayName !== receipt.userId
+          ? rawDisplayName
+          : getMxIdLocalPart(receipt.userId);
+      })
       .reverse();
 
     if (typingNames.length === 0) {
@@ -37,7 +42,7 @@ export const RoomViewTyping = as<'div', RoomViewTypingProps>(
       typingMembers.forEach((receipt) =>
         setTypingMembers({
           type: 'DELETE',
-          roomId: room.roomId,
+          roomId,
           userId: receipt.userId,
         })
       );

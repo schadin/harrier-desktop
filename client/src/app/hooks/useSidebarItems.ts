@@ -1,10 +1,9 @@
+import type { HarrierCore } from '@harrier/core';
 import { Dispatch, SetStateAction, useCallback, useEffect, useState } from 'react';
-import { MatrixClient } from 'matrix-js-sdk';
 import { AccountDataEvent } from '../../types/matrix/accountData';
-import { useMatrixClient } from './useMatrixClient';
-import { getAccountData, isSpace } from '../utils/room';
 import { Membership } from '../../types/matrix/room';
 import { useAccountDataCallback } from './useAccountDataCallback';
+import { useCore } from './useCore';
 
 export type ISidebarFolder = {
   name?: string;
@@ -19,8 +18,12 @@ export type InCinnySpacesContent = {
   sidebar?: SidebarItems;
 };
 
+const getCinnySpacesContent = (core: HarrierCore): InCinnySpacesContent | undefined =>
+  (core.auth.accountData(AccountDataEvent.CinnySpaces).getSnapshot()
+    .value as InCinnySpacesContent | null) ?? undefined;
+
 export const parseSidebar = (
-  mx: MatrixClient,
+  core: HarrierCore,
   orphanSpaces: string[],
   content?: InCinnySpacesContent
 ) => {
@@ -31,9 +34,9 @@ export const parseSidebar = (
 
   const safeToAdd = (spaceId: string): boolean => {
     if (typeof spaceId !== 'string') return false;
-    const space = mx.getRoom(spaceId);
-    if (space?.getMyMembership() !== Membership.Join) return false;
-    return isSpace(space);
+    const space = core.rooms.room(spaceId).getSnapshot().value;
+    if (space?.membership !== Membership.Join) return false;
+    return space.isSpace;
   };
 
   sidebar.forEach((item) => {
@@ -66,33 +69,27 @@ export const parseSidebar = (
 export const useSidebarItems = (
   orphanSpaces: string[]
 ): [SidebarItems, Dispatch<SetStateAction<SidebarItems>>] => {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const [sidebarItems, setSidebarItems] = useState(() => {
-    const inCinnySpacesContent = getAccountData(
-      mx,
-      AccountDataEvent.CinnySpaces
-    )?.getContent<InCinnySpacesContent>();
-    return parseSidebar(mx, orphanSpaces, inCinnySpacesContent);
+    const inCinnySpacesContent = getCinnySpacesContent(core);
+    return parseSidebar(core, orphanSpaces, inCinnySpacesContent);
   });
 
   useEffect(() => {
-    const inCinnySpacesContent = getAccountData(
-      mx,
-      AccountDataEvent.CinnySpaces
-    )?.getContent<InCinnySpacesContent>();
-    setSidebarItems(parseSidebar(mx, orphanSpaces, inCinnySpacesContent));
-  }, [mx, orphanSpaces]);
+    const inCinnySpacesContent = getCinnySpacesContent(core);
+    setSidebarItems(parseSidebar(core, orphanSpaces, inCinnySpacesContent));
+  }, [core, orphanSpaces]);
 
   useAccountDataCallback(
     useCallback(
       (type, content) => {
         if (type === AccountDataEvent.CinnySpaces) {
           const newContent = content as InCinnySpacesContent;
-          setSidebarItems(parseSidebar(mx, orphanSpaces, newContent));
+          setSidebarItems(parseSidebar(core, orphanSpaces, newContent));
         }
       },
-      [mx, orphanSpaces]
+      [core, orphanSpaces]
     )
   );
 
@@ -122,11 +119,10 @@ export const sidebarItemWithout = (items: SidebarItems, roomId: string) => {
 };
 
 export const makeCinnySpacesContent = (
-  mx: MatrixClient,
+  core: HarrierCore,
   items: SidebarItems
 ): InCinnySpacesContent => {
-  const currentInSpaces =
-    getAccountData(mx, AccountDataEvent.CinnySpaces)?.getContent<InCinnySpacesContent>() ?? {};
+  const currentInSpaces = getCinnySpacesContent(core) ?? {};
 
   const newSpacesContent: InCinnySpacesContent = {
     ...currentInSpaces,

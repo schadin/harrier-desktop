@@ -1,5 +1,4 @@
-import { MatrixClient, WritableAccountDataEvents } from 'matrix-js-sdk';
-import { getAccountData } from '../utils/room';
+import type { HarrierCore } from '@harrier/core';
 import { IEmoji, emojis } from './emoji';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 
@@ -10,12 +9,14 @@ export type IRecentEmojiContent = {
   recent_emoji?: [EmojiUnicode, EmojiUsageCount][];
 };
 
-export const getRecentEmojis = (mx: MatrixClient, limit?: number): IEmoji[] => {
-  const recentEmojiEvent = getAccountData(mx, AccountDataEvent.ElementRecentEmoji);
-  const recentEmoji = recentEmojiEvent?.getContent<IRecentEmojiContent>().recent_emoji;
+export const getRecentEmojis = (core: HarrierCore, limit?: number): IEmoji[] => {
+  const recentEmojiContent = core.auth
+    .accountData(AccountDataEvent.ElementRecentEmoji)
+    .getSnapshot().value as unknown as IRecentEmojiContent | null;
+  const recentEmoji = recentEmojiContent?.recent_emoji;
   if (!Array.isArray(recentEmoji)) return [];
 
-  return recentEmoji
+  return [...recentEmoji]
     .sort((e1, e2) => e2[1] - e1[1])
     .slice(0, limit)
     .reduce<IEmoji[]>((list, [unicode]) => {
@@ -25,9 +26,10 @@ export const getRecentEmojis = (mx: MatrixClient, limit?: number): IEmoji[] => {
     }, []);
 };
 
-export function addRecentEmoji(mx: MatrixClient, unicode: string) {
-  const recentEmojiEvent = getAccountData(mx, AccountDataEvent.ElementRecentEmoji);
-  const recentEmojiContent = recentEmojiEvent?.getContent<IRecentEmojiContent>();
+export async function addRecentEmoji(core: HarrierCore, unicode: string): Promise<void> {
+  const recentEmojiContent = core.auth
+    .accountData(AccountDataEvent.ElementRecentEmoji)
+    .getSnapshot().value as unknown as IRecentEmojiContent | null;
   const recentEmoji =
     recentEmojiContent && Array.isArray(recentEmojiContent.recent_emoji)
       ? structuredClone(recentEmojiContent.recent_emoji)
@@ -42,7 +44,8 @@ export function addRecentEmoji(mx: MatrixClient, unicode: string) {
     entry[1] += 1;
   }
   recentEmoji.unshift(entry);
-  mx.setAccountData(AccountDataEvent.ElementRecentEmoji as keyof WritableAccountDataEvents, {
+  const result = await core.auth.setAccountData(AccountDataEvent.ElementRecentEmoji, {
     recent_emoji: recentEmoji.slice(0, 100),
   });
+  if (!result.ok) throw result.error;
 }

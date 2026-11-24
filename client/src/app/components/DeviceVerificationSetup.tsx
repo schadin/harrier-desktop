@@ -15,7 +15,8 @@ import {
 } from 'folds';
 import FileSaver from 'file-saver';
 import to from 'await-to-js';
-import { AuthDict, IAuthData, MatrixError, UIAuthCallback } from 'matrix-js-sdk';
+import type { MatrixCryptoLike, MatrixErrorLike } from '../../types/matrix/legacyStructural';
+import type { AuthData, AuthDict, UIAuthCallback } from '../../types/matrix/uia';
 import { PasswordInput } from './password-input';
 import { ContainerColor } from '../styles/ContainerColor.css';
 import { copyToClipboard } from '../utils/dom';
@@ -26,20 +27,23 @@ import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
 
+const isUIAError = (error: unknown): error is MatrixErrorLike =>
+  error instanceof Error && 'httpStatus' in error && error.httpStatus === 401 && 'data' in error;
+
 type UIACallback<T> = (
   authDict: AuthDict | null
-) => Promise<[IAuthData, undefined] | [undefined, T]>;
+) => Promise<[AuthData, undefined] | [undefined, T]>;
 
 type PerformAction<T> = (authDict: AuthDict | null) => Promise<T>;
 
 type UIAAction<T> = {
-  authData: IAuthData;
+  authData: AuthData;
   callback: UIACallback<T>;
   cancelCallback: () => void;
 };
 
 function makeUIAAction<T>(
-  authData: IAuthData,
+  authData: AuthData,
   performAction: PerformAction<T>,
   resolve: (data: T) => void,
   reject: (error?: any) => void
@@ -47,10 +51,10 @@ function makeUIAAction<T>(
   const action: UIAAction<T> = {
     authData,
     callback: async (authDict) => {
-      const [error, data] = await to<T, MatrixError | Error>(performAction(authDict));
+      const [error, data] = await to<T, MatrixErrorLike | Error>(performAction(authDict));
 
-      if (error instanceof MatrixError && error.httpStatus === 401) {
-        return [error.data as IAuthData, undefined];
+      if (isUIAError(error)) {
+        return [error.data as AuthData, undefined];
       }
 
       if (error) {
@@ -75,7 +79,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
   const alive = useAlive();
 
   const [uiaAction, setUIAAction] = useState<UIAAction<void>>();
-  const [nextAuthData, setNextAuthData] = useState<IAuthData | null>(); // null means no next action.
+  const [nextAuthData, setNextAuthData] = useState<AuthData | null>(); // null means no next action.
 
   const handleAction = useCallback(
     async (authDict: AuthDict) => {
@@ -109,8 +113,8 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
             resetUIA();
           })
           .catch((error) => {
-            if (error instanceof MatrixError && error.httpStatus === 401) {
-              const authData = error.data as IAuthData;
+            if (isUIAError(error)) {
+              const authData = error.data as AuthData;
               const action = makeUIAAction(
                 authData,
                 makeRequest as PerformAction<void>,
@@ -136,7 +140,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
   const [setupState, setup] = useAsyncCallback<void, Error, [string | undefined]>(
     useCallback(
       async (passphrase) => {
-        const crypto = mx.getCrypto();
+        const crypto: MatrixCryptoLike | undefined = mx.getCrypto();
         if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
 
         const recoveryKeyData = await crypto.createRecoveryKeyFromPassphrase(passphrase);

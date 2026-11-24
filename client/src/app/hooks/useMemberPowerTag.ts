@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { MatrixClient, Room } from 'matrix-js-sdk';
 import type { MemberView } from '@harrier/core';
+import type { MatrixClientLike } from '../../types/matrix/legacyStructural';
 import { getPowerLevelTag, PowerLevelTags, usePowerLevelTags } from './usePowerLevelTags';
 import { IPowerLevels, readPowerLevel } from './usePowerLevels';
 import { MemberPowerTag, MemberPowerTagIcon } from '../../types/matrix/room';
@@ -11,7 +11,7 @@ import { accessibleColor } from '../plugins/color';
 export type GetMemberPowerTag = (userId: string) => MemberPowerTag;
 
 export const useGetMemberPowerTag = (
-  room: Room,
+  room: { roomId: string },
   creators: Set<string>,
   powerLevels: IPowerLevels
 ) => {
@@ -34,7 +34,7 @@ export const useGetMemberPowerTag = (
 };
 
 export const getPowerTagIconSrc = (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   useAuthentication: boolean,
   icon: MemberPowerTagIcon
 ): string | undefined =>

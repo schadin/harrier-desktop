@@ -1,13 +1,23 @@
 import { ReactNode, useCallback, useState } from 'react';
-import { MatrixClient, Room } from 'matrix-js-sdk';
 import type { PublicRoomView } from '@harrier/core';
 import { useQuery } from '@tanstack/react-query';
 import { useCore } from '../hooks/useCore';
+import { useCoreRoom } from '../hooks/useCoreRoom';
+import { useCoreRoomState } from '../hooks/useCoreRoomState';
 import { useMatrixClient } from '../hooks/useMatrixClient';
-import { LocalRoomSummary, useLocalRoomSummary } from '../hooks/useLocalRoomSummary';
+import { useRoomMembers } from '../hooks/useRoomMembers';
 import { AsyncState, AsyncStatus } from '../hooks/useAsyncCallback';
+import { StateEvent } from '../../types/matrix/room';
 
-export type IRoomSummary = Awaited<ReturnType<MatrixClient['getRoomSummary']>>;
+// The public core contract has no federated room-summary operation yet.
+export type IRoomSummary = {
+  room_id: string;
+  name?: string;
+  avatar_url?: string;
+  topic?: string;
+  num_joined_members?: number;
+  room_type?: string;
+};
 
 type RoomSummaryLoaderProps = {
   roomIdOrAlias: string;
@@ -26,14 +36,57 @@ export function RoomSummaryLoader({ roomIdOrAlias, children }: RoomSummaryLoader
   return children(data);
 }
 
+export type LocalRoomSummary = {
+  roomId: string;
+  name: string;
+  topic?: string;
+  avatarMxc?: string;
+  dmAvatarMxc?: string;
+  canonicalAlias?: string;
+  worldReadable?: boolean;
+  guestCanJoin?: boolean;
+  memberCount: number;
+  roomType?: string;
+  joinRule?: string;
+};
+
 export function LocalRoomSummaryLoader({
-  room,
+  roomId,
   children,
 }: {
-  room: Room;
+  roomId: string;
   children: (roomSummary: LocalRoomSummary) => ReactNode;
 }) {
-  const summary = useLocalRoomSummary(room);
+  const room = useCoreRoom(roomId);
+  const members = useRoomMembers(roomId);
+  const history = useCoreRoomState<{ history_visibility?: string }>(
+    { roomId },
+    StateEvent.RoomHistoryVisibility
+  );
+  const guestAccess = useCoreRoomState<{ guest_access?: string }>(
+    { roomId },
+    StateEvent.RoomGuestAccess
+  );
+
+  const summary: LocalRoomSummary = {
+    roomId,
+    name: room?.name ?? roomId,
+    topic: room?.topic,
+    avatarMxc: room?.avatarMxc,
+    dmAvatarMxc: room?.dmAvatarMxc,
+    canonicalAlias: room?.canonicalAlias,
+    worldReadable:
+      typeof history?.history_visibility === 'string'
+        ? history.history_visibility === 'world_readable'
+        : undefined,
+    guestCanJoin:
+      typeof guestAccess?.guest_access === 'string'
+        ? guestAccess.guest_access === 'can_join'
+        : undefined,
+    memberCount: members.filter((member) => member.membership === 'join').length,
+    roomType: room?.roomType,
+    joinRule: room?.joinRule,
+  };
 
   return children(summary);
 }

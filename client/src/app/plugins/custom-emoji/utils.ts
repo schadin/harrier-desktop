@@ -1,9 +1,7 @@
-import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
-import type { RoomStateEntry } from '@harrier/core';
+import type { HarrierCore, JsonObject, RoomStateEntry } from '@harrier/core';
 import { ImagePack } from './ImagePack';
 import { PackContent, EmoteRoomsContent, ImageUsage } from './types';
 import { StateEvent } from '../../../types/matrix/room';
-import { getAccountData, getStateEvent, getStateEvents } from '../../utils/room';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { PackMetaReader } from './PackMetaReader';
 import { PackAddress } from './PackAddress';
@@ -27,77 +25,75 @@ export function packMetaEqual(a: PackMetaReader, b: PackMetaReader): boolean {
   );
 }
 
-export function makeImagePacks(packEvents: MatrixEvent[]): ImagePack[] {
-  return packEvents.reduce<ImagePack[]>((imagePacks, packEvent) => {
-    const packId = packEvent.getId();
-    if (!packId) return imagePacks;
-    imagePacks.push(ImagePack.fromMatrixEvent(packId, packEvent));
-    return imagePacks;
-  }, []);
-}
-
-export function getRoomImagePack(room: Room, stateKey: string): ImagePack | undefined {
-  const packEvent = getStateEvent(room, StateEvent.PoniesRoomEmotes, stateKey);
-  if (!packEvent) return undefined;
-  const packId = packEvent.getId();
-  if (!packId) return undefined;
-  return ImagePack.fromMatrixEvent(packId, packEvent);
-}
+const imagePackFromState = (roomId: string, entry: RoomStateEntry): ImagePack =>
+  new ImagePack(
+    entry.eventId ?? `${roomId}|${entry.stateKey}`,
+    entry.content as PackContent,
+    new PackAddress(roomId, entry.stateKey)
+  );
 
 export function makeImagePacksFromState(
   roomId: string,
   entries: readonly RoomStateEntry[]
 ): ImagePack[] {
-  return entries.map(
-    (entry) =>
-      new ImagePack(
-        entry.eventId ?? `${roomId}|${entry.stateKey}`,
-        entry.content as PackContent,
-        new PackAddress(roomId, entry.stateKey)
-      )
+  return entries.map((entry) => imagePackFromState(roomId, entry));
+}
+
+export function getRoomImagePack(
+  core: HarrierCore,
+  roomId: string,
+  stateKey: string
+): ImagePack | undefined {
+  const entry = core.rooms
+    .stateList(roomId, StateEvent.PoniesRoomEmotes)
+    .getSnapshot()
+    .value.find((item) => item.stateKey === stateKey);
+  return entry ? imagePackFromState(roomId, entry) : undefined;
+}
+
+export function getRoomImagePacks(core: HarrierCore, roomId: string): ImagePack[] {
+  return makeImagePacksFromState(
+    roomId,
+    core.rooms.stateList(roomId, StateEvent.PoniesRoomEmotes).getSnapshot().value
   );
 }
 
-export function getRoomImagePacks(room: Room): ImagePack[] {
-  const packEvents = getStateEvents(room, StateEvent.PoniesRoomEmotes);
-  return makeImagePacks(packEvents);
-}
-
-export function getGlobalImagePacks(mx: MatrixClient): ImagePack[] {
-  const emoteRoomsContent = getAccountData(mx, AccountDataEvent.PoniesEmoteRooms)?.getContent() as
-    | EmoteRoomsContent
-    | undefined;
-  if (typeof emoteRoomsContent !== 'object') return [];
+export function getGlobalImagePacks(
+  core: HarrierCore,
+  content?: unknown,
+  stateByRoom?: ReadonlyMap<string, readonly RoomStateEntry[]>
+): ImagePack[] {
+  const emoteRoomsContent = (content === undefined
+    ? core.auth.accountData(AccountDataEvent.PoniesEmoteRooms).getSnapshot().value
+    : content) as unknown as EmoteRoomsContent | null;
+  if (!emoteRoomsContent || typeof emoteRoomsContent !== 'object') return [];
 
   const { rooms: roomIdToPackInfo } = emoteRoomsContent;
-  if (typeof roomIdToPackInfo !== 'object') return [];
+  if (!roomIdToPackInfo || typeof roomIdToPackInfo !== 'object') return [];
 
-  const roomIds = Object.keys(roomIdToPackInfo);
-
-  const packs = roomIds.flatMap((roomId) => {
-    if (typeof roomIdToPackInfo[roomId] !== 'object') return [];
-    const room = mx.getRoom(roomId);
-    if (!room) return [];
+  return Object.keys(roomIdToPackInfo).flatMap((roomId) => {
     const packStateKeyToUnknown = roomIdToPackInfo[roomId];
-    const packEvents = getStateEvents(room, StateEvent.PoniesRoomEmotes);
-    const globalPackEvents = packEvents.filter((mE) => {
-      const stateKey = mE.getStateKey();
-      if (typeof stateKey === 'string') return !!packStateKeyToUnknown[stateKey];
-      return false;
-    });
-    return makeImagePacks(globalPackEvents);
-  });
+    if (!packStateKeyToUnknown || typeof packStateKeyToUnknown !== 'object') return [];
+    if (!core.rooms.room(roomId).getSnapshot().value) return [];
 
-  return packs;
+    const entries =
+      stateByRoom?.get(roomId) ??
+      core.rooms.stateList(roomId, StateEvent.PoniesRoomEmotes).getSnapshot().value;
+    return makeImagePacksFromState(
+      roomId,
+      entries.filter((entry) => !!packStateKeyToUnknown[entry.stateKey])
+    );
+  });
 }
 
-export function getUserImagePack(mx: MatrixClient): ImagePack | undefined {
-  const packEvent = getAccountData(mx, AccountDataEvent.PoniesUserEmotes);
-  const userId = mx.getUserId();
-  if (!packEvent || !userId) {
-    return undefined;
-  }
+export function getUserImagePack(
+  core: HarrierCore,
+  content: JsonObject | null = core.auth
+    .accountData(AccountDataEvent.PoniesUserEmotes)
+    .getSnapshot().value
+): ImagePack | undefined {
+  const userId = core.auth.session.getSnapshot().value?.userId;
+  if (!content || !userId) return undefined;
 
-  const userImagePack = ImagePack.fromMatrixEvent(userId, packEvent);
-  return userImagePack;
+  return new ImagePack(userId, content as unknown as PackContent, undefined);
 }

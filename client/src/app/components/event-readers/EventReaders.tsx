@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import classNames from 'classnames';
+import type { MemberView } from '@harrier/core';
 import {
   Avatar,
   Box,
@@ -13,9 +14,8 @@ import {
   as,
   config,
 } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
-import { getMemberDisplayName } from '../../utils/room';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './EventReaders.css';
 import { UserAvatar } from '../user-avatar';
@@ -46,18 +46,27 @@ function EventReaderAvatar({ userId, avatarMxc, name }: EventReaderAvatarProps) 
 }
 
 export type EventReadersProps = {
-  room: Room;
+  roomId: string;
   eventId: string;
   requestClose: () => void;
 };
 export const EventReaders = as<'div', EventReadersProps>(
-  ({ className, room, eventId, requestClose, ...props }, ref) => {
-    const latestEventReaders = useRoomEventReaders(room.roomId, eventId);
+  ({ className, roomId, eventId, requestClose, ...props }, ref) => {
+    const latestEventReaders = useRoomEventReaders(roomId, eventId);
+    const members = useRoomMembers(roomId);
+    const memberById = useMemo(
+      () => new Map<string, MemberView>(members.map((member) => [member.userId, member])),
+      [members]
+    );
     const openProfile = useOpenUserRoomProfile();
     const space = useSpaceOptionally();
 
-    const getName = (userId: string) =>
-      getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
+    const getName = (userId: string) => {
+      const rawDisplayName = memberById.get(userId)?.rawDisplayName;
+      return rawDisplayName !== undefined && rawDisplayName !== userId
+        ? rawDisplayName
+        : getMxIdLocalPart(userId) ?? userId;
+    };
 
     return (
       <Box
@@ -79,7 +88,7 @@ export const EventReaders = as<'div', EventReadersProps>(
             <Box className={css.Content} direction="Column">
               {latestEventReaders.map((readerId) => {
                 const name = getName(readerId);
-                const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
+                const avatarMxcUrl = memberById.get(readerId)?.avatarMxc;
 
                 return (
                   <MenuItem
@@ -88,7 +97,7 @@ export const EventReaders = as<'div', EventReadersProps>(
                     radii="400"
                     onClick={(event: React.MouseEvent<HTMLElement>) => {
                       openProfile(
-                        room.roomId,
+                        roomId,
                         space?.roomId,
                         readerId,
                         getMouseEventCords(event.nativeEvent),

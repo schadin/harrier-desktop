@@ -146,7 +146,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
           roomInputRef={roomInputRef}
           editor={editor}
         />
-        <RoomViewTyping room={room} />
+        <RoomViewTyping roomId={roomId} />
       </Box>
       <Box shrink="No" direction="Column">
         <div style={{ padding: `0 ${config.space.S400}` }}>
@@ -182,7 +182,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
         {hideActivity || !showFollowing ? (
           <RoomViewFollowingPlaceholder />
         ) : (
-          <RoomViewFollowing room={room} />
+          <RoomViewFollowing roomId={roomId} />
         )}
       </Box>
     </Page>

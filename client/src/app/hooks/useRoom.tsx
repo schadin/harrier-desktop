@@ -1,13 +1,14 @@
 import React, { createContext, ReactNode, useContext, useSyncExternalStore } from 'react';
 import type { RoomView } from '@harrier/core';
 import { getMatrixClient } from '@harrier/core-matrix-js';
-import type { Room } from 'matrix-js-sdk';
 import { useCore } from './useCore';
+
+type LegacyRoom = NonNullable<ReturnType<ReturnType<typeof getMatrixClient>['getRoom']>>;
 
 const RoomIdContext = createContext<string | null>(null);
 
 type RoomProviderProps = {
-  value: Room | string;
+  value: LegacyRoom | string;
   children: ReactNode;
 };
 export function RoomProvider({ value, children }: RoomProviderProps) {
@@ -31,7 +32,7 @@ export function useCoreRoomFromContext(): RoomView | null {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 }
 
-export function useRoom(): Room {
+export function useRoom(): LegacyRoom {
   const core = useCore();
   const roomId = useRoomId();
   const room = getMatrixClient(core).getRoom(roomId);

@@ -11,14 +11,13 @@ import {
   as,
   config,
 } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import classNames from 'classnames';
 import FocusTrap from 'focus-trap-react';
 
-import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './RoomViewFollowing.css';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreSession } from '../../hooks/useCoreSession';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { useRoomLatestRenderedEvent } from '../../hooks/useRoomLatestRenderedEvent';
 import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
 import { EventReaders } from '../../components/event-readers';
@@ -29,19 +28,23 @@ export function RoomViewFollowingPlaceholder() {
 }
 
 export type RoomViewFollowingProps = {
-  room: Room;
+  roomId: string;
 };
 export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
-  ({ className, room, ...props }, ref) => {
-    const mx = useMatrixClient();
+  ({ className, roomId, ...props }, ref) => {
+    const session = useCoreSession();
+    const members = useRoomMembers(roomId);
     const [open, setOpen] = useState(false);
-    const latestEvent = useRoomLatestRenderedEvent(room);
-    const latestEventReaders = useRoomEventReaders(room.roomId, latestEvent?.eventId);
+    const latestEvent = useRoomLatestRenderedEvent({ roomId });
+    const latestEventReaders = useRoomEventReaders(roomId, latestEvent?.eventId);
     const names = latestEventReaders
-      .filter((readerId) => readerId !== mx.getUserId())
-      .map(
-        (readerId) => getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId
-      );
+      .filter((readerId) => readerId !== session?.userId)
+      .map((readerId) => {
+        const rawDisplayName = members.find((member) => member.userId === readerId)?.rawDisplayName;
+        return rawDisplayName !== undefined && rawDisplayName !== readerId
+          ? rawDisplayName
+          : getMxIdLocalPart(readerId) ?? readerId;
+      });
 
     const eventId = latestEvent?.eventId;
 
@@ -59,7 +62,11 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
                 }}
               >
                 <Modal variant="Surface" size="300">
-                  <EventReaders room={room} eventId={eventId} requestClose={() => setOpen(false)} />
+                  <EventReaders
+                    roomId={roomId}
+                    eventId={eventId}
+                    requestClose={() => setOpen(false)}
+                  />
                 </Modal>
               </FocusTrap>
             </OverlayCenter>

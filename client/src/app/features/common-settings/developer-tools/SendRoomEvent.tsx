@@ -1,5 +1,4 @@
 import React, { useCallback, useRef, useState, FormEventHandler, useEffect } from 'react';
-import { MatrixError } from 'matrix-js-sdk';
 import {
   Box,
   Chip,
@@ -14,9 +13,8 @@ import {
   TextArea as TextAreaComponent,
   Input,
 } from 'folds';
-import type { JsonObject } from '@harrier/core';
+import type { CoreError, JsonObject } from '@harrier/core';
 import { Page, PageHeader } from '../../../components/page';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useRoom } from '../../../hooks/useRoom';
@@ -34,7 +32,6 @@ export type SendRoomEventProps = {
   requestClose: () => void;
 };
 export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const room = useRoom();
   const alive = useAlive();
@@ -49,7 +46,7 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
 
   const [submitState, submit] = useAsyncCallback<
     object,
-    MatrixError,
+    CoreError,
     [string, string | undefined, object]
   >(
     useCallback(
@@ -58,9 +55,11 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
           await sendRoomState(core, room.roomId, evtType, evtContent as JsonObject, evtStateKey);
           return evtContent;
         }
-        return mx.sendEvent(room.roomId, evtType as any, evtContent);
+        const result = await core.send.sendEvent(room.roomId, evtType, evtContent as JsonObject);
+        if (!result.ok) throw result.error;
+        return evtContent;
       },
-      [core, mx, room]
+      [core, room.roomId]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

@@ -1,19 +1,23 @@
 import { useMatch, useParams } from 'react-router-dom';
-import { getCanonicalAliasRoomId, isRoomAlias } from '../../utils/matrix';
-import { useMatrixClient } from '../useMatrixClient';
+import { useSyncExternalStore } from 'react';
+import { isRoomAlias } from '../../utils/matrix';
+import { useCore } from '../useCore';
 import { getSpaceLobbyPath, getSpaceSearchPath } from '../../pages/pathUtils';
 
 export const useSelectedSpace = (): string | undefined => {
-  const mx = useMatrixClient();
-
+  const core = useCore();
+  const rooms = useSyncExternalStore(
+    core.rooms.all.subscribe,
+    core.rooms.all.getSnapshot,
+    core.rooms.all.getSnapshot
+  ).value;
   const { spaceIdOrAlias } = useParams();
-
-  const spaceId =
-    spaceIdOrAlias && isRoomAlias(spaceIdOrAlias)
-      ? getCanonicalAliasRoomId(mx, spaceIdOrAlias)
-      : spaceIdOrAlias;
-
-  return spaceId;
+  if (!spaceIdOrAlias || !isRoomAlias(spaceIdOrAlias)) return spaceIdOrAlias;
+  return (
+    rooms
+      .map((room) => core.rooms.room(room.roomId).getSnapshot().value)
+      .find((room) => room?.canonicalAlias === spaceIdOrAlias)?.roomId ?? spaceIdOrAlias
+  );
 };
 
 export const useSpaceLobbySelected = (spaceIdOrAlias: string): boolean => {

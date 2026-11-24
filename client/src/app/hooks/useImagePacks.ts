@@ -1,5 +1,4 @@
-import { Room } from 'matrix-js-sdk';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import { StateEvent } from '../../types/matrix/room';
 import {
@@ -8,72 +7,42 @@ import {
   ImagePack,
   ImageUsage,
   makeImagePacksFromState,
+  EmoteRoomsContent,
 } from '../plugins/custom-emoji';
-import { useMatrixClient } from './useMatrixClient';
-import { useAccountDataCallback } from './useAccountDataCallback';
-import { useStateEventCallback } from './useStateEventCallback';
+import { useAccountData } from './useAccountData';
+import { useCore } from './useCore';
 import { useCoreRoomStateList, useCoreRoomsStateList } from './useCoreRoomState';
 import { PackAddress } from '../plugins/custom-emoji/PackAddress';
 import { PackContent } from '../plugins/custom-emoji/types';
 
+type ImagePackRoom = { roomId: string };
+
 export const useUserImagePack = (): ImagePack | undefined => {
-  const mx = useMatrixClient();
-  const [userPack, setUserPack] = useState(() => getUserImagePack(mx));
+  const core = useCore();
+  const content = useAccountData(AccountDataEvent.PoniesUserEmotes);
 
-  useAccountDataCallback(
-    useCallback(
-      (type) => {
-        if (type === AccountDataEvent.PoniesUserEmotes) {
-          setUserPack(getUserImagePack(mx));
-        }
-      },
-      [mx]
-    )
-  );
-
-  return userPack;
+  return useMemo(() => getUserImagePack(core, content), [core, content]);
 };
 
 export const useGlobalImagePacks = (): ImagePack[] => {
-  const mx = useMatrixClient();
-  const [globalPacks, setGlobalPacks] = useState(() => getGlobalImagePacks(mx));
+  const core = useCore();
+  const content = useAccountData(
+    AccountDataEvent.PoniesEmoteRooms
+  ) as unknown as EmoteRoomsContent | null;
+  const roomIds = useMemo(() => {
+    const rooms = content?.rooms;
+    return rooms && typeof rooms === 'object' && !Array.isArray(rooms) ? Object.keys(rooms) : [];
+  }, [content]);
+  const rooms = useMemo(() => roomIds.map((roomId) => ({ roomId })), [roomIds]);
+  const stateByRoom = useCoreRoomsStateList(rooms, StateEvent.PoniesRoomEmotes);
 
-  useAccountDataCallback(
-    useCallback(
-      (type) => {
-        if (type === AccountDataEvent.PoniesEmoteRooms) {
-          setGlobalPacks(getGlobalImagePacks(mx));
-        }
-      },
-      [mx]
-    )
+  return useMemo(
+    () => getGlobalImagePacks(core, content, stateByRoom),
+    [core, content, stateByRoom]
   );
-
-  useStateEventCallback(
-    mx,
-    useCallback(
-      (mEvent) => {
-        const eventType = mEvent.getType();
-        const roomId = mEvent.getRoomId();
-        const stateKey = mEvent.getStateKey();
-        if (eventType === StateEvent.PoniesRoomEmotes && roomId && typeof stateKey === 'string') {
-          const global = !!globalPacks.find(
-            (pack) =>
-              pack.address && pack.address.roomId === roomId && pack.address.stateKey === stateKey
-          );
-          if (global) {
-            setGlobalPacks(getGlobalImagePacks(mx));
-          }
-        }
-      },
-      [mx, globalPacks]
-    )
-  );
-
-  return globalPacks;
 };
 
-export const useRoomImagePack = (room: Room, stateKey: string): ImagePack | undefined => {
+export const useRoomImagePack = (room: ImagePackRoom, stateKey: string): ImagePack | undefined => {
   const entries = useCoreRoomStateList(room, StateEvent.PoniesRoomEmotes);
   return useMemo(() => {
     const entry = entries.find((item) => item.stateKey === stateKey);
@@ -86,12 +55,12 @@ export const useRoomImagePack = (room: Room, stateKey: string): ImagePack | unde
   }, [entries, room.roomId, stateKey]);
 };
 
-export const useRoomImagePacks = (room: Room): ImagePack[] => {
+export const useRoomImagePacks = (room: ImagePackRoom): ImagePack[] => {
   const entries = useCoreRoomStateList(room, StateEvent.PoniesRoomEmotes);
   return useMemo(() => makeImagePacksFromState(room.roomId, entries), [room.roomId, entries]);
 };
 
-export const useRoomsImagePacks = (rooms: Room[]) => {
+export const useRoomsImagePacks = (rooms: readonly ImagePackRoom[]): ImagePack[] => {
   const stateByRoom = useCoreRoomsStateList(rooms, StateEvent.PoniesRoomEmotes);
   return useMemo(
     () =>
@@ -102,12 +71,15 @@ export const useRoomsImagePacks = (rooms: Room[]) => {
   );
 };
 
-export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePack[] => {
+export const useRelevantImagePacks = (
+  usage: ImageUsage,
+  rooms: readonly ImagePackRoom[]
+): ImagePack[] => {
   const userPack = useUserImagePack();
   const globalPacks = useGlobalImagePacks();
   const roomsPacks = useRoomsImagePacks(rooms);
 
-  const relevantPacks = useMemo(() => {
+  return useMemo(() => {
     const packs = userPack ? [userPack] : [];
     const globalPackIds = new Set(globalPacks.map((pack) => pack.id));
 
@@ -118,6 +90,4 @@ export const useRelevantImagePacks = (usage: ImageUsage, rooms: Room[]): ImagePa
 
     return relPacks.filter((pack) => pack.getImages(usage).length > 0);
   }, [userPack, globalPacks, roomsPacks, usage]);
-
-  return relevantPacks;
 };

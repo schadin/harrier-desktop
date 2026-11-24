@@ -63,9 +63,9 @@ module.exports = {
       {
         patterns: [
           {
-            group: ['matrix-js-sdk/lib/crypto-api', 'matrix-js-sdk/lib/crypto-api/*'],
+            group: ['matrix-js-sdk', 'matrix-js-sdk/*'],
             message:
-              'crypto-api допустим только в @harrier/core-matrix-js; используйте core.crypto.',
+              'matrix-js-sdk допустим только в @harrier/core-matrix-js; используйте @harrier/core.',
           },
         ],
       },

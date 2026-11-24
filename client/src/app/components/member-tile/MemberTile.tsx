@@ -1,6 +1,5 @@
 import React, { ReactNode } from 'react';
 import { as, Avatar, Box, Icon, Icons, Text } from 'folds';
-import type { MatrixClient } from 'matrix-js-sdk';
 import type { MemberView } from '@harrier/core';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../user-avatar';
@@ -13,15 +12,11 @@ const getName = (member: MemberView) =>
     : getMxIdLocalPart(member.userId) ?? member.userId;
 
 type MemberTileProps = {
-  mx: MatrixClient;
   member: MemberView;
-  useAuthentication: boolean;
   after?: ReactNode;
 };
 export const MemberTile = as<'button', MemberTileProps>(
-  // Legacy media props remain in the API so existing callers keep working.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ({ as: AsMemberTile = 'button', mx, member, useAuthentication, after, ...props }, ref) => {
+  ({ as: AsMemberTile = 'button', member, after, ...props }, ref) => {
     const name = getName(member);
     const username = getMxIdLocalPart(member.userId);
 

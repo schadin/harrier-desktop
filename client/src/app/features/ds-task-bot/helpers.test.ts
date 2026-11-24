@@ -1,10 +1,11 @@
-import type { TimelineItem } from '@harrier/core';
+import type { MemberView, TimelineItem } from '@harrier/core';
 import { describe, expect, it } from 'vitest';
 import {
   buildBotCommand,
   isBotCommandMessage,
   isBotCommandText,
   isBotInRoom,
+  isDirectRoomWithBot,
   isBotServiceReply,
   isCollapseAllowed,
   parseDsTaskPayload,
@@ -374,22 +375,59 @@ describe('isCollapseAllowed', () => {
   });
 });
 
-describe('isBotInRoom', () => {
-  const makeRoom = (membership?: string) => ({
-    getMember: () => (membership === undefined ? undefined : { membership }),
+describe('isDirectRoomWithBot', () => {
+  const makeMember = (userId: string, membership: MemberView['membership']): MemberView => ({
+    userId,
+    membership,
+    displayName: userId,
+    powerLevel: 0,
   });
 
+  it('определяет личку по core-снимку участников, включая приглашение', () => {
+    const members = [
+      makeMember(MY_MXID, 'join'),
+      makeMember(BOT_MXID, 'invite'),
+      makeMember(OTHER_MXID, 'leave'),
+    ];
+    expect(isDirectRoomWithBot(members, BOT_MXID)).toBe(true);
+  });
+
+  it('не считает личкой комнату с другим участником или без бота', () => {
+    expect(
+      isDirectRoomWithBot([makeMember(MY_MXID, 'join'), makeMember(OTHER_MXID, 'join')], BOT_MXID)
+    ).toBe(false);
+    expect(isDirectRoomWithBot([makeMember(MY_MXID, 'join')], BOT_MXID)).toBe(false);
+    expect(
+      isDirectRoomWithBot(
+        [makeMember(MY_MXID, 'join'), makeMember(OTHER_MXID, 'join'), makeMember(BOT_MXID, 'join')],
+        BOT_MXID
+      )
+    ).toBe(false);
+  });
+});
+
+describe('isBotInRoom', () => {
+  const makeMember = (membership?: MemberView['membership']): MemberView | undefined =>
+    membership === undefined
+      ? undefined
+      : {
+          userId: BOT_MXID,
+          membership,
+          displayName: BOT_MXID,
+          powerLevel: 0,
+        };
+
   it('истинно, когда бот состоит в комнате', () => {
-    expect(isBotInRoom(makeRoom('join'), BOT_MXID)).toBe(true);
+    expect(isBotInRoom(makeMember('join'), BOT_MXID)).toBe(true);
   });
 
   it('ложно для приглашённого, вышедшего и отсутствующего бота', () => {
-    expect(isBotInRoom(makeRoom('invite'), BOT_MXID)).toBe(false);
-    expect(isBotInRoom(makeRoom('leave'), BOT_MXID)).toBe(false);
-    expect(isBotInRoom(makeRoom(undefined), BOT_MXID)).toBe(false);
+    expect(isBotInRoom(makeMember('invite'), BOT_MXID)).toBe(false);
+    expect(isBotInRoom(makeMember('leave'), BOT_MXID)).toBe(false);
+    expect(isBotInRoom(makeMember(), BOT_MXID)).toBe(false);
   });
 
   it('ложно без MXID бота', () => {
-    expect(isBotInRoom(makeRoom('join'), '')).toBe(false);
+    expect(isBotInRoom(makeMember('join'), '')).toBe(false);
   });
 });

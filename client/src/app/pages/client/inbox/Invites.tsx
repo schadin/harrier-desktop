@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Avatar,
   Badge,
@@ -18,9 +18,8 @@ import {
   config,
 } from 'folds';
 import { useAtomValue } from 'jotai';
-import { RoomTopicEventContent } from 'matrix-js-sdk/lib/types';
+import type { CoreError } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
-import { MatrixClient, MatrixError, Room } from 'matrix-js-sdk';
 import {
   Page,
   PageContent,
@@ -31,26 +30,12 @@ import {
   PageHeroSection,
 } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { allInvitesAtom } from '../../../state/room-list/inviteList';
 import { SequenceCard } from '../../../components/sequence-card';
-import {
-  bannedInRooms,
-  getCommonRooms,
-  getDirectRoomAvatarUrl,
-  getMemberDisplayName,
-  getRoomAvatarUrl,
-  getStateEvent,
-  isDirectInvite,
-  isSpace,
-} from '../../../utils/room';
 import { nameInitials } from '../../../utils/common';
 import { RoomAvatar } from '../../../components/room-avatar';
-import {
-  addRoomIdToMDirect,
-  getMxIdLocalPart,
-  guessDmRoomUserId,
-  rateLimitedActions,
-} from '../../../utils/matrix';
+import { rateLimitedActions } from '../../../utils/matrix';
 import { Time } from '../../../components/message';
 import { useElementSizeObserver } from '../../../hooks/useElementSizeObserver';
 import { onEnterOrSpace, stopPropagation } from '../../../utils/keyboard';
@@ -59,87 +44,21 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../../components/BackRouteHandler';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { StateEvent } from '../../../../types/matrix/room';
-import { testBadWords } from '../../../plugins/bad-words';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { useIgnoredUsers } from '../../../hooks/useIgnoredUsers';
 import { useReportRoomSupported } from '../../../hooks/useReportRoomSupported';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import {
+  addRoomIdToMDirect,
+  joinRoom,
+  leaveRoom,
+  setIgnoredUsers,
+} from '../../../utils/coreRoomActions';
+import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
+import { classifyInvites, makeInviteData, type InviteData } from './inviteUtils';
 
 const COMPACT_CARD_WIDTH = 548;
-
-type InviteData = {
-  room: Room;
-  roomId: string;
-  roomName: string;
-  roomAvatar?: string;
-  roomTopic?: string;
-  roomAlias?: string;
-
-  senderId: string;
-  senderName: string;
-  inviteTs?: number;
-  reason?: string;
-
-  isSpace: boolean;
-  isDirect: boolean;
-  isEncrypted: boolean;
-};
-
-const makeInviteData = (mx: MatrixClient, room: Room, useAuthentication: boolean): InviteData => {
-  const userId = mx.getSafeUserId();
-  const direct = isDirectInvite(room, userId);
-
-  const roomAvatar = direct
-    ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-    : getRoomAvatarUrl(mx, room, 96, useAuthentication);
-  const roomName = room.name || room.getCanonicalAlias() || room.roomId;
-  const roomTopic =
-    getStateEvent(room, StateEvent.RoomTopic)?.getContent<RoomTopicEventContent>()?.topic ??
-    undefined;
-
-  const member = room.getMember(userId);
-  const memberEvent = member?.events.member;
-
-  const content = memberEvent?.getContent();
-  const senderId = memberEvent?.getSender();
-
-  const senderName = senderId
-    ? getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId
-    : undefined;
-  const inviteTs = memberEvent?.getTs();
-  const reason =
-    content && 'reason' in content && typeof content.reason === 'string'
-      ? content.reason
-      : undefined;
-
-  return {
-    room,
-    roomId: room.roomId,
-    roomAvatar,
-    roomName,
-    roomTopic,
-    roomAlias: room.getCanonicalAlias() ?? undefined,
-
-    senderId: senderId ?? 'Unknown',
-    senderName: senderName ?? 'Unknown',
-    inviteTs,
-    reason,
-
-    isSpace: isSpace(room),
-    isDirect: direct,
-    isEncrypted: !!getStateEvent(room, StateEvent.RoomEncryption),
-  };
-};
-
-const hasBadWords = (invite: InviteData): boolean =>
-  testBadWords(invite.roomName) ||
-  testBadWords(invite.roomTopic ?? '') ||
-  testBadWords(invite.senderName) ||
-  testBadWords(invite.senderId) ||
-  testBadWords(invite.reason || '');
 
 type NavigateHandler = (roomId: string, space: boolean) => void;
 
@@ -159,28 +78,31 @@ function InviteCard({
   onNavigate,
   hideAvatar,
 }: InviteCardProps) {
-  const mx = useMatrixClient();
-  const userId = mx.getSafeUserId();
+  const core = useCore();
+  const avatarRef = useMemo(
+    () =>
+      invite.avatarMxc
+        ? toMediaRef(invite.avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+        : undefined,
+    [invite.avatarMxc]
+  );
+  const avatarUrl = useMediaSource(avatarRef);
 
   const [viewTopic, setViewTopic] = useState(false);
   const closeTopic = () => setViewTopic(false);
   const openTopic = () => setViewTopic(true);
 
-  const [joinState, join] = useAsyncCallback<void, MatrixError, []>(
+  const [joinState, join] = useAsyncCallback<void, CoreError, []>(
     useCallback(async () => {
-      const dmUserId = isDirectInvite(invite.room, userId)
-        ? guessDmRoomUserId(invite.room, userId)
-        : undefined;
-
-      await mx.joinRoom(invite.roomId);
-      if (dmUserId) {
-        await addRoomIdToMDirect(mx, invite.roomId, dmUserId);
+      await joinRoom(core, invite.roomId);
+      if (invite.dmUserId) {
+        await addRoomIdToMDirect(core, invite.roomId, invite.dmUserId);
       }
       onNavigate(invite.roomId, invite.isSpace);
-    }, [mx, invite, userId, onNavigate])
+    }, [core, invite, onNavigate])
   );
-  const [leaveState, leave] = useAsyncCallback<Record<string, never>, MatrixError, []>(
-    useCallback(() => mx.leave(invite.roomId), [mx, invite])
+  const [leaveState, leave] = useAsyncCallback<void, CoreError, []>(
+    useCallback(() => leaveRoom(core, invite.roomId), [core, invite])
   );
 
   const joining =
@@ -224,11 +146,11 @@ function InviteCard({
         <Avatar size="300">
           <RoomAvatar
             roomId={invite.roomId}
-            src={hideAvatar ? undefined : invite.roomAvatar}
+            src={hideAvatar ? undefined : avatarUrl}
             alt={invite.roomName}
             renderFallback={() => (
               <Text as="span" size="H6">
-                {nameInitials(hideAvatar && invite.roomAvatar ? undefined : invite.roomName)}
+                {nameInitials(hideAvatar && invite.avatarMxc ? undefined : invite.roomName)}
               </Text>
             )}
           />
@@ -473,14 +395,14 @@ function UnknownInvites({
   hour24Clock,
   dateFormatString,
 }: UnknownInvitesProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const [declineAllStatus, declineAll] = useAsyncCallback(
     useCallback(async () => {
       const roomIds = invites.map((invite) => invite.roomId);
 
-      await rateLimitedActions(roomIds, (roomId) => mx.leave(roomId));
-    }, [mx, invites])
+      await rateLimitedActions(roomIds, (roomId) => leaveRoom(core, roomId));
+    }, [core, invites])
   );
 
   const declining = declineAllStatus.status === AsyncStatus.Loading;
@@ -546,6 +468,7 @@ function SpamInvites({
   hour24Clock,
   dateFormatString,
 }: SpamInvitesProps) {
+  const core = useCore();
   const mx = useMatrixClient();
   const [showInvites, setShowInvites] = useState(false);
 
@@ -555,8 +478,8 @@ function SpamInvites({
     useCallback(async () => {
       const roomIds = invites.map((invite) => invite.roomId);
 
-      await rateLimitedActions(roomIds, (roomId) => mx.leave(roomId));
-    }, [mx, invites])
+      await rateLimitedActions(roomIds, (roomId) => leaveRoom(core, roomId));
+    }, [core, invites])
   );
 
   const [reportAllStatus, reportAll] = useAsyncCallback(
@@ -573,8 +496,8 @@ function SpamInvites({
   );
   const [blockAllStatus, blockAll] = useAsyncCallback(
     useCallback(
-      () => mx.setIgnoredUsers([...ignoredUsers, ...unignoredUsers]),
-      [mx, ignoredUsers, unignoredUsers]
+      () => setIgnoredUsers(core, [...ignoredUsers, ...unignoredUsers]),
+      [core, ignoredUsers, unignoredUsers]
     )
   );
 
@@ -692,39 +615,38 @@ function SpamInvites({
 }
 
 export function Invites() {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
+  const core = useCore();
   const { navigateRoom, navigateSpace } = useRoomNavigate();
   const allRooms = useAtomValue(allRoomsAtom);
   const allInviteIds = useAtomValue(allInvitesAtom);
+  const memberStores = useMemo(
+    () => allRooms.map((roomId) => core.rooms.members(roomId)),
+    [core, allRooms]
+  );
+  const subscribeMembers = useCallback(
+    (listener: () => void) => {
+      const unsubscribes = memberStores.map((store) => store.subscribe(listener));
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    },
+    [memberStores]
+  );
+  const getMembersRevision = useCallback(
+    () => memberStores.reduce((revision, store) => revision + store.getSnapshot().revision, 0),
+    [memberStores]
+  );
+  useSyncExternalStore(subscribeMembers, getMembersRevision, getMembersRevision);
 
   const [filter, setFilter] = useState(InviteFilter.Known);
 
   const invitesData = allInviteIds
-    .map((inviteId) => mx.getRoom(inviteId))
-    .filter((inviteRoom): inviteRoom is Room => !!inviteRoom)
-    .map((inviteRoom) => makeInviteData(mx, inviteRoom, useAuthentication));
+    .map((inviteId) => core.rooms.room(inviteId).getSnapshot().value)
+    .filter((inviteRoom): inviteRoom is NonNullable<typeof inviteRoom> => !!inviteRoom)
+    .map((inviteRoom) => makeInviteData(core, inviteRoom.roomId));
 
-  const [knownInvites, unknownInvites, spamInvites] = useMemo(() => {
-    const known: InviteData[] = [];
-    const unknown: InviteData[] = [];
-    const spam: InviteData[] = [];
-    invitesData.forEach((invite) => {
-      if (hasBadWords(invite) || bannedInRooms(mx, allRooms, invite.senderId)) {
-        spam.push(invite);
-        return;
-      }
-
-      if (getCommonRooms(mx, allRooms, invite.senderId).length === 0) {
-        unknown.push(invite);
-        return;
-      }
-
-      known.push(invite);
-    });
-
-    return [known, unknown, spam];
-  }, [mx, allRooms, invitesData]);
+  const [knownInvites, unknownInvites, spamInvites] = useMemo(
+    () => classifyInvites(core, invitesData, allRooms),
+    [core, allRooms, invitesData]
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(document.body.clientWidth <= COMPACT_CARD_WIDTH);

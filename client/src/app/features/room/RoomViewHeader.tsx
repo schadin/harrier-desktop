@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, forwardRef, useState } from 'react';
+import React, { MouseEventHandler, forwardRef, useMemo, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -24,26 +24,21 @@ import {
   Button,
 } from 'folds';
 import { useNavigate } from 'react-router-dom';
-import { Room } from 'matrix-js-sdk';
 
 import { PageHeader } from '../../components/page';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { RoomTopicViewer } from '../../components/room-topic-viewer';
-import { StateEvent } from '../../../types/matrix/room';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { useCore } from '../../hooks/useCore';
-import { useIsDirectRoom, useRoom } from '../../hooks/useRoom';
+import { useCoreRoom } from '../../hooks/useCoreRoom';
+import { useCoreSession } from '../../hooks/useCoreSession';
+import { useCoreRoomFromContext, useIsDirectRoom, useRoom, useRoomId } from '../../hooks/useRoom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { useSpaceOptionally } from '../../hooks/useSpace';
 import { getHomeSearchPath, getSpaceSearchPath, withSearchParam } from '../../pages/pathUtils';
-import {
-  getCanonicalAliasOrRoomId,
-  guessDmRoomUserId,
-  isRoomAlias,
-  mxcUrlToHttp,
-} from '../../utils/matrix';
+import { isRoomAlias } from '../../utils/matrix';
 import { useCustomStatus } from '../../hooks/useCustomStatus';
 import { _SearchPathSearchParams } from '../../pages/paths';
 import * as css from './RoomViewHeader.css';
@@ -54,12 +49,13 @@ import { roomToUnreadAtom } from '../../state/room/roomToUnread';
 import { copyToClipboard } from '../../utils/dom';
 import { LeaveRoomPrompt } from '../../components/leave-room-prompt';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
+import { useCoreRoomState } from '../../hooks/useCoreRoomState';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { stopPropagation } from '../../utils/keyboard';
 import { getMatrixToRoom } from '../../plugins/matrix-to';
 import { getViaServers } from '../../plugins/via-servers';
 import { BackRouteHandler } from '../../components/BackRouteHandler';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import { useRoomPinnedEvents } from '../../hooks/useRoomPinnedEvents';
 import { RoomPinMenu } from './room-pin-menu';
 import { useOpenRoomSettings } from '../../state/hooks/roomSettings';
@@ -81,27 +77,32 @@ import { useLivekitSupport } from '../../hooks/useLivekitSupport';
 import { webRTCSupported } from '../../utils/rtc';
 
 type RoomMenuProps = {
-  room: Room;
+  roomId: string;
   requestClose: () => void;
 };
-const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose }, ref) => {
-  const mx = useMatrixClient();
+const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ roomId, requestClose }, ref) => {
   const core = useCore();
+  const session = useCoreSession();
+  const room = useCoreRoom(roomId);
+  const tombstone = useCoreRoomState<{ replacement_room?: string }>(
+    { roomId },
+    StateEvent.RoomTombstone
+  );
   const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
-  const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
+  const unread = useRoomUnread(roomId, roomToUnreadAtom);
   const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
+  const creators = useRoomCreators({ roomId });
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canInvite = permissions.action('invite', mx.getSafeUserId());
+  const canInvite = permissions.action('invite', session?.userId ?? '');
   const notificationPreferences = useRoomsNotificationPreferencesContext();
-  const notificationMode = getRoomNotificationMode(notificationPreferences, room.roomId);
+  const notificationMode = getRoomNotificationMode(notificationPreferences, roomId);
   const { navigateRoom } = useRoomNavigate();
 
   const [invitePrompt, setInvitePrompt] = useState(false);
 
   const handleMarkAsRead = () => {
-    markAsRead(core, room.roomId, hideActivity);
+    markAsRead(core, roomId, hideActivity);
     requestClose();
   };
 
@@ -110,8 +111,8 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
   };
 
   const handleCopyLink = () => {
-    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
+    const roomIdOrAlias = tombstone ? roomId : room?.canonicalAlias ?? roomId;
+    const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, roomId);
     copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
     requestClose();
   };
@@ -119,7 +120,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
   const openSettings = useOpenRoomSettings();
   const parentSpace = useSpaceOptionally();
   const handleOpenSettings = () => {
-    openSettings(room.roomId, parentSpace?.roomId);
+    openSettings(roomId, parentSpace?.roomId);
     requestClose();
   };
 
@@ -127,7 +128,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
     <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
       {invitePrompt && (
         <InviteUserPrompt
-          room={room}
+          roomId={roomId}
           requestClose={() => {
             setInvitePrompt(false);
             requestClose();
@@ -146,7 +147,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
             Mark as Read
           </Text>
         </MenuItem>
-        <RoomNotificationModeSwitcher roomId={room.roomId} value={notificationMode}>
+        <RoomNotificationModeSwitcher roomId={roomId} value={notificationMode}>
           {(handleOpen, opened, changing) => (
             <MenuItem
               size="300"
@@ -222,7 +223,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
                 <JumpToTime
                   onSubmit={(eventId) => {
                     setPromptJump(false);
-                    navigateRoom(room.roomId, eventId);
+                    navigateRoom(roomId, eventId);
                     requestClose();
                   }}
                   onCancel={() => setPromptJump(false)}
@@ -252,7 +253,7 @@ const RoomMenu = forwardRef<HTMLDivElement, RoomMenuProps>(({ room, requestClose
               </MenuItem>
               {promptLeave && (
                 <LeaveRoomPrompt
-                  roomId={room.roomId}
+                  roomId={roomId}
                   onDone={requestClose}
                   onCancel={() => setPromptLeave(false)}
                 />
@@ -393,18 +394,24 @@ function CallButton() {
 
 export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const navigate = useNavigate();
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const screenSize = useScreenSizeContext();
-  const room = useRoom();
+  const roomId = useRoomId();
+  const room = useCoreRoomFromContext();
+  const session = useCoreSession();
   const space = useSpaceOptionally();
+  const spaceId = space?.roomId;
+  const spaceRoom = useCoreRoom(spaceId ?? '');
+  const spaceTombstone = useCoreRoomState<{ replacement_room?: string }>(
+    { roomId: spaceId ?? '' },
+    StateEvent.RoomTombstone
+  );
   const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
+  const creators = useRoomCreators({ roomId });
   const permissions = useRoomPermissions(creators, powerLevels);
 
   const hasCallPermission = permissions.stateEvent(
     StateEvent.GroupCallMemberPrefix,
-    mx.getSafeUserId()
+    session?.userId ?? ''
   );
   const livekitSupported = useLivekitSupport();
   const rtcSupported = webRTCSupported();
@@ -413,29 +420,34 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   const [pinMenuAnchor, setPinMenuAnchor] = useState<RectCords>();
   const direct = useIsDirectRoom();
 
-  const pinnedEvents = useRoomPinnedEvents(room);
+  const pinnedEvents = useRoomPinnedEvents({ roomId });
   const {
     name,
     topic,
     avatarMxc: roomAvatarMxc,
     dmAvatarMxc,
     encrypted: encryptedRoom,
-  } = useCoreRoomMeta(room.roomId);
+  } = useCoreRoomMeta(roomId);
   const avatarMxc = direct ? dmAvatarMxc : roomAvatarMxc;
-  const dmUserId = direct ? guessDmRoomUserId(room, mx.getUserId()!) : undefined;
+  const dmUserId = direct ? room?.dmUserId : undefined;
   const dmStatus = useCustomStatus(dmUserId ?? '');
-  const avatarUrl = avatarMxc
-    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarRef = useMemo(
+    () =>
+      avatarMxc
+        ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+        : undefined,
+    [avatarMxc]
+  );
+  const avatarUrl = useMediaSource(avatarRef);
 
   const [peopleDrawer, setPeopleDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');
 
   const handleSearchClick = () => {
     const searchParams: _SearchPathSearchParams = {
-      rooms: room.roomId,
+      rooms: roomId,
     };
-    const path = space
-      ? getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))
+    const path = spaceId
+      ? getSpaceSearchPath(spaceTombstone ? spaceId : spaceRoom?.canonicalAlias ?? spaceId)
       : getHomeSearchPath();
     navigate(withSearchParam(path, searchParams));
   };
@@ -449,10 +461,9 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
   };
 
   const openSettings = useOpenRoomSettings();
-  const parentSpace = useSpaceOptionally();
   const handleMemberToggle = () => {
     if (callView) {
-      openSettings(room.roomId, parentSpace?.roomId, RoomSettingsPage.MembersPage);
+      openSettings(roomId, spaceId, RoomSettingsPage.MembersPage);
       return;
     }
     setPeopleDrawer(!peopleDrawer);
@@ -479,11 +490,11 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
           {screenSize !== ScreenSize.Mobile && (
             <Avatar size="300">
               <RoomAvatar
-                roomId={room.roomId}
+                roomId={roomId}
                 src={avatarUrl}
                 alt={name}
                 renderFallback={() => (
-                  <RoomIcon size="200" joinRule={room.getJoinRule()} roomType={room.getType()} />
+                  <RoomIcon size="200" joinRule={room?.joinRule} roomType={room?.roomType} />
                 )}
               />
             </Avatar>
@@ -613,13 +624,14 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                   escapeDeactivates: stopPropagation,
                 }}
               >
-                <RoomPinMenu room={room} requestClose={() => setPinMenuAnchor(undefined)} />
+                <RoomPinMenu roomId={roomId} requestClose={() => setPinMenuAnchor(undefined)} />
               </FocusTrap>
             }
           />
-          {!room.isCallRoom() && livekitSupported && rtcSupported && hasCallPermission && (
-            <CallButton />
-          )}
+          {room?.roomType !== RoomType.Call &&
+            livekitSupported &&
+            rtcSupported &&
+            hasCallPermission && <CallButton />}
           {screenSize === ScreenSize.Desktop && (
             <TooltipProvider
               position="Bottom"
@@ -679,7 +691,7 @@ export function RoomViewHeader({ callView }: { callView?: boolean }) {
                   escapeDeactivates: stopPropagation,
                 }}
               >
-                <RoomMenu room={room} requestClose={() => setMenuAnchor(undefined)} />
+                <RoomMenu roomId={roomId} requestClose={() => setMenuAnchor(undefined)} />
               </FocusTrap>
             }
           />

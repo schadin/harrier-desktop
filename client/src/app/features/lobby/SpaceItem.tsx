@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, ReactNode, useCallback, useRef, useState } from 'react';
+import React, { MouseEventHandler, ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Avatar,
@@ -18,21 +18,19 @@ import {
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import classNames from 'classnames';
-import { MatrixError, Room } from 'matrix-js-sdk';
-import type { PublicRoomView } from '@harrier/core';
+import type { CoreError, PublicRoomView } from '@harrier/core';
 import { HierarchyItem } from '../../hooks/useSpaceHierarchy';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { RoomAvatar } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { LocalRoomSummaryLoader } from '../../components/RoomSummaryLoader';
-import { getRoomAvatarUrl } from '../../utils/room';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import * as css from './SpaceItem.css';
 import * as styleCss from './style.css';
 import { useDraggableItem } from './DnD';
 import { stopPropagation } from '../../utils/keyboard';
-import { mxcUrlToHttp } from '../../utils/matrix';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { joinRoom } from '../../utils/coreRoomActions';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import { useOpenCreateRoomModal } from '../../state/hooks/createRoomModal';
 import { useOpenCreateSpaceModal } from '../../state/hooks/createSpaceModal';
 import { AddExistingModal } from '../add-existing';
@@ -100,20 +98,28 @@ type UnjoinedSpaceProfileProps = {
   roomId: string;
   via?: string[];
   name?: string;
-  avatarUrl?: string;
+  avatarMxc?: string;
   suggested?: boolean;
 };
 function UnjoinedSpaceProfile({
   roomId,
   via,
   name,
-  avatarUrl,
+  avatarMxc,
   suggested,
 }: UnjoinedSpaceProfileProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const avatarRef = useMemo(
+    () =>
+      avatarMxc
+        ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+        : undefined,
+    [avatarMxc]
+  );
+  const avatarUrl = useMediaSource(avatarRef);
 
-  const [joinState, join] = useAsyncCallback<Room, MatrixError, []>(
-    useCallback(() => mx.joinRoom(roomId, { viaServers: via }), [mx, roomId, via])
+  const [joinState, join] = useAsyncCallback<string, CoreError, []>(
+    useCallback(() => joinRoom(core, roomId, via), [core, roomId, via])
   );
 
   const canJoin = joinState.status === AsyncStatus.Idle || joinState.status === AsyncStatus.Error;
@@ -166,7 +172,7 @@ function UnjoinedSpaceProfile({
 type SpaceProfileProps = {
   roomId: string;
   name: string;
-  avatarUrl?: string;
+  avatarMxc?: string;
   suggested?: boolean;
   closed: boolean;
   categoryId: string;
@@ -175,12 +181,21 @@ type SpaceProfileProps = {
 function SpaceProfile({
   roomId,
   name,
-  avatarUrl,
+  avatarMxc,
   suggested,
   closed,
   categoryId,
   handleClose,
 }: SpaceProfileProps) {
+  const avatarRef = useMemo(
+    () =>
+      avatarMxc
+        ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+        : undefined,
+    [avatarMxc]
+  );
+  const avatarUrl = useMediaSource(avatarRef);
+
   return (
     <Chip
       data-category-id={categoryId}
@@ -330,7 +345,7 @@ function AddSpaceButton({ item }: { item: HierarchyItem }) {
   };
 
   const handleCreateSpace = () => {
-    openCreateSpaceModal(item.roomId as any);
+    openCreateSpaceModal(item.roomId);
     setCords(undefined);
   };
 
@@ -391,7 +406,7 @@ type SpaceItemCardProps = {
   summary: PublicRoomView | undefined;
   loading?: boolean;
   item: HierarchyItem;
-  joined?: boolean;
+  joined: boolean;
   categoryId: string;
   closed: boolean;
   handleClose?: MouseEventHandler<HTMLButtonElement>;
@@ -401,7 +416,6 @@ type SpaceItemCardProps = {
   canEditChild: boolean;
   canReorder: boolean;
   onDragging: (item?: HierarchyItem) => void;
-  getRoom: (roomId: string) => Room | undefined;
 };
 export const SpaceItemCard = as<'div', SpaceItemCardProps>(
   (
@@ -420,15 +434,11 @@ export const SpaceItemCard = as<'div', SpaceItemCardProps>(
       canEditChild,
       canReorder,
       onDragging,
-      getRoom,
       ...props
     },
     ref
   ) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
     const { roomId, content } = item;
-    const space = getRoom(roomId);
     const targetRef = useRef<HTMLDivElement>(null);
     useDraggableItem(item, targetRef, onDragging);
 
@@ -444,14 +454,14 @@ export const SpaceItemCard = as<'div', SpaceItemCardProps>(
         {before}
         <Box grow="Yes" gap="100" alignItems="Inherit" justifyContent="SpaceBetween">
           <Box ref={canReorder ? targetRef : null}>
-            {space ? (
-              <LocalRoomSummaryLoader room={space}>
+            {joined ? (
+              <LocalRoomSummaryLoader roomId={roomId}>
                 {(localSummary) =>
                   item.parentId ? (
                     <SpaceProfile
                       roomId={roomId}
                       name={localSummary.name}
-                      avatarUrl={getRoomAvatarUrl(mx, space, 96, useAuthentication)}
+                      avatarMxc={localSummary.avatarMxc}
                       suggested={content.suggested}
                       closed={closed}
                       categoryId={categoryId}
@@ -482,19 +492,14 @@ export const SpaceItemCard = as<'div', SpaceItemCardProps>(
                     roomId={roomId}
                     via={item.content.via}
                     name={summary.name || summary.canonicalAlias || roomId}
-                    avatarUrl={
-                      summary?.avatarMxc
-                        ? mxcUrlToHttp(mx, summary.avatarMxc, useAuthentication, 96, 96, 'crop') ??
-                          undefined
-                        : undefined
-                    }
+                    avatarMxc={summary.avatarMxc}
                     suggested={content.suggested}
                   />
                 )}
               </>
             )}
           </Box>
-          {space && canEditChild && (
+          {joined && canEditChild && (
             <Box shrink="No" alignItems="Inherit" gap="200">
               <AddRoomButton item={item} />
               {item.parentId === undefined && <AddSpaceButton item={item} />}

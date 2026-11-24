@@ -9,7 +9,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { EventTimelineSet, MatrixEvent, MsgType, Room } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import classNames from 'classnames';
 import { ReactEditor } from 'slate-react';
@@ -34,6 +33,12 @@ import {
 import { isKeyHotkey } from 'is-hotkey';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { useTranslation } from 'react-i18next';
+import { MsgType } from '../../../types/matrix/protocol';
+import type {
+  EventTimelineSetLike,
+  MatrixEventLike,
+  RoomLike,
+} from '../../../types/matrix/legacyStructural';
 import { eventWithShortcode, factoryEventSentBy, getMxIdLocalPart } from '../../utils/matrix';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useDsTaskBotSettings } from '../../state/dsTaskBot';
@@ -131,6 +136,7 @@ import {
   paginateCoreTimelineForward,
   useCoreTimeline,
 } from '../../hooks/useCoreTimeline';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 
 const TimelineFloat = as<'div', css.TimelineFloatVariants>(
   ({ position, className, ...props }, ref) => (
@@ -156,7 +162,7 @@ const TimelineDivider = as<'div', { variant?: ContainerColor | 'Inherit' }>(
 );
 
 type RoomTimelineProps = {
-  room: Room;
+  room: RoomLike;
   eventId?: string;
   roomInputRef: RefObject<HTMLElement>;
   editor: Editor;
@@ -189,9 +195,10 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const [messageSpacing] = useSetting(settingsAtom, 'messageSpacing');
   const [legacyUsernameColor] = useSetting(settingsAtom, 'legacyUsernameColor');
   const direct = useIsDirectRoom();
+  const roomMembers = useRoomMembers(room.roomId);
   const botCollapseAllowed = isCollapseAllowed(
     direct,
-    isDirectRoomWithBot(room, dsTaskBotSettings.botMxid)
+    isDirectRoomWithBot(roomMembers, dsTaskBotSettings.botMxid)
   );
   const [roomReadReceipts] = useSetting(settingsAtom, 'roomReadReceipts');
   const [directReadReceipts] = useSetting(settingsAtom, 'directReadReceipts');
@@ -250,7 +257,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const openUserRoomProfile = useOpenUserRoomProfile();
   const space = useSpaceOptionally();
 
-  const imagePackRooms: Room[] = useImagePackRooms(room.roomId, roomToParents);
+  const imagePackRooms = useImagePackRooms(room.roomId, roomToParents);
 
   const core = useCore();
   const timelineView = useCoreTimeline(room.roomId);
@@ -822,7 +829,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
   const { t } = useTranslation();
 
   const renderMatrixEvent = useMatrixEventRenderer<
-    [string, MatrixEvent, number, EventTimelineSet, boolean, TimelineItem]
+    [string, MatrixEventLike, number, EventTimelineSetLike, boolean, TimelineItem]
   >(
     {
       [MessageEvent.RoomMessage]: (mEventId, mEvent, item, timelineSet, collapse, timelineItem) => {
@@ -877,7 +884,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             reply={
               replyEventId && (
                 <Reply
-                  room={room}
+                  roomId={room.roomId}
                   replyEventId={replyEventId}
                   replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}
@@ -892,7 +899,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
-                  room={room}
+                  roomId={room.roomId}
                   reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}
@@ -1000,7 +1007,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             reply={
               replyEventId && (
                 <Reply
-                  room={room}
+                  roomId={room.roomId}
                   replyEventId={replyEventId}
                   replyItem={items.find((entry) => entry.eventId === replyEventId)}
                   threadRootId={threadRootId}
@@ -1015,7 +1022,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
-                  room={room}
+                  roomId={room.roomId}
                   reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}
@@ -1120,7 +1127,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
               (itemReactions(timelineItem)?.length ?? 0) > 0 && (
                 <Reactions
                   style={{ marginTop: config.space.S200 }}
-                  room={room}
+                  roomId={room.roomId}
                   reactions={itemReactions(timelineItem) ?? []}
                   mEventId={mEventId}
                   canSendReaction={canSendReaction}

@@ -1,25 +1,27 @@
 import React, { useCallback, useMemo } from 'react';
-import { WritableAccountDataEvents } from 'matrix-js-sdk';
+import type { JsonObject } from '@harrier/core';
 import { ImagePackContent } from './ImagePackContent';
 import { ImagePack, PackContent } from '../../plugins/custom-emoji';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { useUserImagePack } from '../../hooks/useImagePacks';
 
 export function UserImagePack() {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
 
-  const defaultPack = useMemo(() => new ImagePack(mx.getUserId() ?? '', {}, undefined), [mx]);
+  const defaultPack = useMemo(() => new ImagePack(userId, {}, undefined), [userId]);
   const imagePack = useUserImagePack();
 
   const handleUpdate = useCallback(
     async (packContent: PackContent) => {
-      await mx.setAccountData(
-        AccountDataEvent.PoniesUserEmotes as keyof WritableAccountDataEvents,
-        packContent
+      const result = await core.auth.setAccountData(
+        AccountDataEvent.PoniesUserEmotes,
+        packContent as unknown as JsonObject
       );
+      if (!result.ok) throw result.error;
     },
-    [mx]
+    [core]
   );
 
   return <ImagePackContent imagePack={imagePack ?? defaultPack} canEdit onUpdate={handleUpdate} />;

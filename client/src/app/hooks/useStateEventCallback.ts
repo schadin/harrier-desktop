@@ -1,17 +1,12 @@
-import { MatrixClient, MatrixEvent, RoomState, RoomStateEvent } from 'matrix-js-sdk';
+import type { RoomStateEntry } from '@harrier/core';
 import { useEffect } from 'react';
+import { useCore } from './useCore';
 
 export type StateEventCallback = (
-  event: MatrixEvent,
-  state: RoomState,
-  lastStateEvent: MatrixEvent | null
+  entry: RoomStateEntry & { readonly roomId: string; readonly eventType: string }
 ) => void;
 
-export const useStateEventCallback = (mx: MatrixClient, onStateEvent: StateEventCallback) => {
-  useEffect(() => {
-    mx.on(RoomStateEvent.Events, onStateEvent);
-    return () => {
-      mx.removeListener(RoomStateEvent.Events, onStateEvent);
-    };
-  }, [mx, onStateEvent]);
+export const useStateEventCallback = (onStateEvent: StateEventCallback) => {
+  const core = useCore();
+  useEffect(() => core.rooms.onState(onStateEvent), [core, onStateEvent]);
 };

@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import type { CoreError } from '@harrier/core';
 import {
   Avatar,
   Box,
@@ -26,9 +27,8 @@ import {
   toRem,
 } from 'folds';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { JoinRule, Room } from 'matrix-js-sdk';
-import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
 import FocusTrap from 'focus-trap-react';
+import { JoinRule } from '../../../../types/matrix/legacyStructural';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { mDirectAtom } from '../../../state/mDirectList';
@@ -54,6 +54,8 @@ import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
 import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useSpaceJoinedHierarchy, sortRoomsByOrder } from '../../../hooks/useSpaceHierarchy';
 import { factoryRoomIdByActivity } from '../../../utils/sort';
 import {
@@ -94,6 +96,11 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { BreakWord } from '../../../styles/Text.css';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { useCallEmbed } from '../../../hooks/useCallEmbed';
+import { joinRoom } from '../../../utils/coreRoomActions';
+
+type MatrixClient = ReturnType<typeof useMatrixClient>;
+type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
+type RoomJoinRulesContent = { join_rule?: string };
 
 type SpaceMenuProps = {
   room: Room;
@@ -102,6 +109,7 @@ type SpaceMenuProps = {
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClose }, ref) => {
   const mx = useMatrixClient();
   const core = useCore();
+  const session = useCoreSession();
   const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
   const [developerTools] = useSetting(settingsAtom, 'developerTools');
   const roomToParents = useAtomValue(roomToParentsAtom);
@@ -109,7 +117,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canInvite = permissions.action('invite', mx.getSafeUserId());
+  const canInvite = permissions.action('invite', session?.userId ?? '');
   const openSpaceSettings = useOpenSpaceSettings();
   const { navigateRoom } = useRoomNavigate();
 
@@ -153,7 +161,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
       <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
         {invitePrompt && room && (
           <InviteUserPrompt
-            room={room}
+            roomId={room.roomId}
             requestClose={() => {
               setInvitePrompt(false);
               requestClose();
@@ -262,7 +270,7 @@ function SpaceHeader() {
   const sortType = useSpaceRoomSort(space.roomId);
   const setSpaceRoomSort = useSetSpaceRoomSort();
 
-  const joinRules = useCoreRoomState<RoomJoinRulesEventContent>(space, StateEvent.RoomJoinRules);
+  const joinRules = useCoreRoomState<RoomJoinRulesContent>(space, StateEvent.RoomJoinRules);
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     const cords = evt.currentTarget.getBoundingClientRect();
@@ -354,24 +362,20 @@ function SpaceHeader() {
 
 type SpaceTombstoneProps = { roomId: string; replacementRoomId: string };
 export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const { navigateSpace } = useRoomNavigate();
 
-  const [joinState, handleJoin] = useAsyncCallback(
-    useCallback(() => {
-      const currentRoom = mx.getRoom(roomId);
-      const via = currentRoom ? getViaServers(core, currentRoom.roomId) : [];
-      return mx.joinRoom(replacementRoomId, {
-        viaServers: via,
-      });
-    }, [mx, core, roomId, replacementRoomId])
+  const [joinState, handleJoin] = useAsyncCallback<string, CoreError, []>(
+    useCallback(
+      () => joinRoom(core, replacementRoomId, getViaServers(core, roomId)),
+      [core, roomId, replacementRoomId]
+    )
   );
-  const replacementRoom = mx.getRoom(replacementRoomId);
+  const replacementRoom = useCoreRoom(replacementRoomId);
 
   const handleOpen = () => {
     if (replacementRoom) navigateSpace(replacementRoom.roomId);
-    if (joinState.status === AsyncStatus.Success) navigateSpace(joinState.data.roomId);
+    if (joinState.status === AsyncStatus.Success) navigateSpace(joinState.data);
   };
 
   return (
@@ -390,12 +394,12 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
         <Text size="T200">This space has been replaced and is no longer active.</Text>
         {joinState.status === AsyncStatus.Error && (
           <Text className={BreakWord} style={{ color: color.Critical.Main }} size="T200">
-            {(joinState.error as any)?.message ?? 'Failed to join replacement space!'}
+            {joinState.error.message ?? 'Failed to join replacement space!'}
           </Text>
         )}
       </Box>
       <Box direction="Column" shrink="No">
-        {replacementRoom?.getMyMembership() === Membership.Join ||
+        {replacementRoom?.membership === Membership.Join ||
         joinState.status === AsyncStatus.Success ? (
           <Button onClick={handleOpen} size="300" variant="Success" fill="Solid" radii="300">
             <Text size="B300">Open New Space</Text>

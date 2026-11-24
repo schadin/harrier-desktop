@@ -1,52 +1,48 @@
-import { ReactNode, useCallback, useMemo } from 'react';
-import { Capabilities, validateAuthMetadata, ValidatedAuthMetadata } from 'matrix-js-sdk';
-import { AsyncStatus, useAsyncCallbackValue } from '../hooks/useAsyncCallback';
-import { useMatrixClient } from '../hooks/useMatrixClient';
+import type { AuthMetadataView, CapabilitiesView } from '@harrier/core';
+import { ReactNode, useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCore } from '../hooks/useCore';
 import { MediaConfig } from '../hooks/useMediaConfig';
-import { promiseFulfilledResult } from '../utils/common';
 
 export type ServerConfigs = {
-  capabilities?: Capabilities;
+  capabilities?: CapabilitiesView;
   mediaConfig?: MediaConfig;
-  authMetadata?: ValidatedAuthMetadata;
+  authMetadata?: AuthMetadataView | null;
 };
 
 type ServerConfigsLoaderProps = {
   children: (configs: ServerConfigs) => ReactNode;
 };
 export function ServerConfigsLoader({ children }: ServerConfigsLoaderProps) {
-  const mx = useMatrixClient();
-  const fallbackConfigs = useMemo(() => ({}), []);
+  const core = useCore();
+  const capabilities = useSyncExternalStore(
+    core.auth.capabilities.subscribe,
+    core.auth.capabilities.getSnapshot,
+    core.auth.capabilities.getSnapshot
+  ).value;
+  const mediaConfig = useSyncExternalStore(
+    core.media.config.subscribe,
+    core.media.config.getSnapshot,
+    core.media.config.getSnapshot
+  ).value;
+  const authMetadata = useSyncExternalStore(
+    core.auth.authMetadata.subscribe,
+    core.auth.authMetadata.getSnapshot,
+    core.auth.authMetadata.getSnapshot
+  ).value;
 
-  const [configsState] = useAsyncCallbackValue<ServerConfigs, unknown>(
-    useCallback(async () => {
-      const result = await Promise.allSettled([
-        mx.getCapabilities(),
-        mx.getMediaConfig(),
-        mx.getAuthMetadata(),
-      ]);
+  const refresh = useCallback(() => {
+    core.auth.refreshCapabilities().catch(() => undefined);
+    core.media.refreshConfig().catch(() => undefined);
+    core.auth.refreshAuthMetadata().catch(() => undefined);
+  }, [core]);
 
-      const capabilities = promiseFulfilledResult(result[0]);
-      const mediaConfig = promiseFulfilledResult(result[1]);
-      const authMetadata = promiseFulfilledResult(result[2]);
-      let validatedAuthMetadata: ValidatedAuthMetadata | undefined;
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-      try {
-        validatedAuthMetadata = validateAuthMetadata(authMetadata);
-      } catch (e) {
-        console.error(e);
-      }
-
-      return {
-        capabilities,
-        mediaConfig,
-        authMetadata: validatedAuthMetadata,
-      };
-    }, [mx])
-  );
-
-  const configs: ServerConfigs =
-    configsState.status === AsyncStatus.Success ? configsState.data : fallbackConfigs;
-
-  return children(configs);
+  return children({
+    capabilities,
+    mediaConfig: { 'm.upload.size': mediaConfig.maxUploadSize },
+    authMetadata,
+  });
 }

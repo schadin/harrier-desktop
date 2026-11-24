@@ -2,10 +2,10 @@ import React, { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Editor, Element, Transforms } from 'slate';
 import { Box, MenuItem, Text as FoldsText, config } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
 import { AutocompleteMenu, AutocompleteQuery, BlockType } from '../../components/editor';
 import { useKeyDown } from '../../hooks/useKeyDown';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { onTabPress } from '../../utils/keyboard';
 import { dsTaskBotLastTasksAtom, useDsTaskBotSettings } from '../../state/dsTaskBot';
 import type { DsTask } from './parser';
@@ -17,10 +17,9 @@ import {
   buildBotCommandSuggestions,
   filterBotCommandSuggestions,
 } from './botCommandSuggestions';
-import { isDirectRoomWithBot } from './helpers';
 
 type BotCommandAutocompleteProps = {
-  room: Room;
+  roomId: string;
   editor: Editor;
   query: AutocompleteQuery<string>;
   requestClose: () => void;
@@ -34,17 +33,24 @@ const hasBotMention = (editor: Editor, botMxid: string): boolean => {
 };
 
 export function BotCommandAutocomplete({
-  room,
+  roomId,
   editor,
   query,
   requestClose,
 }: BotCommandAutocompleteProps) {
   const { t } = useTranslation();
   const settings = useDsTaskBotSettings();
-  const lastTasks: DsTask[] = useAtomValue(dsTaskBotLastTasksAtom)[room.roomId] ?? [];
+  const members = useRoomMembers(roomId);
+  const lastTasks: DsTask[] = useAtomValue(dsTaskBotLastTasksAtom)[roomId] ?? [];
 
   const enabled = settings.helpersEnabled && settings.botMxid !== '';
-  const dm = enabled && isDirectRoomWithBot(room, settings.botMxid);
+  const joinedMembers = members.filter(
+    (member) => member.membership === 'join' || member.membership === 'invite'
+  );
+  const dm =
+    enabled &&
+    joinedMembers.length === 2 &&
+    joinedMembers.some((member) => member.userId === settings.botMxid);
   // После чипа /dstask упоминание не требуется: sendBotCommand добавит его сам.
   const allowed =
     enabled && (dm || query.viaSlash === true || hasBotMention(editor, settings.botMxid));

@@ -164,6 +164,7 @@ export type RoomsModule = {
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   viaServers(roomId: RoomId): readonly string[];
   mutualRooms(userId: UserId): Promise<CoreResult<readonly RoomId[]>>;
+  resolveAlias(alias: string): Promise<CoreResult<RoomId | null>>;
   aliases(roomId: RoomId): Promise<CoreResult<RoomAliasesView>>;
   createAlias(alias: string, roomId: RoomId): Promise<CoreResult<void>>;
   deleteAlias(alias: string): Promise<CoreResult<void>>;
@@ -194,6 +195,11 @@ export type RoomsModule = {
   ): SnapshotStore<RoomStateEntry | null>;
   stateList(roomId: RoomId, eventType: string): SnapshotStore<readonly RoomStateEntry[]>;
   stateEntries(roomId: RoomId): SnapshotStore<readonly RoomStateEntry[]>;
+  onState(
+    listener: (
+      entry: RoomStateEntry & { readonly roomId: RoomId; readonly eventType: string }
+    ) => void
+  ): () => void;
   sendState(
     roomId: RoomId,
     eventType: string,
@@ -285,6 +291,7 @@ export type NotificationsModule = {
   ): Promise<CoreResult<void>>;
   deletePushRule(kind: string, ruleId: string): Promise<CoreResult<void>>;
   setPusher(pusher: JsonObject): Promise<CoreResult<void>>;
+  emailNotifications(): Promise<CoreResult<{ readonly enabled: boolean; readonly email?: string }>>;
   setRoomMode(
     roomId: RoomId,
     mode: RoomNotificationModeView,

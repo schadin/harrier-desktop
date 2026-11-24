@@ -2,7 +2,8 @@ import React from 'react';
 import { SpaceSettings } from './SpaceSettings';
 import { Modal500 } from '../../components/Modal500';
 import { useCloseSpaceSettings, useSpaceSettingsState } from '../../state/hooks/spaceSettings';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
+import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { SpaceSettingsState } from '../../state/spaceSettings';
 import { RoomProvider } from '../../hooks/useRoom';
 import { SpaceProvider } from '../../hooks/useSpace';
@@ -14,7 +15,7 @@ function RenderSettings({ state }: RenderSettingsProps) {
   const { roomId, spaceId, page } = state;
   const closeSettings = useCloseSpaceSettings();
   const allJoinedRooms = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allJoinedRooms);
+  const getRoom = useGetCoreRoom(allJoinedRooms);
   const room = getRoom(roomId);
   const space = spaceId && spaceId !== roomId ? getRoom(spaceId) : undefined;
 
@@ -22,8 +23,8 @@ function RenderSettings({ state }: RenderSettingsProps) {
 
   return (
     <Modal500 requestClose={closeSettings}>
-      <SpaceProvider value={space ?? null}>
-        <RoomProvider value={room}>
+      <SpaceProvider value={space?.roomId ?? null}>
+        <RoomProvider value={room.roomId}>
           <SpaceSettings initialPage={page} requestClose={closeSettings} />
         </RoomProvider>
       </SpaceProvider>

@@ -32,10 +32,10 @@ import React, {
 } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { useHover, useFocusWithin } from 'react-aria';
-import { MatrixEvent, Room } from 'matrix-js-sdk';
 import classNames from 'classnames';
-import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
-import type { ReactionCountView, TimelineItem } from '@harrier/core';
+import type { ReactionCountView, RoomView, TimelineItem } from '@harrier/core';
+import type { MatrixEventLike, RoomLike } from '../../../../types/matrix/legacyStructural';
+import type { RoomPinnedEventsEventContent } from '../../../../types/matrix/protocol';
 import {
   AvatarBase,
   BubbleLayout,
@@ -88,8 +88,7 @@ type MessageQuickReactionsProps = {
 };
 export const MessageQuickReactions = as<'div', MessageQuickReactionsProps>(
   ({ onReaction, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const recentEmojis = useRecentEmoji(mx, 4);
+    const recentEmojis = useRecentEmoji(4);
 
     if (recentEmojis.length === 0) return <span />;
     return (
@@ -126,7 +125,7 @@ export const MessageQuickReactions = as<'div', MessageQuickReactionsProps>(
 export const MessageAllReactionItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     reactionCounts: readonly ReactionCountView[];
     onClose?: () => void;
   }
@@ -159,7 +158,7 @@ export const MessageAllReactionItem = as<
           >
             <Modal variant="Surface" size="300">
               <ReactionViewer
-                room={room}
+                roomId={room.roomId}
                 reactions={reactionCounts}
                 requestClose={() => setOpen(false)}
               />
@@ -187,7 +186,7 @@ export const MessageAllReactionItem = as<
 export const MessageReadReceiptItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     eventId: string;
     onClose?: () => void;
   }
@@ -212,7 +211,7 @@ export const MessageReadReceiptItem = as<
             }}
           >
             <Modal variant="Surface" size="300">
-              <EventReaders room={room} eventId={eventId} requestClose={handleClose} />
+              <EventReaders roomId={room.roomId} eventId={eventId} requestClose={handleClose} />
             </Modal>
           </FocusTrap>
         </OverlayCenter>
@@ -237,14 +236,14 @@ export const MessageReadReceiptItem = as<
 export const MessageSourceCodeItem = as<
   'button',
   {
-    room: Room;
-    mEvent: MatrixEvent;
+    room: RoomLike;
+    mEvent: MatrixEventLike;
     onClose?: () => void;
   }
 >(({ room, mEvent, onClose, ...props }, ref) => {
   const [open, setOpen] = useState(false);
 
-  const getContent = (evt: MatrixEvent) =>
+  const getContent = (evt: MatrixEventLike) =>
     evt.isEncrypted()
       ? {
           [`<== DECRYPTED_EVENT ==>`]: evt.getEffectiveEvent(),
@@ -320,7 +319,7 @@ export const MessageSourceCodeItem = as<
 export const MessageCopyLinkItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     eventId: string;
     onClose?: () => void;
   }
@@ -417,7 +416,7 @@ export const MessageRemoveLocalItem = as<
 export const MessagePinItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     eventId: string;
     onClose?: () => void;
   }
@@ -456,7 +455,7 @@ export const MessagePinItem = as<
 export const MessageDeleteItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     eventId: string;
     onClose?: () => void;
   }
@@ -587,7 +586,7 @@ export const MessageDeleteItem = as<
 export const MessageReportItem = as<
   'button',
   {
-    room: Room;
+    room: RoomLike;
     eventId: string;
     onClose?: () => void;
   }
@@ -718,8 +717,8 @@ export const MessageReportItem = as<
 });
 
 export type MessageProps = {
-  room: Room;
-  mEvent: MatrixEvent;
+  room: RoomLike;
+  mEvent: MatrixEventLike;
   timelineItem: TimelineItem;
   collapse: boolean;
   highlight: boolean;
@@ -727,7 +726,7 @@ export type MessageProps = {
   canDelete?: boolean;
   canSendReaction?: boolean;
   canPinEvent?: boolean;
-  imagePackRooms?: Room[];
+  imagePackRooms?: RoomView[];
   reactionCounts?: readonly ReactionCountView[];
   messageLayout: MessageLayout;
   messageSpacing: MessageSpacing;
@@ -860,7 +859,12 @@ export const Message = as<'div', MessageProps>(
                 hour24Clock={hour24Clock}
                 dateFormatString={dateFormatString}
               />
-              <MessageStatus room={room} sender={senderId} status={messageStatus} readBy={readBy} />
+              <MessageStatus
+                roomId={room.roomId}
+                sender={senderId}
+                status={messageStatus}
+                readBy={readBy}
+              />
             </>
           )}
         </Box>
@@ -911,7 +915,12 @@ export const Message = as<'div', MessageProps>(
             hour24Clock
           )}`}
         />
-        <MessageStatus room={room} sender={senderId} status={messageStatus} readBy={readBy} />
+        <MessageStatus
+          roomId={room.roomId}
+          sender={senderId}
+          status={messageStatus}
+          readBy={readBy}
+        />
       </Box>
     );
 
@@ -925,7 +934,6 @@ export const Message = as<'div', MessageProps>(
               width: '100vw',
             }}
             roomId={room.roomId}
-            room={room}
             eventId={timelineItem.eventId}
             content={timelineItem.content}
             imagePackRooms={imagePackRooms}
@@ -1281,7 +1289,7 @@ export const Message = as<'div', MessageProps>(
         {readReceiptUsers && readReceiptUsers.length > 0 && (
           <ReadReceiptGroup
             className={css.ReadReceiptMarker}
-            room={room}
+            roomId={room.roomId}
             eventId={timelineItem.eventId}
             userIds={readReceiptUsers}
           />
@@ -1292,8 +1300,8 @@ export const Message = as<'div', MessageProps>(
 );
 
 export type EventProps = {
-  room: Room;
-  mEvent: MatrixEvent;
+  room: RoomLike;
+  mEvent: MatrixEventLike;
   timelineItem: TimelineItem;
   highlight: boolean;
   canDelete?: boolean;
@@ -1448,7 +1456,7 @@ export const Event = as<'div', EventProps>(
         {readReceiptUsers && readReceiptUsers.length > 0 && (
           <ReadReceiptGroup
             className={css.ReadReceiptMarker}
-            room={room}
+            roomId={room.roomId}
             eventId={timelineItem.eventId}
             userIds={readReceiptUsers}
           />

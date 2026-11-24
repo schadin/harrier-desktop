@@ -19,8 +19,9 @@ import {
   PopOut,
   RectCords,
 } from 'folds';
-import { Direction, MatrixError } from 'matrix-js-sdk';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { CoreError } from '@harrier/core';
+import type { EventTimelineDirection } from '../../../../types/matrix/legacyStructural';
+import { useCore } from '../../../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useAlive } from '../../../hooks/useAlive';
@@ -31,13 +32,17 @@ import { getToday, getYesterday, timeDayMonthYear, timeHourMinute } from '../../
 import { DatePicker, TimePicker } from '../../../components/time-date';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
+import { findCoreTimelineEvent } from './jumpToTime';
+
+const TIMELINE_PAGE_SIZE = 80;
+const FORWARD_DIRECTION: EventTimelineDirection = 'f';
 
 type JumpToTimeProps = {
   onCancel: () => void;
   onSubmit: (eventId: string) => void;
 };
 export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const alive = useAlive();
   const createStateEvent = useStateEvent(room, StateEvent.RoomCreate);
@@ -67,13 +72,34 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
   };
   const handleBeginning = () => setTs(createTs);
 
-  const [timestampState, timestampToEvent] = useAsyncCallback<string, MatrixError, [number]>(
+  const [timestampState, timestampToEvent] = useAsyncCallback<string, CoreError, [number]>(
     useCallback(
       async (newTs) => {
-        const result = await mx.timestampToEvent(room.roomId, newTs, Direction.Forward);
-        return result.event_id;
+        let previousFirstEventId: string | undefined;
+        for (;;) {
+          const timeline = core.timeline.timeline(room.roomId).getSnapshot().value;
+          if (timeline.items.length > 0) {
+            const event = findCoreTimelineEvent(timeline.items, newTs);
+            if (!event) throw new CoreError('not-found', `No event found in ${room.roomId}`);
+            if (event.timestamp >= newTs || !timeline.hasBackwardHistory) return event.eventId;
+            if (FORWARD_DIRECTION !== 'f') return event.eventId;
+            if (event.eventId === previousFirstEventId) {
+              throw new CoreError(
+                'not-found',
+                `No event found at or after ${newTs} in ${room.roomId}`
+              );
+            }
+            previousFirstEventId = event.eventId;
+          } else if (!timeline.hasBackwardHistory) {
+            throw new CoreError('not-found', `No event found in ${room.roomId}`);
+          }
+
+          // eslint-disable-next-line no-await-in-loop -- pagination depends on the previous page
+          const result = await core.timeline.paginateBackward(room.roomId, TIMELINE_PAGE_SIZE);
+          if (!result.ok) throw result.error;
+        }
       },
-      [mx, room]
+      [core, room.roomId]
     )
   );
 

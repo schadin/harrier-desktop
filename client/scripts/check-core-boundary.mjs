@@ -29,10 +29,8 @@ const imports = (file) => {
 
 walk(path.join(root, 'src'), (file) => {
   for (const specifier of imports(file)) {
-    if (/^matrix-js-sdk\/lib\/crypto-api(?:\/|$)/.test(specifier)) {
-      errors.push(
-        `${path.relative(root, file)}: crypto-api только в core-matrix-js (${specifier})`
-      );
+    if (specifier === 'matrix-js-sdk' || specifier.startsWith('matrix-js-sdk/')) {
+      errors.push(`${path.relative(root, file)}: SDK вне core-matrix-js (${specifier})`);
     }
   }
 });

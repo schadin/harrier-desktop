@@ -60,6 +60,7 @@ import {
   Room,
   RoomEvent,
   RoomMemberEvent,
+  RoomStateEvent,
   SetPresence,
   SyncState,
   User,
@@ -665,6 +666,11 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       ...summary,
       topic,
       encrypted,
+      guestCanJoin: room.getGuestAccess() === 'can_join',
+      memberCount: room.getJoinedMemberCount(),
+      historyVisibility: room.currentState
+        .getStateEvents('m.room.history_visibility', '')
+        ?.getContent<{ history_visibility?: string }>().history_visibility,
       joinRule: room.getJoinRule(),
       joinRuleContent: room.currentState.getStateEvents('m.room.join_rules', '')?.getContent() as
         | JsonObject
@@ -734,6 +740,22 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       content: event.getContent() as JsonObject,
     }));
   };
+
+  const stateListeners = new Set<
+    (entry: RoomStateEntry & { roomId: string; eventType: string }) => void
+  >();
+  client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
+    const entry = {
+      roomId: event.getRoomId() ?? '',
+      eventType: event.getType(),
+      stateKey: event.getStateKey() ?? '',
+      content: event.getContent() as JsonObject,
+      eventId: event.getId() ?? undefined,
+      sender: event.getSender() ?? undefined,
+      timestamp: event.getTs() ?? undefined,
+    };
+    stateListeners.forEach((listener) => listener(entry));
+  });
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
   const stateKeyOf = (roomId: string, eventType: string, key: string) =>
@@ -1684,6 +1706,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         creatorStores.set(roomId, store);
         return store;
       },
+      async resolveAlias(alias) {
+        try {
+          const result = await client.getRoomIdForAlias(alias);
+          return { ok: true, value: result?.room_id ?? null };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async aliases(roomId) {
         try {
           const local = await client.getLocalAliases(roomId);
@@ -1907,6 +1937,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore(buildStateEntry(roomId, eventType, stateKey));
         stateEntryStores.set(key, store);
         return store;
+      },
+      onState(listener) {
+        stateListeners.add(listener);
+        return () => stateListeners.delete(listener);
       },
       stateEntries(roomId) {
         const existing = stateEntriesStores.get(roomId);
@@ -2475,6 +2509,27 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         try {
           await client.deletePushRule('global', kind as never, ruleId);
           return await refreshNotificationPreferences();
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async emailNotifications() {
+        try {
+          const tpIDs = (await client.getThreePids())?.threepids ?? [];
+          const emailAddresses = tpIDs
+            .filter((id) => id.medium === 'email')
+            .map((id) => id.address);
+          if (emailAddresses.length === 0) return { ok: true, value: { enabled: false } };
+          const pushers = (await client.getPushers())?.pushers ?? [];
+          const emailPusher = pushers.find(
+            (pusher) => pusher.app_id === 'm.email' && emailAddresses.includes(pusher.pushkey)
+          );
+          return {
+            ok: true,
+            value: emailPusher?.pushkey
+              ? { enabled: true, email: emailPusher.pushkey }
+              : { enabled: false, email: emailAddresses[0] },
+          };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }

@@ -12,7 +12,7 @@ import React, {
 import { Box, config, Icons, Scroll } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
-import { Room } from 'matrix-js-sdk';
+import type { RoomView } from '@harrier/core';
 import { atom, PrimitiveAtom, useAtom, useSetAtom } from 'jotai';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { IEmoji, emojiGroups, emojis } from '../../plugins/emoji';
@@ -21,6 +21,7 @@ import { useEmojiGroupIcons } from './useEmojiGroupIcons';
 import { preventScrollWithArrowKey, stopPropagation } from '../../utils/keyboard';
 import { useRelevantImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
 import { isUserId, mxcUrlToHttp } from '../../utils/matrix';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
@@ -73,7 +74,7 @@ const useGroups = (
 ): [EmojiGroupItem[], StickerGroupItem[]] => {
   const mx = useMatrixClient();
 
-  const recentEmojis = useRecentEmoji(mx, 21);
+  const recentEmojis = useRecentEmoji(21);
   const labels = useEmojiGroupLabels();
 
   const emojiGroupItems = useMemo(() => {
@@ -134,31 +135,14 @@ const useGroups = (
 };
 
 const useItemRenderer = (tab: EmojiBoardTab) => {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
-
   const renderItem = (emoji: IEmoji | PackImageReader, index: number) => {
     if ('unicode' in emoji) {
       return <EmojiItem key={emoji.unicode + index} emoji={emoji} />;
     }
     if (tab === EmojiBoardTab.Sticker) {
-      return (
-        <StickerItem
-          key={emoji.shortcode + index}
-          mx={mx}
-          useAuthentication={useAuthentication}
-          image={emoji}
-        />
-      );
+      return <StickerItem key={emoji.shortcode + index} image={emoji} />;
     }
-    return (
-      <CustomEmojiItem
-        key={emoji.shortcode + index}
-        mx={mx}
-        useAuthentication={useAuthentication}
-        image={emoji}
-      />
-    );
+    return <CustomEmojiItem key={emoji.shortcode + index} image={emoji} />;
   };
 
   return renderItem;
@@ -354,7 +338,7 @@ const VIRTUAL_OVER_SCAN = 2;
 type EmojiBoardProps = {
   tab?: EmojiBoardTab;
   onTabChange?: (tab: EmojiBoardTab) => void;
-  imagePackRooms: Room[];
+  imagePackRooms: RoomView[];
   requestClose: () => void;
   returnFocusOnDeactivate?: boolean;
   onEmojiSelect?: (unicode: string, shortcode: string) => void;
@@ -376,7 +360,7 @@ export function EmojiBoard({
   allowTextCustomEmoji,
   addToRecentEmoji = true,
 }: EmojiBoardProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const emojiTab = tab === EmojiBoardTab.Emoji;
   const usage = emojiTab ? ImageUsage.Emoticon : ImageUsage.Sticker;
@@ -437,7 +421,7 @@ export function EmojiBoard({
     if (emojiInfo.type === EmojiType.Emoji) {
       onEmojiSelect?.(emojiInfo.data, emojiInfo.shortcode);
       if (!evt.altKey && !evt.shiftKey && addToRecentEmoji) {
-        addRecentEmoji(mx, emojiInfo.data);
+        addRecentEmoji(core, emojiInfo.data);
       }
     }
     if (emojiInfo.type === EmojiType.CustomEmoji) {

@@ -3,19 +3,20 @@ import {
   decryptAttachment,
   encryptAttachment,
 } from 'browser-encrypt-attachment';
-import {
-  EventTimeline,
-  MatrixClient,
-  MatrixError,
-  MatrixEvent,
-  Room,
-  RoomMember,
-  UploadProgress,
-  UploadResponse,
-} from 'matrix-js-sdk';
 import to from 'await-to-js';
 import { IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/common';
 import { AccountDataEvent } from '../../types/matrix/accountData';
+import {
+  EventTimelineDirection,
+  LegacyMatrixError,
+  MatrixClientLike,
+  MatrixErrorLike,
+  MatrixEventLike,
+  RoomLike,
+  RoomMemberLike,
+  UploadProgressLike,
+  UploadResponseLike,
+} from '../../types/matrix/legacyStructural';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
 
@@ -37,7 +38,7 @@ export const isRoomId = (id: string): boolean => id.startsWith('!');
 
 export const isRoomAlias = (id: string): boolean => validMxId(id) && id.startsWith('#');
 
-export const getCanonicalAliasRoomId = (mx: MatrixClient, alias: string): string | undefined =>
+export const getCanonicalAliasRoomId = (mx: MatrixClientLike, alias: string): string | undefined =>
   mx
     .getRooms()
     ?.find(
@@ -46,7 +47,7 @@ export const getCanonicalAliasRoomId = (mx: MatrixClient, alias: string): string
         getStateEvent(room, StateEvent.RoomTombstone) === undefined
     )?.roomId;
 
-export const getCanonicalAliasOrRoomId = (mx: MatrixClient, roomId: string): string => {
+export const getCanonicalAliasOrRoomId = (mx: MatrixClientLike, roomId: string): string => {
   const room = mx.getRoom(roomId);
   if (!room) return roomId;
   if (getStateEvent(room, StateEvent.RoomTombstone) !== undefined) return roomId;
@@ -139,14 +140,14 @@ export type ContentUploadOptions = {
   name?: string;
   fileType?: string;
   hideFilename?: boolean;
-  onPromise?: (promise: Promise<UploadResponse>) => void;
-  onProgress?: (progress: UploadProgress) => void;
+  onPromise?: (promise: Promise<UploadResponseLike>) => void;
+  onProgress?: (progress: UploadProgressLike) => void;
   onSuccess: (mxc: string) => void;
-  onError: (error: MatrixError) => void;
+  onError: (error: MatrixErrorLike) => void;
 };
 
 export const uploadContent = async (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   file: TUploadContent,
   options: ContentUploadOptions
 ) => {
@@ -163,23 +164,29 @@ export const uploadContent = async (
     const data = await uploadPromise;
     const mxc = data.content_uri;
     if (mxc) onSuccess(mxc);
-    else onError(new MatrixError(data));
+    else onError(new LegacyMatrixError(data));
   } catch (e: any) {
     const error = typeof e?.message === 'string' ? e.message : undefined;
     const errcode = typeof e?.name === 'string' ? e.message : undefined;
-    onError(new MatrixError({ error, errcode }));
+    onError(new LegacyMatrixError({ error, errcode }));
   }
 };
 
-export const matrixEventByRecency = (m1: MatrixEvent, m2: MatrixEvent) => m2.getTs() - m1.getTs();
+export const matrixEventByRecency = (m1: MatrixEventLike, m2: MatrixEventLike) =>
+  m2.getTs() - m1.getTs();
 
-export const factoryEventSentBy = (senderId: string) => (ev: MatrixEvent) =>
+export const factoryEventSentBy = (senderId: string) => (ev: MatrixEventLike) =>
   ev.getSender() === senderId;
 
-export const eventWithShortcode = (ev: MatrixEvent) =>
+export const eventWithShortcode = (ev: MatrixEventLike) =>
   typeof ev.getContent().shortcode === 'string';
 
-export const getDMRoomFor = (mx: MatrixClient, userId: string): Room | undefined => {
+type ClientRoom<M extends MatrixClientLike> = ReturnType<M['getRooms']>[number];
+
+export const getDMRoomFor = <M extends MatrixClientLike>(
+  mx: M,
+  userId: string
+): ClientRoom<M> | undefined => {
   const dmLikeRooms = mx
     .getRooms()
     .filter(
@@ -189,15 +196,15 @@ export const getDMRoomFor = (mx: MatrixClient, userId: string): Room | undefined
         room.getMembers().length <= 2
     );
 
-  return dmLikeRooms.find((room) => room.getMember(userId));
+  return dmLikeRooms.find((room) => room.getMember(userId)) as ClientRoom<M> | undefined;
 };
 
-export const guessDmRoomUserId = (room: Room, myUserId: string): string => {
-  const getOldestMember = (members: RoomMember[]): RoomMember | undefined => {
+export const guessDmRoomUserId = (room: RoomLike, myUserId: string): string => {
+  const getOldestMember = (members: RoomMemberLike[]): RoomMemberLike | undefined => {
     let oldestMemberTs: number | undefined;
-    let oldestMember: RoomMember | undefined;
+    let oldestMember: RoomMemberLike | undefined;
 
-    const pickOldestMember = (member: RoomMember) => {
+    const pickOldestMember = (member: RoomMemberLike) => {
       if (member.userId === myUserId) return;
 
       if (
@@ -220,17 +227,17 @@ export const guessDmRoomUserId = (room: Room, myUserId: string): string => {
 
   // if there are no joined members other than us, use the oldest member
   const member1 = getOldestMember(
-    room.getLiveTimeline().getState(EventTimeline.FORWARDS)?.getMembers() ?? []
+    room.getLiveTimeline().getState(EventTimelineDirection.FORWARDS)?.getMembers() ?? []
   );
   return member1?.userId ?? myUserId;
 };
 
 export const addRoomIdToMDirect = async (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   roomId: string,
   userId: string
 ): Promise<void> => {
-  const mDirectsEvent = mx.getAccountData(AccountDataEvent.Direct as any);
+  const mDirectsEvent = mx.getAccountData(AccountDataEvent.Direct);
   let userIdToRoomIds: Record<string, string[]> = {};
 
   if (typeof mDirectsEvent !== 'undefined')
@@ -255,11 +262,14 @@ export const addRoomIdToMDirect = async (
   }
   userIdToRoomIds[userId] = roomIds;
 
-  await mx.setAccountData(AccountDataEvent.Direct as any, userIdToRoomIds as any);
+  await mx.setAccountData(AccountDataEvent.Direct, userIdToRoomIds);
 };
 
-export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string): Promise<void> => {
-  const mDirectsEvent = mx.getAccountData(AccountDataEvent.Direct as any);
+export const removeRoomIdFromMDirect = async (
+  mx: MatrixClientLike,
+  roomId: string
+): Promise<void> => {
+  const mDirectsEvent = mx.getAccountData(AccountDataEvent.Direct);
   let userIdToRoomIds: Record<string, string[]> = {};
 
   if (typeof mDirectsEvent !== 'undefined')
@@ -273,11 +283,11 @@ export const removeRoomIdFromMDirect = async (mx: MatrixClient, roomId: string):
     }
   });
 
-  await mx.setAccountData(AccountDataEvent.Direct as any, userIdToRoomIds as any);
+  await mx.setAccountData(AccountDataEvent.Direct, userIdToRoomIds);
 };
 
 export const mxcUrlToHttp = (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   mxcUrl: string,
   useAuthentication?: boolean,
   width?: number,
@@ -328,7 +338,7 @@ export const rateLimitedActions = async <T, R = void>(
     });
 
   const performAction = async (dataItem: T, index: number) => {
-    const [err] = await to<R, MatrixError>(callback(dataItem, index));
+    const [err] = await to<R, MatrixErrorLike>(callback(dataItem, index));
 
     if (err?.httpStatus === 429) {
       if (retryCount === maxRetryCount) {

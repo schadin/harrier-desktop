@@ -1,5 +1,4 @@
 import { Descendant, Editor, Text } from 'slate';
-import { MatrixClient } from 'matrix-js-sdk';
 import { sanitizeText } from '../../utils/sanitize';
 import { BlockType } from './types';
 import { CustomElement } from './slate';
@@ -201,7 +200,7 @@ export type MentionsData = {
   room: boolean;
   users: Set<string>;
 };
-export const getMentions = (mx: MatrixClient, roomId: string, editor: Editor): MentionsData => {
+export const getMentions = (myUserId: string | null | undefined, editor: Editor): MentionsData => {
   const mentionData: MentionsData = {
     room: false,
     users: new Set(),
@@ -216,7 +215,7 @@ export const getMentions = (mx: MatrixClient, roomId: string, editor: Editor): M
         mentionData.room = true;
       }
 
-      if (isUserId(node.id) && node.id !== mx.getUserId()) {
+      if (isUserId(node.id) && node.id !== myUserId) {
         mentionData.users.add(node.id);
       }
 

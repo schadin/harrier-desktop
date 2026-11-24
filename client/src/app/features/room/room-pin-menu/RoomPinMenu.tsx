@@ -1,7 +1,5 @@
 /* eslint-disable react/destructuring-assignment */
 import React, { forwardRef, MouseEventHandler, useCallback, useMemo, useRef } from 'react';
-import { Room } from 'matrix-js-sdk';
-import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
 import {
   Avatar,
   Box,
@@ -22,10 +20,13 @@ import type { TimelineItem } from '@harrier/core';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { RoomPinnedEventsEventContent } from '../../../../types/matrix/protocol';
 import { useRoomPinnedEvents } from '../../../hooks/useRoomPinnedEvents';
 import * as css from './RoomPinMenu.css';
 import { SequenceCard } from '../../../components/sequence-card';
 import { useCoreEvent } from '../../../hooks/useCoreTimeline';
+import { useCoreSession } from '../../../hooks/useCoreSession';
+import { useRoomMembers } from '../../../hooks/useRoomMembers';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import {
   AvatarBase,
@@ -41,11 +42,11 @@ import {
   UsernameBold,
 } from '../../../components/message';
 import { UserAvatar } from '../../../components/user-avatar';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
+import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../../utils/room';
 import { GetContentCallback, StateEvent } from '../../../../types/matrix/room';
 import type { IImageContent } from '../../../../types/matrix/common';
 import { useMentionClickHandler } from '../../../hooks/useMentionClickHandler';
@@ -82,6 +83,29 @@ import {
   useGetMemberPowerTag,
 } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '../../../hooks/useRoomCreatorsTag';
+
+function PinnedUserAvatar({
+  userId,
+  avatarMxc,
+  name,
+}: {
+  userId: string;
+  avatarMxc?: string;
+  name: string;
+}) {
+  const src = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 48, height: 48, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={src}
+      alt={name}
+      renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+    />
+  );
+}
 
 const renderPinnedContent = (
   item: TimelineItem,
@@ -147,7 +171,7 @@ const renderPinnedContent = (
 };
 
 type PinnedMessageProps = {
-  room: Room;
+  roomId: string;
   eventId: string;
   onOpen: (roomId: string, eventId: string) => void;
   canPinEvent: boolean;
@@ -162,7 +186,7 @@ type PinnedMessageProps = {
   linkifyOpts: LinkifyOpts;
 };
 function PinnedMessage({
-  room,
+  roomId,
   eventId,
   onOpen,
   canPinEvent,
@@ -176,12 +200,13 @@ function PinnedMessage({
   htmlReactParserOptions,
   linkifyOpts,
 }: PinnedMessageProps) {
-  const pinnedItem = useCoreEvent(room.roomId, eventId);
+  const pinnedItem = useCoreEvent(roomId, eventId);
+  const members = useRoomMembers(roomId);
   const useAuthentication = useMediaAuthentication();
   const mx = useMatrixClient();
   const core = useCore();
   const pinnedState = useCoreRoomState<RoomPinnedEventsEventContent>(
-    room,
+    { roomId },
     StateEvent.RoomPinnedEvents
   );
 
@@ -192,17 +217,17 @@ function PinnedMessage({
         pinned: content.pinned.filter((id) => id !== eventId),
       };
 
-      return sendRoomState(core, room.roomId, StateEvent.RoomPinnedEvents, newContent).then(
+      return sendRoomState(core, roomId, StateEvent.RoomPinnedEvents, newContent).then(
         () => newContent
       );
-    }, [core, room, eventId, pinnedState])
+    }, [core, roomId, eventId, pinnedState])
   );
 
   const handleOpenClick: MouseEventHandler = (evt) => {
     evt.stopPropagation();
     const evtId = evt.currentTarget.getAttribute('data-event-id');
     if (!evtId) return;
-    onOpen(room.roomId, evtId);
+    onOpen(roomId, evtId);
   };
 
   const handleUnpinClick: MouseEventHandler = (evt) => {
@@ -246,8 +271,13 @@ function PinnedMessage({
     );
 
   const { sender } = pinnedItem;
-  const displayName = getMemberDisplayName(room, sender) ?? getMxIdLocalPart(sender) ?? sender;
-  const senderAvatarMxc = getMemberAvatarMxc(room, sender);
+  const member = members.find((entry) => entry.userId === sender);
+  const rawDisplayName = member?.rawDisplayName;
+  const displayName =
+    rawDisplayName !== undefined && rawDisplayName !== sender
+      ? rawDisplayName
+      : getMxIdLocalPart(sender) ?? sender;
+  const senderAvatarMxc = member?.avatarMxc;
 
   const memberPowerTag = getMemberPowerTag(sender);
   const tagColor = memberPowerTag?.color
@@ -264,17 +294,7 @@ function PinnedMessage({
       before={
         <AvatarBase>
           <Avatar size="300">
-            <UserAvatar
-              userId={sender}
-              src={
-                senderAvatarMxc
-                  ? mxcUrlToHttp(mx, senderAvatarMxc, useAuthentication, 48, 48, 'crop') ??
-                    undefined
-                  : undefined
-              }
-              alt={displayName}
-              renderFallback={() => <Icon size="200" src={Icons.User} filled />}
-            />
+            <PinnedUserAvatar userId={sender} avatarMxc={senderAvatarMxc} name={displayName} />
           </Avatar>
         </AvatarBase>
       }
@@ -299,7 +319,7 @@ function PinnedMessage({
       </Box>
       {pinnedItem.kind === 'message' && pinnedItem.replyTo && (
         <Reply
-          room={room}
+          roomId={roomId}
           replyEventId={pinnedItem.replyTo}
           threadRootId={pinnedItem.threadRoot}
           onClick={handleOpenClick}
@@ -321,22 +341,23 @@ function PinnedMessage({
 }
 
 type RoomPinMenuProps = {
-  room: Room;
+  roomId: string;
   requestClose: () => void;
 };
 export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
-  ({ room, requestClose }, ref) => {
+  ({ roomId, requestClose }, ref) => {
     const mx = useMatrixClient();
-    const userId = mx.getUserId()!;
+    const session = useCoreSession();
+    const userId = session?.userId ?? '';
     const powerLevels = usePowerLevelsContext();
-    const creators = useRoomCreators(room);
+    const creators = useRoomCreators({ roomId });
 
     const permissions = useRoomPermissions(creators, powerLevels);
     const canPinEvent = permissions.stateEvent(StateEvent.RoomPinnedEvents, userId);
 
     const creatorsTag = useRoomCreatorsTag();
-    const powerLevelTags = usePowerLevelTags(room, powerLevels);
-    const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
+    const powerLevelTags = usePowerLevelTags({ roomId }, powerLevels);
+    const getMemberPowerTag = useGetMemberPowerTag({ roomId }, creators, powerLevels);
 
     const theme = useTheme();
     const accessibleTagColors = useAccessiblePowerTagColors(
@@ -345,7 +366,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       powerLevelTags
     );
 
-    const pinnedEvents = useRoomPinnedEvents(room);
+    const pinnedEvents = useRoomPinnedEvents({ roomId });
     const sortedPinnedEvent = useMemo(() => Array.from(pinnedEvents).reverse(), [pinnedEvents]);
     const useAuthentication = useMediaAuthentication();
     const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
@@ -367,31 +388,31 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       overscan: 4,
     });
 
-    const mentionClickHandler = useMentionClickHandler(room.roomId);
+    const mentionClickHandler = useMentionClickHandler(roomId);
     const spoilerClickHandler = useSpoilerClickHandler();
 
     const linkifyOpts = useMemo<LinkifyOpts>(
       () => ({
         ...LINKIFY_OPTS,
         render: factoryRenderLinkifyWithMention((href) =>
-          renderMatrixMention(mx, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
+          renderMatrixMention(mx, roomId, href, makeMentionCustomProps(mentionClickHandler))
         ),
       }),
-      [mx, room, mentionClickHandler]
+      [mx, roomId, mentionClickHandler]
     );
     const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
       () =>
-        getReactCustomHtmlParser(mx, room.roomId, {
+        getReactCustomHtmlParser(mx, roomId, {
           linkifyOpts,
           useAuthentication,
           handleSpoilerClick: spoilerClickHandler,
           handleMentionClick: mentionClickHandler,
         }),
-      [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
+      [mx, roomId, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
     );
 
-    const handleOpen = (roomId: string, eventId: string) => {
-      navigateRoom(roomId, eventId);
+    const handleOpen = (targetRoomId: string, eventId: string) => {
+      navigateRoom(targetRoomId, eventId);
       requestClose();
     };
 
@@ -435,7 +456,7 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
                             direction="Column"
                           >
                             <PinnedMessage
-                              room={room}
+                              roomId={roomId}
                               eventId={eventId}
                               onOpen={handleOpen}
                               canPinEvent={canPinEvent}

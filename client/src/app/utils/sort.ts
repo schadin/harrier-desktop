@@ -1,4 +1,3 @@
-import { MatrixClient } from 'matrix-js-sdk';
 import {
   byOrderKey as coreByOrderKey,
   byTsOldToNew as coreByTsOldToNew,
@@ -15,30 +14,39 @@ import { RoomSortType } from '../../types/matrix/accountData';
 
 export type { SortFunc } from '@harrier/core';
 
+// RoomView does not expose the live timeline timestamp yet. Keep this bridge
+// structural so activity sorting stays identical to the SDK implementation.
+type RoomSortSource = {
+  getRoom(roomId: string): {
+    name: string;
+    getLastActiveTimestamp(): number;
+  } | null;
+};
+
 const factoryGetMeta =
-  (mx: MatrixClient) =>
+  (source: RoomSortSource) =>
   (roomId: string): RoomSortMeta | undefined => {
-    const room = mx.getRoom(roomId);
+    const room = source.getRoom(roomId);
     if (!room) return undefined;
     return { name: room.name, lastActiveTimestamp: room.getLastActiveTimestamp() };
   };
 
-export const factoryRoomIdByActivity = (mx: MatrixClient): SortFunc<string> =>
-  coreFactoryRoomIdByActivity(factoryGetMeta(mx));
+export const factoryRoomIdByActivity = (source: RoomSortSource): SortFunc<string> =>
+  coreFactoryRoomIdByActivity(factoryGetMeta(source));
 
-export const factoryRoomIdByAtoZ = (mx: MatrixClient): SortFunc<string> =>
-  coreFactoryRoomIdByAtoZ(factoryGetMeta(mx));
+export const factoryRoomIdByAtoZ = (source: RoomSortSource): SortFunc<string> =>
+  coreFactoryRoomIdByAtoZ(factoryGetMeta(source));
 
-export const factoryRoomIdByZtoA = (mx: MatrixClient): SortFunc<string> =>
-  coreFactoryRoomIdByZtoA(factoryGetMeta(mx));
+export const factoryRoomIdByZtoA = (source: RoomSortSource): SortFunc<string> =>
+  coreFactoryRoomIdByZtoA(factoryGetMeta(source));
 
-export const factoryRoomIdByActivityAsc = (mx: MatrixClient): SortFunc<string> =>
-  coreFactoryRoomIdByActivityAsc(factoryGetMeta(mx));
+export const factoryRoomIdByActivityAsc = (source: RoomSortSource): SortFunc<string> =>
+  coreFactoryRoomIdByActivityAsc(factoryGetMeta(source));
 
 export const factoryRoomIdSort = (
-  mx: MatrixClient,
+  source: RoomSortSource,
   sortType: RoomSortType
-): SortFunc<string> | undefined => coreFactoryRoomIdSort(factoryGetMeta(mx), sortType);
+): SortFunc<string> | undefined => coreFactoryRoomIdSort(factoryGetMeta(source), sortType);
 
 export const factoryRoomIdByUnreadCount = coreFactoryRoomIdByUnreadCount;
 

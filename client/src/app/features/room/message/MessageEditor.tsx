@@ -1,4 +1,5 @@
 import React, {
+  ComponentProps,
   KeyboardEventHandler,
   MouseEventHandler,
   useCallback,
@@ -21,7 +22,6 @@ import {
 } from 'folds';
 import { Editor, Transforms } from 'slate';
 import { ReactEditor } from 'slate-react';
-import { IMentions, Room } from 'matrix-js-sdk';
 import type { JsonObject, MessageContentView } from '@harrier/core';
 import { isKeyHotkey } from 'is-hotkey';
 import { useCore } from '../../../hooks/useCore';
@@ -53,22 +53,23 @@ import { settingsAtom } from '../../../state/settings';
 import { UseStateProvider } from '../../../components/UseStateProvider';
 import { EmojiBoard } from '../../../components/emoji-board';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import { getMentionContent, trimReplyFromFormattedBody } from '../../../utils/room';
 import { mobileOrTablet } from '../../../utils/user-agent';
 import { useComposingCheck } from '../../../hooks/useComposingCheck';
 
+type ImagePackRooms = ComponentProps<typeof EmojiBoard>['imagePackRooms'];
+
 type MessageEditorProps = {
   roomId: string;
-  room: Room;
   eventId: string;
   content: MessageContentView;
-  imagePackRooms?: Room[];
+  imagePackRooms?: ImagePackRooms;
   onCancel: () => void;
 };
 export const MessageEditor = as<'div', MessageEditorProps>(
-  ({ room, roomId, eventId, content, imagePackRooms, onCancel, ...props }, ref) => {
-    const mx = useMatrixClient();
+  ({ roomId, eventId, content, imagePackRooms, onCancel, ...props }, ref) => {
+    const session = useCoreSession();
     const core = useCore();
     const editor = useEditor();
     const [enterForNewline] = useSetting(settingsAtom, 'enterForNewline');
@@ -83,9 +84,11 @@ export const MessageEditor = as<'div', MessageEditorProps>(
     const getPrevBodyAndFormattedBody = useCallback((): [
       string | undefined,
       string | undefined,
-      IMentions | undefined
+      { user_ids?: string[]; room?: boolean } | undefined
     ] => {
-      const mMentions = content.raw['m.mentions'] as IMentions | undefined;
+      const mMentions = content.raw['m.mentions'] as
+        | { user_ids?: string[]; room?: boolean }
+        | undefined;
 
       return [
         typeof content.body === 'string' ? content.body : undefined,
@@ -126,7 +129,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           body: plainText,
         };
 
-        const mentionData = getMentions(mx, roomId, editor);
+        const mentionData = getMentions(session?.userId, editor);
 
         prevMentions?.user_ids?.forEach((prevMentionId) => {
           mentionData.users.add(prevMentionId);
@@ -146,7 +149,16 @@ export const MessageEditor = as<'div', MessageEditorProps>(
           throw result.error;
         }
         return result.value;
-      }, [core, mx, editor, roomId, eventId, content, isMarkdown, getPrevBodyAndFormattedBody])
+      }, [
+        core,
+        session?.userId,
+        editor,
+        roomId,
+        eventId,
+        content,
+        isMarkdown,
+        getPrevBodyAndFormattedBody,
+      ])
     );
 
     const handleSave = useCallback(() => {
@@ -233,7 +245,7 @@ export const MessageEditor = as<'div', MessageEditorProps>(
         )}
         {autocompleteQuery?.prefix === AutocompletePrefix.UserMention && (
           <UserMentionAutocomplete
-            room={room}
+            roomId={roomId}
             editor={editor}
             query={autocompleteQuery}
             requestClose={handleCloseAutocomplete}

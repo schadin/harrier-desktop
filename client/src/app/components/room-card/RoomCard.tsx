@@ -1,5 +1,5 @@
-import React, { ReactNode, useCallback, useRef, useState } from 'react';
-import { CoreError } from '@harrier/core';
+import React, { ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import type { CoreError } from '@harrier/core';
 import {
   Avatar,
   Badge,
@@ -21,19 +21,17 @@ import classNames from 'classnames';
 import FocusTrap from 'focus-trap-react';
 import * as css from './style.css';
 import { RoomAvatar } from '../room-avatar';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdLocalPart, isRoomAlias } from '../../utils/matrix';
 import { nameInitials } from '../../utils/common';
 import { millify } from '../../plugins/millify';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { onEnterOrSpace, stopPropagation } from '../../utils/keyboard';
 import { RoomType, StateEvent } from '../../../types/matrix/room';
-import { useJoinedRoomId } from '../../hooks/useJoinedRoomId';
 import { useElementSizeObserver } from '../../hooks/useElementSizeObserver';
-import { getRoomAvatarUrl, getStateEvent } from '../../utils/room';
-import { useStateEventCallback } from '../../hooks/useStateEventCallback';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useCore } from '../../hooks/useCore';
+import { useCoreRoom } from '../../hooks/useCoreRoom';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 
 type GridColumnCount = '1' | '2' | '3';
 const getGridColumnCount = (gridWidth: number): GridColumnCount => {
@@ -162,42 +160,38 @@ export const RoomCard = as<'div', RoomCardProps>(
     },
     ref
   ) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
-    const joinedRoomId = useJoinedRoomId(allRooms, roomIdOrAlias);
     const core = useCore();
-    const joinedRoom = mx.getRoom(joinedRoomId);
-    const [topicEvent, setTopicEvent] = useState(() =>
-      joinedRoom ? getStateEvent(joinedRoom, StateEvent.RoomTopic) : undefined
+    const joinedRoomId = useMemo(() => {
+      if (isRoomAlias(roomIdOrAlias)) {
+        return allRooms.find((roomId) => {
+          const room = core.rooms.room(roomId).getSnapshot().value;
+          const tombstoned =
+            core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().value !== null;
+          return room?.canonicalAlias === roomIdOrAlias && !tombstoned;
+        });
+      }
+      return allRooms.includes(roomIdOrAlias) ? roomIdOrAlias : undefined;
+    }, [core, allRooms, roomIdOrAlias]);
+    const joinedRoom = useCoreRoom(joinedRoomId ?? '');
+    const members = useRoomMembers(joinedRoomId ?? '');
+    const avatarMxc = joinedRoom?.avatarMxc ?? avatarUrl;
+    const avatarRef = useMemo(
+      () =>
+        avatarMxc
+          ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+          : undefined,
+      [avatarMxc]
     );
+    const avatar = useMediaSource(avatarRef);
 
     const fallbackName = getMxIdLocalPart(roomIdOrAlias) ?? roomIdOrAlias;
     const fallbackTopic = roomIdOrAlias;
 
-    const avatar = joinedRoom
-      ? getRoomAvatarUrl(mx, joinedRoom, 96, useAuthentication)
-      : avatarUrl && mxcUrlToHttp(mx, avatarUrl, useAuthentication, 96, 96, 'crop');
-
     const roomName = joinedRoom?.name || name || fallbackName;
-    const roomTopic =
-      (topicEvent?.getContent().topic as string) || undefined || topic || fallbackTopic;
-    const joinedMemberCount = joinedRoom?.getJoinedMemberCount() ?? memberCount;
-
-    useStateEventCallback(
-      mx,
-      useCallback(
-        (event) => {
-          if (
-            joinedRoom &&
-            event.getRoomId() === joinedRoom.roomId &&
-            event.getType() === StateEvent.RoomTopic
-          ) {
-            setTopicEvent(getStateEvent(joinedRoom, StateEvent.RoomTopic));
-          }
-        },
-        [joinedRoom]
-      )
-    );
+    const roomTopic = joinedRoom?.topic || topic || fallbackTopic;
+    const joinedMemberCount = joinedRoom
+      ? members.filter((member) => member.membership === 'join').length
+      : memberCount;
 
     const [joinState, join] = useAsyncCallback<string, CoreError, []>(
       useCallback(async () => {
@@ -228,7 +222,7 @@ export const RoomCard = as<'div', RoomCardProps>(
               )}
             />
           </Avatar>
-          {(roomType === RoomType.Space || joinedRoom?.isSpaceRoom()) && (
+          {(roomType === RoomType.Space || joinedRoom?.isSpace) && (
             <Badge variant="Secondary" fill="Soft" outlined>
               <Text size="L400">Space</Text>
             </Badge>

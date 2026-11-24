@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Editor } from 'slate';
 import { Avatar, Icon, Icons, MenuItem, Text } from 'folds';
-import { MatrixClient, Room } from 'matrix-js-sdk';
+
 import type { MemberView } from '@harrier/core';
 import { getMemberSearchStr } from '@harrier/core';
 
 import { AutocompleteQuery } from './autocompleteQuery';
 import { AutocompleteMenu } from './AutocompleteMenu';
 import { useRoomMembers } from '../../../hooks/useRoomMembers';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
+import { useCoreSession } from '../../../hooks/useCoreSession';
 import {
   SearchItemStrGetter,
   UseAsyncSearchOptions,
@@ -19,15 +20,37 @@ import { createMentionElement, moveCursor, replaceWithElement } from '../utils';
 import { useKeyDown } from '../../../hooks/useKeyDown';
 import { getMxIdLocalPart, getMxIdServer, isUserId } from '../../../utils/matrix';
 import { UserAvatar } from '../../user-avatar';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
+import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
 import { Membership } from '../../../../types/matrix/room';
 
 type MentionAutoCompleteHandler = (userId: string, name: string) => void;
 
-const userIdFromQueryText = (mx: MatrixClient, text: string) =>
+const userIdFromQueryText = (myUserId: string | null | undefined, text: string) =>
   isUserId(`@${text}`)
     ? `@${text}`
-    : `@${text}${text.endsWith(':') ? '' : ':'}${getMxIdServer(mx.getUserId() ?? '')}`;
+    : `@${text}${text.endsWith(':') ? '' : ':'}${getMxIdServer(myUserId ?? '')}`;
+
+const getName = (member: MemberView) =>
+  member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
+    ? member.rawDisplayName
+    : getMxIdLocalPart(member.userId) ?? member.userId;
+
+function MentionMemberAvatar({ member }: { member: MemberView }) {
+  const avatarUrl = useMediaSource(
+    member.avatarMxc
+      ? toMediaRef(member.avatarMxc, { width: 32, height: 32, resizeMethod: 'crop' })
+      : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={member.userId}
+      src={avatarUrl}
+      alt={getName(member)}
+      renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+    />
+  );
+}
 
 function UnknownMentionItem({
   userId,
@@ -63,7 +86,7 @@ function UnknownMentionItem({
 }
 
 type UserMentionAutocompleteProps = {
-  room: Room;
+  roomId: string;
   editor: Editor;
   query: AutocompleteQuery<string>;
   requestClose: () => void;
@@ -86,15 +109,14 @@ const getRoomMemberStr: SearchItemStrGetter<MemberView> = (m, query) =>
   getMemberSearchStr(m, query, mxIdToName);
 
 export function UserMentionAutocomplete({
-  room,
+  roomId,
   editor,
   query,
   requestClose,
 }: UserMentionAutocompleteProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
-  const roomId: string = room.roomId!;
-  const roomAliasOrId = room.getCanonicalAlias() || roomId;
+  const session = useCoreSession();
+  const room = useCoreRoom(roomId);
+  const roomAliasOrId = room?.canonicalAlias || roomId;
   const members = useRoomMembers(roomId);
   const memberList = useMemo(() => [...members], [members]);
 
@@ -116,7 +138,7 @@ export function UserMentionAutocomplete({
     const mentionEl = createMentionElement(
       uId,
       name.startsWith('@') ? name : `@${name}`,
-      mx.getUserId() === uId || roomAliasOrId === uId
+      session?.userId === uId || roomAliasOrId === uId
     );
     replaceWithElement(editor, query.range, mentionEl);
     moveCursor(editor, true);
@@ -130,7 +152,7 @@ export function UserMentionAutocomplete({
         return;
       }
       if (autoCompleteMembers.length === 0) {
-        const userId = userIdFromQueryText(mx, query.text);
+        const userId = userIdFromQueryText(session?.userId, query.text);
         handleAutocomplete(userId, userId);
         return;
       }
@@ -138,11 +160,6 @@ export function UserMentionAutocomplete({
       handleAutocomplete(roomMember.userId, roomMember.displayName);
     });
   });
-
-  const getName = (member: MemberView) =>
-    member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
-      ? member.rawDisplayName
-      : getMxIdLocalPart(member.userId) ?? member.userId;
 
   return (
     <AutocompleteMenu headerContent={<Text size="L400">Mentions</Text>} requestClose={requestClose}>
@@ -155,47 +172,36 @@ export function UserMentionAutocomplete({
       )}
       {autoCompleteMembers.length === 0 ? (
         <UnknownMentionItem
-          userId={userIdFromQueryText(mx, query.text)}
-          name={userIdFromQueryText(mx, query.text)}
+          userId={userIdFromQueryText(session?.userId, query.text)}
+          name={userIdFromQueryText(session?.userId, query.text)}
           handleAutocomplete={handleAutocomplete}
         />
       ) : (
-        autoCompleteMembers.map((roomMember) => {
-          const avatarMxcUrl = roomMember.avatarMxc;
-          const avatarUrl = avatarMxcUrl
-            ? mx.mxcUrlToHttp(avatarMxcUrl, 32, 32, 'crop', undefined, false, useAuthentication)
-            : undefined;
-          return (
-            <MenuItem
-              key={roomMember.userId}
-              as="button"
-              radii="300"
-              onKeyDown={(evt: ReactKeyboardEvent<HTMLButtonElement>) =>
-                onTabPress(evt, () => handleAutocomplete(roomMember.userId, getName(roomMember)))
-              }
-              onClick={() => handleAutocomplete(roomMember.userId, getName(roomMember))}
-              after={
-                <Text size="T200" priority="300" truncate>
-                  {roomMember.userId}
-                </Text>
-              }
-              before={
-                <Avatar size="200">
-                  <UserAvatar
-                    userId={roomMember.userId}
-                    src={avatarUrl ?? undefined}
-                    alt={getName(roomMember)}
-                    renderFallback={() => <Icon size="50" src={Icons.User} filled />}
-                  />
-                </Avatar>
-              }
-            >
-              <Text style={{ flexGrow: 1 }} size="B400" truncate>
-                {getName(roomMember)}
+        autoCompleteMembers.map((roomMember) => (
+          <MenuItem
+            key={roomMember.userId}
+            as="button"
+            radii="300"
+            onKeyDown={(evt: ReactKeyboardEvent<HTMLButtonElement>) =>
+              onTabPress(evt, () => handleAutocomplete(roomMember.userId, getName(roomMember)))
+            }
+            onClick={() => handleAutocomplete(roomMember.userId, getName(roomMember))}
+            after={
+              <Text size="T200" priority="300" truncate>
+                {roomMember.userId}
               </Text>
-            </MenuItem>
-          );
-        })
+            }
+            before={
+              <Avatar size="200">
+                <MentionMemberAvatar member={roomMember} />
+              </Avatar>
+            }
+          >
+            <Text style={{ flexGrow: 1 }} size="B400" truncate>
+              {getName(roomMember)}
+            </Text>
+          </MenuItem>
+        ))
       )}
     </AutocompleteMenu>
   );

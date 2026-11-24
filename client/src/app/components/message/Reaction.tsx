@@ -1,21 +1,24 @@
 import React from 'react';
 import { Box, Text, as } from 'folds';
 import classNames from 'classnames';
-import { MatrixClient, Room } from 'matrix-js-sdk';
 import * as css from './Reaction.css';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../plugins/emoji';
-import { getMemberDisplayName } from '../../utils/room';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
+import { getMxIdLocalPart } from '../../utils/matrix';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
+
+function ReactionEmote({ reaction }: { reaction: string }) {
+  const src = useMediaSource(toMediaRef(reaction));
+  return <img className={css.ReactionImg} src={src} alt={reaction} />;
+}
 
 export const Reaction = as<
   'button',
   {
-    mx: MatrixClient;
     count: number;
     reaction: string;
-    useAuthentication?: boolean;
   }
->(({ className, mx, count, reaction, useAuthentication, ...props }, ref) => (
+>(({ className, count, reaction, ...props }, ref) => (
   <Box
     as="button"
     className={classNames(css.Reaction, className)}
@@ -27,11 +30,7 @@ export const Reaction = as<
   >
     <Text className={css.ReactionText} as="span" size="T400">
       {reaction.startsWith('mxc://') ? (
-        <img
-          className={css.ReactionImg}
-          src={mxcUrlToHttp(mx, reaction, useAuthentication) ?? reaction}
-          alt={reaction}
-        />
+        <ReactionEmote reaction={reaction} />
       ) : (
         <Text as="span" size="Inherit" truncate>
           {reaction}
@@ -45,22 +44,26 @@ export const Reaction = as<
 ));
 
 type ReactionTooltipMsgProps = {
-  room: Room;
+  roomId: string;
   reaction: string;
   senders: readonly string[];
   shortcode?: string;
 };
 
 export function ReactionTooltipMsg({
-  room,
+  roomId,
   reaction,
   senders,
   shortcode: reactionShortcode,
 }: ReactionTooltipMsgProps) {
+  const members = useRoomMembers(roomId);
   const shortcode = reactionShortcode ?? getShortcodeFor(getHexcodeForEmoji(reaction)) ?? reaction;
-  const names = senders.map(
-    (senderId) => getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? 'Unknown'
-  );
+  const names = senders.map((senderId) => {
+    const rawDisplayName = members.find((member) => member.userId === senderId)?.rawDisplayName;
+    return rawDisplayName !== undefined && rawDisplayName !== senderId
+      ? rawDisplayName
+      : getMxIdLocalPart(senderId) ?? 'Unknown';
+  });
 
   return (
     <>

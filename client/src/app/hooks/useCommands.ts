@@ -1,19 +1,17 @@
-import {
-  Direction,
-  EventTimeline,
-  IContextResponse,
-  MatrixClient,
-  Method,
-  Preset,
-  Room,
-  RoomMember,
-  Visibility,
-} from 'matrix-js-sdk';
 import type { HarrierCore } from '@harrier/core';
-import { RoomServerAclEventContent } from 'matrix-js-sdk/lib/types';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
+import {
+  EventTimelineDirection,
+  Method,
+  Preset,
+  Visibility,
+  type MatrixClientCommandsLike,
+  type RoomLike,
+  type RoomMemberLike,
+} from '../../types/matrix/legacyStructural';
+import type { IContextResponse, RoomServerAclEventContent } from '../../types/matrix/protocol';
 import {
   addRoomIdToMDirect,
   getDMRoomFor,
@@ -38,6 +36,7 @@ import {
   sendBotCommand,
 } from '../features/ds-task-bot/helpers';
 import { DSTASK_SLASH_COMMANDS } from '../features/ds-task-bot/botCommandSuggestions';
+import { useRoomMembers } from './useRoomMembers';
 
 export const SHRUG = '¯\\_(ツ)_/¯';
 export const TABLEFLIP = '(╯°□°)╯︵ ┻━┻';
@@ -104,8 +103,8 @@ export const parseServers = (payload: string): string[] => {
   return servers;
 };
 
-const getServerMembers = (room: Room, server: string): RoomMember[] => {
-  const members: RoomMember[] = room
+const getServerMembers = (room: RoomLike, server: string): RoomMemberLike[] => {
+  const members: RoomMemberLike[] = room
     .getMembers()
     .filter((member) => member.userId.endsWith(`:${server}`));
 
@@ -183,17 +182,23 @@ export type CommandRecord = Partial<Record<Command, CommandContent>> & {
   [commandName: string]: CommandContent | undefined;
 };
 
-export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): CommandRecord => {
+export const useCommands = (
+  mx: MatrixClientCommandsLike,
+  room: RoomLike,
+  core: HarrierCore
+): CommandRecord => {
   const { navigateRoom } = useRoomNavigate();
   const { t } = useTranslation();
   const dsTaskBotSettings = useDsTaskBotSettings();
+  const roomMembers = useRoomMembers(room.roomId);
+  const botMember = roomMembers.find((member) => member.userId === dsTaskBotSettings.botMxid);
   // Помощники команд доступны только в комнатах, где бот из настройки состоит
   // участником (`join`): без бота упоминание невозможно, а шорткаты бессмысленны.
   const dsTaskBotEnabled =
     dsTaskBotSettings.helpersEnabled &&
     dsTaskBotSettings.botMxid !== '' &&
-    isBotInRoom(room, dsTaskBotSettings.botMxid);
-  const dsTaskBotDm = isDirectRoomWithBot(room, dsTaskBotSettings.botMxid);
+    isBotInRoom(botMember, dsTaskBotSettings.botMxid);
+  const dsTaskBotDm = isDirectRoomWithBot(roomMembers, dsTaskBotSettings.botMxid);
   const dsTaskBotLastTasks = useAtomValue(dsTaskBotLastTasksAtom)[room.roomId] ?? [];
   const dsTaskBotCloseIds = dsTaskBotLastTasks
     .map((task) => task.id)
@@ -388,7 +393,7 @@ export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): Co
           if (nick === '') return;
           const mEvent = room
             .getLiveTimeline()
-            .getState(EventTimeline.FORWARDS)
+            .getState(EventTimelineDirection.FORWARDS)
             ?.getStateEvents(StateEvent.RoomMember, mx.getSafeUserId());
           const content = mEvent?.getContent();
           if (!content) return;
@@ -410,7 +415,7 @@ export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): Co
           if (payload.match(/^mxc:\/\/\S+$/)) {
             const mEvent = room
               .getLiveTimeline()
-              .getState(EventTimeline.FORWARDS)
+              .getState(EventTimelineDirection.FORWARDS)
               ?.getStateEvents(StateEvent.RoomMember, mx.getSafeUserId());
             const content = mEvent?.getContent();
             if (!content) return;
@@ -468,7 +473,11 @@ export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): Co
             });
           }
 
-          const result = await mx.timestampToEvent(room.roomId, ts, Direction.Forward);
+          const result = await mx.timestampToEvent(
+            room.roomId,
+            ts,
+            EventTimelineDirection.FORWARDS
+          );
           const startEventId = result.event_id;
 
           const path = `/rooms/${encodeURIComponent(room.roomId)}/context/${encodeURIComponent(
@@ -485,7 +494,7 @@ export const useCommands = (mx: MatrixClient, room: Room, core: HarrierCore): Co
               room.roomId,
               token,
               20,
-              Direction.Forward,
+              EventTimelineDirection.FORWARDS,
               undefined
             );
             const { end, chunk } = response;

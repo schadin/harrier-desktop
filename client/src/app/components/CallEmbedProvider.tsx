@@ -18,13 +18,15 @@ import {
   toRem,
 } from 'folds';
 import {
-  EventTimelineSetHandlerMap,
   EventType,
+  type MatrixClientCallEventEmitterLike,
+  type MatrixClientCallLike,
   RelationType,
-  Room,
+  type RoomLike,
   RoomEvent,
-} from 'matrix-js-sdk';
-import { IRTCNotificationContent, RTCNotificationType } from 'matrix-js-sdk/lib/matrixrtc/types';
+  type TimelineEventHandler,
+} from '../../types/matrix/legacyStructural';
+import type { IRTCNotificationContent, RTCNotificationType } from '../../types/matrix/protocol';
 import {
   CallEmbedContextProvider,
   CallEmbedRefContextProvider,
@@ -57,7 +59,7 @@ import { webRTCSupported } from '../utils/rtc';
 import { useCore } from '../hooks/useCore';
 
 type IncomingCallInfo = {
-  room: Room;
+  room: RoomLike;
   sender: string;
   senderTs: number;
   lifetime: number;
@@ -69,8 +71,8 @@ type IncomingCallProps = {
   dm: boolean;
   info: IncomingCallInfo;
   onIgnore: () => void;
-  onAnswer: (room: Room, video: boolean) => void;
-  onReject: (room: Room, eventId: string) => void;
+  onAnswer: (room: RoomLike, video: boolean) => void;
+  onReject: (room: RoomLike, eventId: string) => void;
 };
 function IncomingCall({ dm, info, onIgnore, onAnswer, onReject }: IncomingCallProps) {
   const livekitSupported = useLivekitSupport();
@@ -215,7 +217,8 @@ type IncomingCallListenerProps = {
   joined?: boolean;
 };
 function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) {
-  const mx = useMatrixClient();
+  const mx = useMatrixClient() as unknown as MatrixClientCallLike &
+    MatrixClientCallEventEmitterLike;
   const core = useCore();
   const directs = useAtomValue(mDirectAtom);
   const { navigateRoom } = useRoomNavigate();
@@ -224,7 +227,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
   const dm = callInfo ? directs.has(callInfo.room.roomId) : false;
   const startCall = useCallStart(dm);
 
-  const handleTimelineEvent: EventTimelineSetHandlerMap[RoomEvent.Timeline] = useCallback(
+  const handleTimelineEvent: TimelineEventHandler = useCallback(
     async (event, room, toStartOfTimeline, removed, data) => {
       // only process rtc notification reference events.
       // we do not want to wait to decrypt all events.
@@ -233,7 +236,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
 
       if (event.isEncrypted()) {
         if (!event.isBeingDecrypted()) {
-          await event.attemptDecryption(mx.getCrypto() as never);
+          await event.attemptDecryption(mx.getCrypto());
         }
         await event.getDecryptionPromise();
       }
@@ -305,7 +308,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
   }, []);
 
   const handleReject = useCallback(
-    (room: Room, eventId: string) => {
+    (room: RoomLike, eventId: string) => {
       mx.sendEvent(room.roomId, EventType.RTCDecline, {
         'm.relates_to': {
           rel_type: RelationType.Reference,
@@ -318,7 +321,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
   );
 
   const handleAnswer = useCallback(
-    (room: Room, video: boolean) => {
+    (room: RoomLike, video: boolean) => {
       startCall(room, { microphone: true, video, sound: true });
       setCallInfo(undefined);
       navigateRoom(room.roomId);

@@ -27,11 +27,9 @@ import { getMemberSearchStr } from '@harrier/core';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { useRoom } from '../../../hooks/useRoom';
 import { useRoomMembers } from '../../../hooks/useRoomMembers';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useGetMemberPowerLevel, usePowerLevels } from '../../../hooks/usePowerLevels';
 import { VirtualTile } from '../../../components/virtualizer';
 import { MemberTile } from '../../../components/member-tile';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { getMxIdLocalPart, getMxIdServer } from '../../../utils/matrix';
 import { ServerBadge } from '../../../components/server-badge';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -75,8 +73,6 @@ type MembersProps = {
   requestClose: () => void;
 };
 export function Members({ requestClose }: MembersProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const members = useRoomMembers(room.roomId);
   const fetchingMembers = members.length < room.getJoinedMemberCount();
@@ -323,9 +319,7 @@ export function Members({ requestClose }: MembersProps) {
                             data-user-id={tagOrMember.userId}
                             onClick={handleMemberClick}
                             aria-pressed={profileUser?.userId === tagOrMember.userId}
-                            mx={mx}
                             member={tagOrMember}
-                            useAuthentication={useAuthentication}
                             after={
                               server && (
                                 <Box as="span" shrink="No" alignSelf="End">

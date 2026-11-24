@@ -10,13 +10,14 @@
 
 ## Шов между ядром и UI
 
-UI не получает `MatrixClient`, `Room` или `MatrixEvent`. Вместо этого:
+Целевое правило — UI не получает `MatrixClient`, `Room` или `MatrixEvent`. Вместо этого:
 
 - состояние читается через `SnapshotStore<T>` (`revision`, `getSnapshot`, `subscribe`);
 - команды возвращают `CoreResult<T>` — либо значение, либо нормализованный `CoreError`;
 - все события и данные приходят как plain data (`RoomView`, `TimelineItem`, `DeviceView`, `VerificationRequestView` и т. д.).
 
 React-слой получает ядро через `CoreProvider` / `useCore()`. Для типовых задач есть хуки `useCoreRoom`, `useCoreRoomMeta`, `useCoreTimeline`, `useUserPresence`, `useDeviceList` и другие.
+На этапе миграции часть legacy-мостов (`useMatrixClient`, `useRoom`, custom HTML/calls) временно сохраняется; они удаляются по мере перевода потребителей на доменные модули.
 
 ## Модули контракта
 
@@ -27,7 +28,8 @@ React-слой получает ядро через `CoreProvider` / `useCore()`
 - `send` — отправка сообщений и событий, локальные ID и статусы.
 - `uploads` — загрузка файлов и прогресс.
 - `crypto` — устройства, доверие, верификация SAS, бэкап и secret storage.
-- `notifications` — настройки уведомлений и push rules.
+- `notifications` — настройки уведомлений, inbox и push rules.
+- `calls` — опциональная capability, активные звонки и участники.
 - `media` — MXC-URL, загрузка/расшифровка вложений, previews и media config.
 
 ## Как запустить контрактные тесты

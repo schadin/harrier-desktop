@@ -1,17 +1,24 @@
-import { Room } from 'matrix-js-sdk';
+import type { MemberView } from '@harrier/core';
 import React from 'react';
 import { Box, Icon, Icons, Text } from 'folds';
-import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 
 type MemberSpeakingProps = {
-  room: Room;
+  roomId: string;
   speakers: Set<string>;
 };
-export function MemberSpeaking({ room, speakers }: MemberSpeakingProps) {
-  const speakingNames = Array.from(speakers).map(
-    (userId) => getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId
+export function MemberSpeaking({ roomId, speakers }: MemberSpeakingProps) {
+  const roomMembers = useRoomMembers(roomId);
+  const memberById = new Map<string, MemberView>(
+    roomMembers.map((member) => [member.userId, member])
   );
+  const speakingNames = Array.from(speakers).map((userId) => {
+    const member = memberById.get(userId);
+    return member?.rawDisplayName !== undefined && member.rawDisplayName !== userId
+      ? member.rawDisplayName
+      : getMxIdLocalPart(userId) ?? userId;
+  });
   return (
     <Box alignItems="Center" gap="100">
       <Icon size="100" src={Icons.Mic} filled />

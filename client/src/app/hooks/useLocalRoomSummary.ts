@@ -1,6 +1,5 @@
-import { GuestAccess, HistoryVisibility, JoinRule, Room } from 'matrix-js-sdk';
-import { getStateEvent } from '../utils/room';
-import { StateEvent } from '../../types/matrix/room';
+import { useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
 export type LocalRoomSummary = {
   roomId: string;
@@ -12,33 +11,25 @@ export type LocalRoomSummary = {
   guestCanJoin?: boolean;
   memberCount?: number;
   roomType?: string;
-  joinRule?: JoinRule;
+  joinRule?: string;
 };
-export const useLocalRoomSummary = (room: Room): LocalRoomSummary => {
-  const topicEvent = getStateEvent(room, StateEvent.RoomTopic);
-  const topicContent = topicEvent?.getContent();
-  const topic =
-    topicContent && typeof topicContent.topic === 'string' ? topicContent.topic : undefined;
-
-  const historyEvent = getStateEvent(room, StateEvent.RoomHistoryVisibility);
-  const historyContent = historyEvent?.getContent();
-  const worldReadable =
-    historyContent && typeof historyContent.history_visibility === 'string'
-      ? historyContent.history_visibility === HistoryVisibility.WorldReadable
-      : undefined;
-
-  const guestCanJoin = room.getGuestAccess() === GuestAccess.CanJoin;
+export const useLocalRoomSummary = (room: { roomId: string }): LocalRoomSummary => {
+  const core = useCore();
+  const store = useMemo(() => core.rooms.room(room.roomId), [core, room.roomId]);
+  const view = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 
   return {
     roomId: room.roomId,
-    name: room.name,
-    topic,
-    avatarUrl: room.getMxcAvatarUrl() ?? undefined,
-    canonicalAlias: room.getCanonicalAlias() ?? undefined,
-    worldReadable,
-    guestCanJoin,
-    memberCount: room.getJoinedMemberCount(),
-    roomType: room.getType(),
-    joinRule: room.getJoinRule(),
+    name: view?.name ?? room.roomId,
+    topic: view?.topic,
+    avatarUrl: view?.avatarMxc,
+    canonicalAlias: view?.canonicalAlias,
+    worldReadable: view?.historyVisibility
+      ? view.historyVisibility === 'world_readable'
+      : undefined,
+    guestCanJoin: view?.guestCanJoin,
+    memberCount: view?.memberCount,
+    roomType: view?.roomType,
+    joinRule: view?.joinRule,
   };
 };

@@ -153,7 +153,7 @@ function InviteMenuItem({
       </MenuItem>
       {invitePrompt && room && (
         <InviteUserPrompt
-          room={room}
+          roomId={room.roomId}
           requestClose={() => {
             setInvitePrompt(false);
             requestClose();
@@ -213,8 +213,8 @@ export function HierarchyItemMenu({
   pinned,
   onTogglePin,
 }: HierarchyItemMenuProps) {
-  const mx = useMatrixClient();
   const core = useCore();
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const canInvite = (): boolean => {
@@ -222,7 +222,7 @@ export function HierarchyItemMenu({
     const creators = getRoomCreatorsForRoomId(core, item.roomId);
     const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
-    return permissions.action('invite', mx.getSafeUserId());
+    return permissions.action('invite', userId);
   };
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {

@@ -23,6 +23,25 @@ export type IEventRelation = {
   key?: string;
 };
 
+export type IMentions = {
+  user_ids?: string[];
+  room?: boolean;
+};
+
+export type RTCNotificationType = 'ring' | 'notification';
+
+export type IRTCNotificationContent = {
+  'm.relates_to': {
+    event_id: string;
+    rel_type: string;
+  };
+  'm.mentions'?: IMentions;
+  notification_type: RTCNotificationType;
+  'm.call.intent'?: string;
+  sender_ts: number;
+  lifetime: number;
+};
+
 type ContentObject = Record<string, unknown>;
 
 export type IContent = ContentObject & {
@@ -37,6 +56,8 @@ export type IContent = ContentObject & {
     url?: string;
   };
   geo_uri?: string;
+  membership?: string;
+  reason?: string;
   'm.relates_to'?: IEventRelation;
 };
 
@@ -44,4 +65,52 @@ export type RoomPinnedEventsEventContent = ContentObject & {
   pinned: string[];
 };
 
-export type EventContent = IContent | RoomPinnedEventsEventContent;
+export type RoomServerAclEventContent = ContentObject & {
+  allow?: string[];
+  allow_ip_literals?: boolean;
+  deny?: string[];
+};
+
+export type MatrixRawEvent = {
+  event_id: string;
+  room_id?: string;
+  sender: string;
+  type: string;
+  content: ContentObject;
+  origin_server_ts?: number;
+  state_key?: string;
+};
+
+export type MatrixRedactedEvent = Omit<MatrixRawEvent, 'content'> & {
+  content: ContentObject & { reason?: string };
+};
+
+export type MatrixEventUnsigned = ContentObject & {
+  prev_content?: ContentObject;
+  redacted_because?: MatrixRedactedEvent;
+};
+
+export type IContextResponse = {
+  end?: string;
+  start?: string;
+};
+
+export type IMessagesResponse = {
+  start?: string;
+  end?: string;
+  chunk: Array<MatrixRawEvent & { unsigned?: MatrixEventUnsigned }>;
+};
+
+export type CreateRoomOptions = {
+  is_direct?: boolean;
+  invite?: string[];
+  visibility?: 'public' | 'private';
+  preset?: 'private_chat' | 'trusted_private_chat' | 'public_chat';
+  initial_state?: Array<{
+    type: string;
+    state_key?: string;
+    content: ContentObject;
+  }>;
+};
+
+export type EventContent = IContent | RoomPinnedEventsEventContent | RoomServerAclEventContent;

@@ -26,14 +26,12 @@ import {
   TooltipProvider,
   config,
 } from 'folds';
-import { MatrixClient, Room } from 'matrix-js-sdk';
-import type { MemberView } from '@harrier/core';
+import type { MediaRef, MemberView } from '@harrier/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 
 import { getMemberSearchStr } from '@harrier/core';
 import * as css from './MembersDrawer.css';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useUserPresence } from '../../hooks/useUserPresence';
 import { useCustomStatus } from '../../hooks/useCustomStatus';
 import { PresenceStatus } from '../../components/presence';
@@ -52,7 +50,6 @@ import { millify } from '../../plugins/millify';
 import { ScrollTopContainer } from '../../components/scroll-top-container';
 import { UserAvatar } from '../../components/user-avatar';
 import { useRoomTypingMember } from '../../hooks/useRoomTypingMembers';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useMembershipFilter, useMembershipFilterMenu } from '../../hooks/useMemberFilter';
 import { useMemberPowerSort, useMemberSort, useMemberSortMenu } from '../../hooks/useMemberSort';
 import { useGetMemberPowerLevel, usePowerLevelsContext } from '../../hooks/usePowerLevels';
@@ -63,19 +60,24 @@ import { useSpaceOptionally } from '../../hooks/useSpace';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { useFlattenPowerTagMembers, useGetMemberPowerTag } from '../../hooks/useMemberPowerTag';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
+import { useCoreRoom } from '../../hooks/useCoreRoom';
+import { useMediaSource, toMediaRef } from '../../utils/coreMedia';
 
 type MemberDrawerHeaderProps = {
-  room: Room;
+  roomId: string;
+  memberCount?: number;
 };
-function MemberDrawerHeader({ room }: MemberDrawerHeaderProps) {
+function MemberDrawerHeader({ roomId, memberCount }: MemberDrawerHeaderProps) {
   const setPeopleDrawer = useSetSetting(settingsAtom, 'isPeopleDrawer');
+  const coreRoom = useCoreRoom(roomId);
+  const joinedMemberCount = memberCount ?? coreRoom?.memberCount ?? 0;
 
   return (
     <Header className={css.MembersDrawerHeader} variant="Background" size="600">
       <Box grow="Yes" alignItems="Center" gap="200">
         <Box grow="Yes" alignItems="Center" gap="200">
-          <Text title={`${room.getJoinedMemberCount()} Members`} size="H5" truncate>
-            {`${millify(room.getJoinedMemberCount())} Members`}
+          <Text title={`${joinedMemberCount} Members`} size="H5" truncate>
+            {`${millify(joinedMemberCount)} Members`}
           </Text>
         </Box>
         <Box shrink="No" alignItems="Center">
@@ -106,22 +108,20 @@ function MemberDrawerHeader({ room }: MemberDrawerHeaderProps) {
 }
 
 type MemberItemProps = {
-  mx: MatrixClient;
-  useAuthentication: boolean;
   member: MemberView;
   onClick: MouseEventHandler<HTMLButtonElement>;
   pressed?: boolean;
   typing?: boolean;
 };
-function MemberItem({ mx, useAuthentication, member, onClick, pressed, typing }: MemberItemProps) {
+function MemberItem({ member, onClick, pressed, typing }: MemberItemProps) {
   const name =
     member.rawDisplayName !== undefined && member.rawDisplayName !== member.userId
       ? member.rawDisplayName
       : getMxIdLocalPart(member.userId) ?? member.userId;
-  const avatarMxcUrl = member.avatarMxc;
-  const avatarUrl = avatarMxcUrl
-    ? mx.mxcUrlToHttp(avatarMxcUrl, 100, 100, 'crop', undefined, false, useAuthentication)
+  const avatarRef: MediaRef | undefined = member.avatarMxc
+    ? toMediaRef(member.avatarMxc, { width: 100, height: 100, resizeMethod: 'crop' })
     : undefined;
+  const avatarUrl = useMediaSource(avatarRef);
   const status = useCustomStatus(member.userId);
   const presence = useUserPresence(member.userId);
 
@@ -137,7 +137,7 @@ function MemberItem({ mx, useAuthentication, member, onClick, pressed, typing }:
         <Avatar size="200">
           <UserAvatar
             userId={member.userId}
-            src={avatarUrl ?? undefined}
+            src={avatarUrl}
             alt={name}
             renderFallback={() => <Icon size="50" src={Icons.User} filled />}
           />
@@ -190,12 +190,10 @@ const getRoomMemberStr: SearchItemStrGetter<MemberView> = (m, query) =>
   getMemberSearchStr(m, query, mxIdToName);
 
 type MembersDrawerProps = {
-  room: Room;
+  room: { roomId: string };
   members: readonly MemberView[];
 };
 export function MembersDrawer({ room, members }: MembersDrawerProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollTopAnchorRef = useRef<HTMLDivElement>(null);
@@ -204,7 +202,8 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
   const getPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
   const getPowerLevel = useGetMemberPowerLevel(powerLevels);
 
-  const fetchingMembers = members.length < room.getJoinedMemberCount();
+  const coreRoom = useCoreRoom(room.roomId);
+  const fetchingMembers = members.length < (coreRoom?.memberCount ?? members.length);
   const openUserRoomProfile = useOpenUserRoomProfile();
   const space = useSpaceOptionally();
   const openProfileUserId = useUserRoomProfileState()?.userId;
@@ -267,7 +266,7 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
       shrink="No"
       direction="Column"
     >
-      <MemberDrawerHeader room={room} />
+      <MemberDrawerHeader roomId={room.roomId} memberCount={coreRoom?.memberCount} />
       <Box className={css.MemberDrawerContentBase} grow="Yes">
         <Scroll ref={scrollRef} variant="Background" size="300" visibility="Hover" hideTrack>
           <Box className={css.MemberDrawerContent} direction="Column" gap="200">
@@ -430,8 +429,6 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
                       ref={virtualizer.measureElement}
                     >
                       <MemberItem
-                        mx={mx}
-                        useAuthentication={useAuthentication}
                         member={tagOrMember}
                         onClick={handleMemberClick}
                         pressed={openProfileUserId === tagOrMember.userId}

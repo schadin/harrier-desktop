@@ -1,11 +1,12 @@
 /* eslint-disable react/destructuring-assignment */
 import React, { MouseEventHandler, useMemo } from 'react';
-import { JoinRule, RelationType, Room } from 'matrix-js-sdk';
 import type { MessageSearchEventView } from '@harrier/core';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Avatar, Box, Chip, Header, Icon, Icons, Text, config } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCoreRoom } from '../../hooks/useCoreRoom';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import {
   factoryRenderLinkifyWithMention,
   getReactCustomHtmlParser,
@@ -14,7 +15,8 @@ import {
   makeMentionCustomProps,
   renderMatrixMention,
 } from '../../plugins/react-custom-html-parser';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdLocalPart } from '../../utils/matrix';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import { useMatrixEventRenderer } from '../../hooks/useMatrixEventRenderer';
 import { GetContentCallback, MessageEvent, StateEvent } from '../../../types/matrix/room';
 import {
@@ -33,7 +35,7 @@ import { Image } from '../../components/media';
 import { ImageViewer } from '../../components/image-viewer';
 import * as customHtmlCss from '../../styles/CustomHtml.css';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
-import { getMemberAvatarMxc, getMemberDisplayName, getRoomAvatarUrl } from '../../utils/room';
+
 import { ResultItem } from './useMessageSearch';
 import { SequenceCard } from '../../components/sequence-card';
 import { UserAvatar } from '../../components/user-avatar';
@@ -53,8 +55,58 @@ import {
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 
+function SearchResultUserAvatar({
+  userId,
+  avatarMxc,
+  name,
+}: {
+  userId: string;
+  avatarMxc?: string;
+  name: string;
+}) {
+  const src = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 48, height: 48, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={src}
+      alt={name}
+      renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+    />
+  );
+}
+
+function SearchResultRoomAvatar({
+  roomId,
+  avatarMxc,
+  name,
+  roomType,
+  joinRule,
+}: {
+  roomId: string;
+  avatarMxc?: string;
+  name: string;
+  roomType?: string;
+  joinRule?: string;
+}) {
+  const src = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <RoomAvatar
+      roomId={roomId}
+      src={src}
+      alt={name}
+      renderFallback={() => <RoomIcon size="50" roomType={roomType} joinRule={joinRule} filled />}
+    />
+  );
+}
+
 type SearchResultGroupProps = {
-  room: Room;
+  roomId: string;
   highlights: string[];
   items: ResultItem[];
   mediaAutoLoad?: boolean;
@@ -65,7 +117,7 @@ type SearchResultGroupProps = {
   dateFormatString: string;
 };
 export function SearchResultGroup({
-  room,
+  roomId,
   highlights,
   items,
   mediaAutoLoad,
@@ -76,34 +128,36 @@ export function SearchResultGroup({
   dateFormatString,
 }: SearchResultGroupProps) {
   const mx = useMatrixClient();
+  const room = useCoreRoom(roomId);
+  const members = useRoomMembers(roomId);
   const useAuthentication = useMediaAuthentication();
   const highlightRegex = useMemo(() => makeHighlightRegex(highlights), [highlights]);
 
-  const powerLevels = usePowerLevels(room);
-  const creators = useRoomCreators(room);
+  const powerLevels = usePowerLevels({ roomId });
+  const creators = useRoomCreators({ roomId });
 
   const creatorsTag = useRoomCreatorsTag();
-  const powerLevelTags = usePowerLevelTags(room, powerLevels);
-  const getMemberPowerTag = useGetMemberPowerTag(room, creators, powerLevels);
+  const powerLevelTags = usePowerLevelTags({ roomId }, powerLevels);
+  const getMemberPowerTag = useGetMemberPowerTag({ roomId }, creators, powerLevels);
 
   const theme = useTheme();
   const accessibleTagColors = useAccessiblePowerTagColors(theme.kind, creatorsTag, powerLevelTags);
 
-  const mentionClickHandler = useMentionClickHandler(room.roomId);
+  const mentionClickHandler = useMentionClickHandler(roomId);
   const spoilerClickHandler = useSpoilerClickHandler();
 
   const linkifyOpts = useMemo<LinkifyOpts>(
     () => ({
       ...LINKIFY_OPTS,
       render: factoryRenderLinkifyWithMention((href) =>
-        renderMatrixMention(mx, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
+        renderMatrixMention(mx, roomId, href, makeMentionCustomProps(mentionClickHandler))
       ),
     }),
-    [mx, room, mentionClickHandler]
+    [mx, roomId, mentionClickHandler]
   );
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
-      getReactCustomHtmlParser(mx, room.roomId, {
+      getReactCustomHtmlParser(mx, roomId, {
         linkifyOpts,
         highlightRegex,
         useAuthentication,
@@ -112,7 +166,7 @@ export function SearchResultGroup({
       }),
     [
       mx,
-      room,
+      roomId,
       linkifyOpts,
       highlightRegex,
       mentionClickHandler,
@@ -190,10 +244,12 @@ export function SearchResultGroup({
     }
   );
 
+  if (!room) return null;
+
   const handleOpenClick: MouseEventHandler = (evt) => {
     const eventId = evt.currentTarget.getAttribute('data-event-id');
     if (!eventId) return;
-    onOpen(room.roomId, eventId);
+    onOpen(roomId, eventId);
   };
 
   return (
@@ -201,22 +257,16 @@ export function SearchResultGroup({
       <Header size="300">
         <Box gap="200" grow="Yes">
           <Avatar size="200" radii="300">
-            <RoomAvatar
-              roomId={room.roomId}
-              src={getRoomAvatarUrl(mx, room, 96, useAuthentication)}
-              alt={room.name}
-              renderFallback={() => (
-                <RoomIcon
-                  size="50"
-                  roomType={room.getType()}
-                  joinRule={room.getJoinRule() ?? JoinRule.Restricted}
-                  filled
-                />
-              )}
+            <SearchResultRoomAvatar
+              roomId={roomId}
+              avatarMxc={room?.avatarMxc}
+              name={room?.name ?? roomId}
+              roomType={room?.roomType}
+              joinRule={room?.joinRule ?? 'restricted'}
             />
           </Avatar>
           <Text size="H4" truncate>
-            {room.name}
+            {room?.name ?? roomId}
           </Text>
         </Box>
       </Header>
@@ -224,11 +274,13 @@ export function SearchResultGroup({
         {items.map((item) => {
           const { event } = item;
 
+          const member = members.find((entry) => entry.userId === event.sender);
+          const rawDisplayName = member?.rawDisplayName;
           const displayName =
-            getMemberDisplayName(room, event.sender) ??
-            getMxIdLocalPart(event.sender) ??
-            event.sender;
-          const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);
+            rawDisplayName !== undefined && rawDisplayName !== event.sender
+              ? rawDisplayName
+              : getMxIdLocalPart(event.sender) ?? event.sender;
+          const senderAvatarMxc = member?.avatarMxc;
 
           const relation = event.content['m.relates_to'] as
             | {
@@ -238,14 +290,13 @@ export function SearchResultGroup({
               }
             | undefined;
           const mainEventId =
-            relation?.rel_type === RelationType.Replace ? relation.event_id : event.event_id;
+            relation?.rel_type === 'm.replace' ? relation.event_id : event.event_id;
 
           const getContent = (() =>
             event.content['m.new_content'] ?? event.content) as GetContentCallback;
 
           const replyEventId = relation?.['m.in_reply_to']?.event_id;
-          const threadRootId =
-            relation?.rel_type === RelationType.Thread ? relation.event_id : undefined;
+          const threadRootId = relation?.rel_type === 'm.thread' ? relation.event_id : undefined;
 
           const memberPowerTag = getMemberPowerTag(event.sender);
           const tagColor = memberPowerTag?.color
@@ -268,22 +319,10 @@ export function SearchResultGroup({
                 before={
                   <AvatarBase>
                     <Avatar size="300">
-                      <UserAvatar
+                      <SearchResultUserAvatar
                         userId={event.sender}
-                        src={
-                          senderAvatarMxc
-                            ? mxcUrlToHttp(
-                                mx,
-                                senderAvatarMxc,
-                                useAuthentication,
-                                48,
-                                48,
-                                'crop'
-                              ) ?? undefined
-                            : undefined
-                        }
-                        alt={displayName}
-                        renderFallback={() => <Icon size="200" src={Icons.User} filled />}
+                        avatarMxc={senderAvatarMxc}
+                        name={displayName}
                       />
                     </Avatar>
                   </AvatarBase>
@@ -318,7 +357,7 @@ export function SearchResultGroup({
                 </Box>
                 {replyEventId && (
                   <Reply
-                    room={room}
+                    roomId={roomId}
                     replyEventId={replyEventId}
                     threadRootId={threadRootId}
                     onClick={handleOpenClick}

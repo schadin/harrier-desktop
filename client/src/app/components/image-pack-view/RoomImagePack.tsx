@@ -1,8 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { Room } from 'matrix-js-sdk';
 import type { JsonObject } from '@harrier/core';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useCore } from '../../hooks/useCore';
 import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { ImagePackContent } from './ImagePackContent';
@@ -14,14 +12,13 @@ import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 
 type RoomImagePackProps = {
-  room: Room;
+  room: { roomId: string };
   stateKey: string;
 };
 
 export function RoomImagePack({ room, stateKey }: RoomImagePackProps) {
-  const mx = useMatrixClient();
   const core = useCore();
-  const userId = mx.getUserId()!;
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
 

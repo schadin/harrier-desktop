@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { AsyncStatus, useAsyncCallbackValue } from './useAsyncCallback';
-import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 
 type RefreshHandler = () => void;
 
@@ -13,34 +13,14 @@ export const useEmailNotifications = (): [
   EmailNotificationResult | undefined | null,
   RefreshHandler
 ] => {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const [emailState, refresh] = useAsyncCallbackValue<EmailNotificationResult, Error>(
     useCallback(async () => {
-      const tpIDs = (await mx.getThreePids())?.threepids;
-      const emailAddresses = tpIDs.filter((id) => id.medium === 'email').map((id) => id.address);
-      if (emailAddresses.length === 0)
-        return {
-          enabled: false,
-        };
-
-      const pushers = (await mx.getPushers())?.pushers;
-      const emailPusher = pushers.find(
-        (pusher) => pusher.app_id === 'm.email' && emailAddresses.includes(pusher.pushkey)
-      );
-
-      if (emailPusher?.pushkey) {
-        return {
-          enabled: true,
-          email: emailPusher.pushkey,
-        };
-      }
-
-      return {
-        enabled: false,
-        email: emailAddresses[0],
-      };
-    }, [mx])
+      const result = await core.notifications.emailNotifications();
+      if (!result.ok) throw result.error;
+      return result.value;
+    }, [core])
   );
 
   if (emailState.status === AsyncStatus.Success) {

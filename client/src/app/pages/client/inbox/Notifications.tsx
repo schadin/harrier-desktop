@@ -14,12 +14,12 @@ import {
   toRem,
 } from 'folds';
 import { useSearchParams } from 'react-router-dom';
-import { IRoomEvent, JoinRule, RelationType, Room } from 'matrix-js-sdk';
 import type { NotificationView } from '@harrier/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts as LinkifyOpts } from 'linkifyjs';
 import { useAtomValue } from 'jotai';
+import { JoinRule, RelationType } from '../../../../types/matrix/legacyStructural';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
@@ -28,12 +28,7 @@ import { InboxNotificationsPathSearchParams } from '../../paths';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { SequenceCard } from '../../../components/sequence-card';
 import { RoomAvatar, RoomIcon } from '../../../components/room-avatar';
-import {
-  getEditedEvent,
-  getMemberAvatarMxc,
-  getMemberDisplayName,
-  getRoomAvatarUrl,
-} from '../../../utils/room';
+import { getEditedEvent } from '../../../utils/room';
 import { ScrollTopContainer } from '../../../components/scroll-top-container';
 import { useInterval } from '../../../hooks/useInterval';
 import {
@@ -92,6 +87,16 @@ import {
 } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreatorsTag } from '../../../hooks/useRoomCreatorsTag';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
+import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
+import { useRoomMembers } from '../../../hooks/useRoomMembers';
+
+type MatrixClient = ReturnType<typeof useMatrixClient>;
+type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
+type NotificationEvent = NotificationView['event'] & {
+  readonly unsigned?: {
+    readonly redacted_because?: { readonly content?: { readonly reason?: string } };
+  };
+};
 
 type RoomNotificationsGroup = {
   roomId: string;
@@ -210,6 +215,12 @@ function RoomNotificationsGroupComp({
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
+  const { name, avatarMxc, roomType, joinRule } = useCoreRoomMeta(room.roomId);
+  const members = useRoomMembers(room.roomId);
+  const membersByUserId = useMemo(
+    () => new Map(members.map((member) => [member.userId, member])),
+    [members]
+  );
 
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
@@ -244,17 +255,17 @@ function RoomNotificationsGroupComp({
     [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
   );
 
-  const renderMatrixEvent = useMatrixEventRenderer<[IRoomEvent, string, GetContentCallback]>(
+  const renderMatrixEvent = useMatrixEventRenderer<[NotificationEvent, string, GetContentCallback]>(
     {
       [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
-          return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+          return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
         }
 
         return (
           <RenderMessageContent
             displayName={displayName}
-            msgType={event.content.msgtype ?? ''}
+            msgType={typeof event.content.msgtype === 'string' ? event.content.msgtype : ''}
             ts={event.origin_server_ts}
             getContent={getContent}
             mediaAutoLoad={mediaAutoLoad}
@@ -342,7 +353,7 @@ function RoomNotificationsGroupComp({
       },
       [MessageEvent.Sticker]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
-          return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+          return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
         }
         return (
           <MSticker
@@ -363,7 +374,7 @@ function RoomNotificationsGroupComp({
         return (
           <Box grow="Yes" direction="Column">
             <Text size="T400" priority="300">
-              Room Tombstone. {content.body}
+              Room Tombstone. {typeof content.body === 'string' ? content.body : undefined}
             </Text>
           </Box>
         );
@@ -372,7 +383,7 @@ function RoomNotificationsGroupComp({
     undefined,
     (event) => {
       if (event.unsigned?.redacted_because) {
-        return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+        return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
       }
       return (
         <Box grow="Yes" direction="Column">
@@ -401,20 +412,33 @@ function RoomNotificationsGroupComp({
           <Avatar size="200" radii="300">
             <RoomAvatar
               roomId={room.roomId}
-              src={getRoomAvatarUrl(mx, room, 96, useAuthentication)}
-              alt={room.name}
+              src={
+                avatarMxc
+                  ? mxcUrlToHttp(
+                      mx,
+                      avatarMxc,
+                      useAuthentication,
+                      96,
+                      96,
+                      'crop',
+                      undefined,
+                      false
+                    ) ?? undefined
+                  : undefined
+              }
+              alt={name}
               renderFallback={() => (
                 <RoomIcon
                   size="50"
-                  roomType={room.getType()}
-                  joinRule={room.getJoinRule() ?? JoinRule.Restricted}
+                  roomType={roomType}
+                  joinRule={joinRule ?? JoinRule.Restricted}
                   filled
                 />
               )}
             />
           </Avatar>
           <Text size="H4" truncate>
-            {room.name}
+            {name}
           </Text>
         </Box>
         <Box shrink="No">
@@ -434,11 +458,12 @@ function RoomNotificationsGroupComp({
         {notifications.map((notification) => {
           const { event } = notification;
 
+          const member = membersByUserId.get(event.sender);
           const displayName =
-            getMemberDisplayName(room, event.sender) ??
+            (member?.rawDisplayName !== event.sender ? member?.rawDisplayName : undefined) ??
             getMxIdLocalPart(event.sender) ??
             event.sender;
-          const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);
+          const senderAvatarMxc = member?.avatarMxc;
           const getContent = (() => event.content) as GetContentCallback;
 
           const relation = event.content['m.relates_to'] as
@@ -523,7 +548,7 @@ function RoomNotificationsGroupComp({
                 </Box>
                 {replyEventId && (
                   <Reply
-                    room={room}
+                    roomId={room.roomId}
                     replyEventId={replyEventId}
                     threadRootId={threadRootId}
                     onClick={handleOpenClick}

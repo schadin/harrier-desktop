@@ -2,7 +2,7 @@ import React, { MouseEventHandler, useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
-import { Room } from 'matrix-js-sdk';
+import type { RoomView } from '@harrier/core';
 import {
   PopOut,
   Menu,
@@ -21,7 +21,7 @@ import {
   Avatar,
 } from 'folds';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { getMxIdServer } from '../../utils/matrix';
+import { getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
 import { useCloseUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { stopPropagation } from '../../utils/keyboard';
 import { copyToClipboard } from '../../utils/dom';
@@ -36,9 +36,9 @@ import {
 import { useRoomNavigate } from '../../hooks/useRoomNavigate';
 import { useDirectRooms } from '../../pages/client/direct/useDirectRooms';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { useAllJoinedRoomsSet, useGetRoom } from '../../hooks/useGetRoom';
+import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
+import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { RoomAvatar, RoomIcon } from '../room-avatar';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '../../utils/room';
 import { nameInitials } from '../../utils/common';
 import { getMatrixToUser } from '../../plugins/matrix-to';
 import { useTimeoutToggle } from '../../hooks/useTimeoutToggle';
@@ -229,9 +229,9 @@ export function ShareChip({ userId }: { userId: string }) {
 }
 
 type MutualRoomsData = {
-  rooms: Room[];
-  spaces: Room[];
-  directs: Room[];
+  rooms: RoomView[];
+  spaces: RoomView[];
+  directs: RoomView[];
 };
 
 export function MutualRoomsChip({ userId }: { userId: string }) {
@@ -246,7 +246,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
   const useAuthentication = useMediaAuthentication();
 
   const allJoinedRooms = useAllJoinedRoomsSet();
-  const getRoom = useGetRoom(allJoinedRooms);
+  const getRoom = useGetCoreRoom(allJoinedRooms);
 
   const [cords, setCords] = useState<RectCords>();
 
@@ -267,9 +267,9 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       const mutualRooms = mutualRoomsState.data
         .sort(factoryRoomIdByAtoZ(mx))
         .map(getRoom)
-        .filter((room): room is Room => !!room);
+        .filter((room): room is RoomView => !!room);
       mutualRooms.forEach((room) => {
-        if (room.isSpaceRoom()) {
+        if (room.isSpace) {
           data.spaces.push(room);
           return;
         }
@@ -291,9 +291,13 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
     return null;
   }
 
-  const renderItem = (room: Room) => {
+  const renderItem = (room: RoomView) => {
     const { roomId } = room;
     const dm = directs.includes(roomId);
+    const avatarMxc = dm ? room.dmAvatarMxc : room.avatarMxc;
+    const avatarUrl = avatarMxc
+      ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
+      : undefined;
 
     return (
       <MenuItem
@@ -304,7 +308,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
         radii="300"
         style={{ paddingLeft: config.space.S100 }}
         onClick={() => {
-          if (room.isSpaceRoom()) {
+          if (room.isSpace) {
             navigateSpace(roomId);
           } else {
             navigateRoom(roomId);
@@ -313,14 +317,10 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
         }}
         before={
           <Avatar size="200" radii={dm ? '400' : '300'}>
-            {dm || room.isSpaceRoom() ? (
+            {dm || room.isSpace ? (
               <RoomAvatar
                 roomId={room.roomId}
-                src={
-                  dm
-                    ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-                    : getRoomAvatarUrl(mx, room, 96, useAuthentication)
-                }
+                src={avatarUrl}
                 alt={room.name}
                 renderFallback={() => (
                   <Text as="span" size="H6">
@@ -329,7 +329,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
                 )}
               />
             ) : (
-              <RoomIcon size="100" joinRule={room.getJoinRule()} roomType={room.getType()} />
+              <RoomIcon size="100" joinRule={room.joinRule} roomType={room.roomType} />
             )}
           </Avatar>
         }

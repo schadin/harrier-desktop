@@ -6,17 +6,23 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { MatrixError } from 'matrix-js-sdk';
 import { Box, color, Icon, Icons, Input, Spinner, Text, toRem } from 'folds';
 import { isKeyHotkey } from 'is-hotkey';
 import { getMxIdServer } from '../../utils/matrix';
+import { useCore } from '../../hooks/useCore';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { replaceSpaceWithDash } from '../../utils/common';
 import { AsyncState, AsyncStatus, useAsync } from '../../hooks/useAsyncCallback';
 import { useDebounce } from '../../hooks/useDebounce';
 
+const isNotFoundError = (error: unknown): boolean =>
+  !!error && typeof error === 'object' && 'httpStatus' in error && error.httpStatus === 404;
+
 export function CreateRoomAliasInput({ disabled }: { disabled?: boolean }) {
+  const core = useCore();
   const mx = useMatrixClient();
+  const userId = core.auth.session.getSnapshot().value?.userId ?? '';
+  const userServer = getMxIdServer(userId);
   const aliasInputRef = useRef<HTMLInputElement>(null);
   const [aliasAvail, setAliasAvail] = useState<AsyncState<boolean, Error>>({
     status: AsyncStatus.Idle,
@@ -31,18 +37,19 @@ export function CreateRoomAliasInput({ disabled }: { disabled?: boolean }) {
   const checkAliasAvail = useAsync(
     useCallback(
       async (aliasLocalPart: string) => {
-        const roomAlias = `#${aliasLocalPart}:${getMxIdServer(mx.getSafeUserId())}`;
+        if (!userServer) throw new Error('User session not found');
+        const roomAlias = `#${aliasLocalPart}:${userServer}`;
         try {
           const result = await mx.getRoomIdForAlias(roomAlias);
           return typeof result.room_id !== 'string';
         } catch (e) {
-          if (e instanceof MatrixError && e.httpStatus === 404) {
+          if (isNotFoundError(e)) {
             return true;
           }
           throw e;
         }
       },
-      [mx]
+      [mx, userServer]
     ),
     setAliasAvail
   );
@@ -94,7 +101,7 @@ export function CreateRoomAliasInput({ disabled }: { disabled?: boolean }) {
         }
         after={
           <Text style={{ maxWidth: toRem(150) }} truncate>
-            :{getMxIdServer(mx.getSafeUserId())}
+            :{userServer}
           </Text>
         }
         onKeyDown={handleAliasKeyDown}

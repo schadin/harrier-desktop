@@ -1,4 +1,4 @@
-import React, { MouseEventHandler, ReactNode, useCallback, useRef } from 'react';
+import React, { MouseEventHandler, ReactNode, useCallback, useMemo, useRef } from 'react';
 import {
   Avatar,
   Badge,
@@ -19,38 +19,43 @@ import {
   toRem,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { JoinRule, MatrixError, Room } from 'matrix-js-sdk';
-import type { PublicRoomView } from '@harrier/core';
+import type { CoreError, PublicRoomView } from '@harrier/core';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { SequenceCard } from '../../components/sequence-card';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { HierarchyItem } from '../../hooks/useSpaceHierarchy';
 import { millify } from '../../plugins/millify';
 import { LocalRoomSummaryLoader } from '../../components/RoomSummaryLoader';
 import { UseStateProvider } from '../../components/UseStateProvider';
 import { RoomTopicViewer } from '../../components/room-topic-viewer';
 import { onEnterOrSpace, stopPropagation } from '../../utils/keyboard';
-import { Membership } from '../../../types/matrix/room';
 import * as css from './RoomItem.css';
 import * as styleCss from './style.css';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { getDirectRoomAvatarUrl, getRoomAvatarUrl } from '../../utils/room';
 import { ItemDraggableTarget, useDraggableItem } from './DnD';
-import { mxcUrlToHttp } from '../../utils/matrix';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { getCoreErrorData, joinRoom } from '../../utils/coreRoomActions';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 
 type RoomJoinButtonProps = {
   roomId: string;
   via?: string[];
 };
 function RoomJoinButton({ roomId, via }: RoomJoinButtonProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
-  const [joinState, join] = useAsyncCallback<Room, MatrixError, []>(
-    useCallback(() => mx.joinRoom(roomId, { viaServers: via }), [mx, roomId, via])
+  const [joinState, join] = useAsyncCallback<string, CoreError, []>(
+    useCallback(() => joinRoom(core, roomId, via), [core, roomId, via])
   );
 
   const canJoin = joinState.status === AsyncStatus.Idle || joinState.status === AsyncStatus.Error;
+  const errorData = getCoreErrorData(
+    joinState.status === AsyncStatus.Error ? joinState.error : null
+  );
+  let errorMessage: string | undefined;
+  if (joinState.status === AsyncStatus.Error) {
+    errorMessage = joinState.error.message;
+    if (errorData && typeof errorData.error === 'string') errorMessage = errorData.error;
+  }
 
   return (
     <Box shrink="No" gap="200" alignItems="Center">
@@ -60,7 +65,7 @@ function RoomJoinButton({ roomId, via }: RoomJoinButtonProps) {
             <Tooltip variant="Critical" style={{ maxWidth: toRem(200) }}>
               <Box direction="Column" gap="100">
                 <Text style={{ wordBreak: 'break-word' }} size="T400">
-                  {joinState.error.data?.error || joinState.error.message}
+                  {errorMessage}
                 </Text>
                 <Text size="T200">{joinState.error.name}</Text>
               </Box>
@@ -75,7 +80,7 @@ function RoomJoinButton({ roomId, via }: RoomJoinButtonProps) {
               size="400"
               filled
               tabIndex={0}
-              aria-label={joinState.error.data?.error || joinState.error.message}
+              aria-label={errorMessage}
             />
           )}
         </TooltipProvider>
@@ -135,11 +140,7 @@ function RoomProfileError({ roomId, suggested, inaccessibleRoom, via }: RoomProf
           src={undefined}
           alt={roomId}
           renderFallback={() => (
-            <RoomIcon
-              size="300"
-              joinRule={inaccessibleRoom ? JoinRule.Invite : JoinRule.Restricted}
-              filled
-            />
+            <RoomIcon size="300" joinRule={inaccessibleRoom ? 'invite' : 'restricted'} filled />
           )}
         />
       </Avatar>
@@ -178,10 +179,10 @@ type RoomProfileProps = {
   roomType?: string;
   name: string;
   topic?: string;
-  avatarUrl?: string;
+  avatarMxc?: string;
   suggested?: boolean;
   memberCount?: number;
-  joinRule?: JoinRule;
+  joinRule?: string;
   options?: ReactNode;
 };
 function RoomProfile({
@@ -189,12 +190,21 @@ function RoomProfile({
   roomType,
   name,
   topic,
-  avatarUrl,
+  avatarMxc,
   suggested,
   memberCount,
   joinRule,
   options,
 }: RoomProfileProps) {
+  const avatarRef = useMemo(
+    () =>
+      avatarMxc
+        ? toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' })
+        : undefined,
+    [avatarMxc]
+  );
+  const avatarUrl = useMediaSource(avatarRef);
+
   return (
     <Box grow="Yes" gap="300">
       <Avatar>
@@ -290,7 +300,7 @@ type RoomItemCardProps = {
   after?: ReactNode;
   onDragging: (item?: HierarchyItem) => void;
   canReorder: boolean;
-  getRoom: (roomId: string) => Room | undefined;
+  joined: boolean;
 };
 export const RoomItemCard = as<'div', RoomItemCardProps>(
   (
@@ -306,20 +316,15 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
       after,
       onDragging,
       canReorder,
-      getRoom,
+      joined,
       ...props
     },
     ref
   ) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
     const { roomId, content } = item;
-    const room = getRoom(roomId);
     const targetRef = useRef<HTMLDivElement>(null);
     const targetHandleRef = useRef<HTMLDivElement>(null);
     useDraggableItem(item, targetRef, onDragging, targetHandleRef);
-
-    const joined = room?.getMyMembership() === Membership.Join;
 
     return (
       <SequenceCard
@@ -333,40 +338,34 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
         {before}
         <Box ref={canReorder ? targetRef : null} grow="Yes">
           {canReorder && <ItemDraggableTarget ref={targetHandleRef} />}
-          {room ? (
-            <LocalRoomSummaryLoader room={room}>
+          {joined ? (
+            <LocalRoomSummaryLoader roomId={roomId}>
               {(localSummary) => (
                 <RoomProfile
                   roomId={roomId}
                   roomType={localSummary.roomType}
                   name={localSummary.name}
                   topic={localSummary.topic}
-                  avatarUrl={
-                    dm
-                      ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-                      : getRoomAvatarUrl(mx, room, 96, useAuthentication)
+                  avatarMxc={
+                    dm ? localSummary.dmAvatarMxc ?? localSummary.avatarMxc : localSummary.avatarMxc
                   }
                   memberCount={localSummary.memberCount}
                   suggested={content.suggested}
                   joinRule={localSummary.joinRule}
                   options={
-                    joined ? (
-                      <Box shrink="No" gap="100" alignItems="Center">
-                        <Chip
-                          data-room-id={roomId}
-                          onClick={onOpen}
-                          variant="Secondary"
-                          fill="None"
-                          size="400"
-                          radii="Pill"
-                          aria-label="Open Room"
-                        >
-                          <Icon size="50" src={Icons.ArrowRight} />
-                        </Chip>
-                      </Box>
-                    ) : (
-                      <RoomJoinButton roomId={roomId} via={content.via} />
-                    )
+                    <Box shrink="No" gap="100" alignItems="Center">
+                      <Chip
+                        data-room-id={roomId}
+                        onClick={onOpen}
+                        variant="Secondary"
+                        fill="None"
+                        size="400"
+                        radii="Pill"
+                        aria-label="Open Room"
+                      >
+                        <Icon size="50" src={Icons.ArrowRight} />
+                      </Chip>
+                    </Box>
                   }
                 />
               )}
@@ -400,15 +399,10 @@ export const RoomItemCard = as<'div', RoomItemCardProps>(
                   roomType={summary.roomType}
                   name={summary.name || summary.canonicalAlias || roomId}
                   topic={summary.topic}
-                  avatarUrl={
-                    summary?.avatarMxc
-                      ? mxcUrlToHttp(mx, summary.avatarMxc, useAuthentication, 96, 96, 'crop') ??
-                        undefined
-                      : undefined
-                  }
+                  avatarMxc={summary.avatarMxc}
                   memberCount={summary.joinedMembers}
                   suggested={content.suggested}
-                  joinRule={summary.joinRule as JoinRule | undefined}
+                  joinRule={summary.joinRule}
                   options={<RoomJoinButton roomId={roomId} via={content.via} />}
                 />
               )}

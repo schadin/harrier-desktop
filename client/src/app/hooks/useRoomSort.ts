@@ -1,10 +1,9 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useMemo } from 'react';
-import { WritableAccountDataEvents } from 'matrix-js-sdk';
 import { AccountDataEvent, RoomSortType, SpacesSortContent } from '../../types/matrix/accountData';
-import { getAccountData } from '../utils/room';
 import { SortFunc, factoryRoomIdSort } from '../utils/sort';
 import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 import { settingsAtom } from '../state/settings';
 import { spaceSortAtom } from '../state/spaceSort';
 import { useSetting } from '../state/hooks/settings';
@@ -33,21 +32,20 @@ export const useSpaceRoomSort = (spaceId: string): RoomSortType => {
 };
 
 export const useSetSpaceRoomSort = () => {
-  const mx = useMatrixClient();
+  const core = useCore();
   const setSpaceSort = useSetAtom(spaceSortAtom);
 
   return useCallback(
     async (spaceId: string, sortType: RoomSortType) => {
       const currentContent =
-        getAccountData(mx, AccountDataEvent.SpacesSort)?.getContent<SpacesSortContent>() ?? {};
+        (core.auth.accountData(AccountDataEvent.SpacesSort).getSnapshot()
+          .value as SpacesSortContent | null) ?? {};
       const newContent: SpacesSortContent = { ...currentContent, [spaceId]: sortType };
       setSpaceSort({ type: 'UPDATE', spacesSort: newContent });
-      await mx.setAccountData(
-        AccountDataEvent.SpacesSort as keyof WritableAccountDataEvents,
-        newContent
-      );
+      const result = await core.auth.setAccountData(AccountDataEvent.SpacesSort, newContent);
+      if (!result.ok) throw result.error;
     },
-    [mx, setSpaceSort]
+    [core, setSpaceSort]
   );
 };
 

@@ -1,5 +1,5 @@
-import { IContent, MsgType, Room } from 'matrix-js-sdk';
-import type { HarrierCore, JsonObject, TimelineItem } from '@harrier/core';
+import type { HarrierCore, JsonObject, MemberView, TimelineItem } from '@harrier/core';
+import { type IContent, MsgType } from '../../../types/matrix/protocol';
 import { getMentionContent } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { notifySendError } from '../../utils/send';
@@ -42,24 +42,19 @@ export const sendBotText = async (
   return result.value;
 };
 
-export const isDirectRoomWithBot = (room: Room, botMxid: string): boolean => {
+export const isDirectRoomWithBot = (members: readonly MemberView[], botMxid: string): boolean => {
   if (!botMxid) return false;
-  const joined = room
-    .getMembers()
-    .filter((member) => member.membership === 'join' || member.membership === 'invite');
+  const joined = members.filter(
+    (member) => member.membership === 'join' || member.membership === 'invite'
+  );
   return joined.length === 2 && joined.some((member) => member.userId === botMxid);
 };
 
-type RoomWithMember = {
-  getMember: (userId: string) => { membership?: string | null } | null | undefined;
-};
-
-// Бот считается присутствующим, только если реально состоит в комнате (`join`):
-// приглашённый бот команд не получает. Помощники команд доступны лишь в таких
-// комнатах.
-export const isBotInRoom = (room: RoomWithMember, botMxid: string): boolean => {
+// Бот считается присутствующим, только когда участник уже присоединился:
+// приглашённый бот команд не получает.
+export const isBotInRoom = (member: MemberView | undefined, botMxid: string): boolean => {
   if (!botMxid) return false;
-  return room.getMember(botMxid)?.membership === 'join';
+  return member?.userId === botMxid && member.membership === 'join';
 };
 
 // В личках сворачиваем служебные сообщения только в переписке с ботом; в обычных

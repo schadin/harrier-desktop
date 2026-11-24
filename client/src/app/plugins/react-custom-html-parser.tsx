@@ -14,13 +14,13 @@ import {
   attributesToProps,
   domToReact,
 } from 'html-react-parser';
-import { MatrixClient } from 'matrix-js-sdk';
 import classNames from 'classnames';
 import { Box, Chip, config, Header, Icon, IconButton, Icons, Scroll, Text, toRem } from 'folds';
 import { IntermediateRepresentation, Opts as LinkifyOpts, OptFn } from 'linkifyjs';
 import Linkify from 'linkify-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ChildNode } from 'domhandler';
+import type { MatrixClientLike } from '../../types/matrix/legacyStructural';
 import * as css from '../styles/CustomHtml.css';
 import {
   getMxIdLocalPart,
@@ -72,14 +72,14 @@ export const makeMentionCustomProps = (
 });
 
 export const renderMatrixMention = (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   currentRoomId: string | undefined,
   href: string,
   customProps: ComponentPropsWithoutRef<'a'>
 ) => {
   const userId = parseMatrixToUser(href);
   if (userId) {
-    const currentRoom = mx.getRoom(currentRoomId);
+    const currentRoom = currentRoomId ? mx.getRoom(currentRoomId) : null;
 
     return (
       <a
@@ -99,7 +99,9 @@ export const renderMatrixMention = (
   if (matrixToRoom) {
     const { roomIdOrAlias, viaServers } = matrixToRoom;
     const mentionRoom = mx.getRoom(
-      isRoomAlias(roomIdOrAlias) ? getCanonicalAliasRoomId(mx, roomIdOrAlias) : roomIdOrAlias
+      isRoomAlias(roomIdOrAlias)
+        ? getCanonicalAliasRoomId(mx, roomIdOrAlias) ?? roomIdOrAlias
+        : roomIdOrAlias
     );
 
     const fallbackContent = mentionRoom ? `#${mentionRoom.name}` : roomIdOrAlias;
@@ -123,7 +125,9 @@ export const renderMatrixMention = (
   if (matrixToRoomEvent) {
     const { roomIdOrAlias, eventId, viaServers } = matrixToRoomEvent;
     const mentionRoom = mx.getRoom(
-      isRoomAlias(roomIdOrAlias) ? getCanonicalAliasRoomId(mx, roomIdOrAlias) : roomIdOrAlias
+      isRoomAlias(roomIdOrAlias)
+        ? getCanonicalAliasRoomId(mx, roomIdOrAlias) ?? roomIdOrAlias
+        : roomIdOrAlias
     );
 
     return (
@@ -311,7 +315,7 @@ export function CodeBlock({
 }
 
 export const getReactCustomHtmlParser = (
-  mx: MatrixClient,
+  mx: MatrixClientLike,
   roomId: string | undefined,
   params: {
     linkifyOpts: LinkifyOpts;

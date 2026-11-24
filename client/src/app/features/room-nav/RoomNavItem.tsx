@@ -1,5 +1,4 @@
 import React, { MouseEventHandler, forwardRef, useState } from 'react';
-import { Room } from 'matrix-js-sdk';
 import {
   Avatar,
   Box,
@@ -20,6 +19,7 @@ import {
 import { useFocusWithin, useHover } from 'react-aria';
 import FocusTrap from 'focus-trap-react';
 import { useAtom, useAtomValue } from 'jotai';
+import type { RoomLike } from '../../../types/matrix/legacyStructural';
 import { NavItem, NavItemContent, NavItemOptions, NavLink } from '../../components/nav';
 import { UnreadBadge, UnreadBadgeCenter } from '../../components/unread-badge';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
@@ -67,7 +67,7 @@ import { StateEvent } from '../../../types/matrix/room';
 import { webRTCSupported } from '../../utils/rtc';
 
 type RoomNavItemMenuProps = {
-  room: Room;
+  room: RoomLike;
   requestClose: () => void;
   notificationMode?: RoomNotificationMode;
 };
@@ -112,7 +112,7 @@ const RoomNavItemMenu = forwardRef<HTMLDivElement, RoomNavItemMenuProps>(
       <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
         {invitePrompt && room && (
           <InviteUserPrompt
-            room={room}
+            roomId={room.roomId}
             requestClose={() => {
               setInvitePrompt(false);
               requestClose();
@@ -243,7 +243,7 @@ function CallChatToggle() {
 }
 
 type RoomNavItemProps = {
-  room: Room;
+  room: RoomLike;
   selected: boolean;
   linkPath: string;
   notificationMode?: RoomNotificationMode;
@@ -319,7 +319,7 @@ export function RoomNavItem({
     // Start call in second click
     if (selected) {
       evt.preventDefault();
-      startCall(room, callPref);
+      startCall(room as Parameters<typeof startCall>[0], callPref);
     }
   };
 

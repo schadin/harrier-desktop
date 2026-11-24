@@ -1,4 +1,3 @@
-import { Room } from 'matrix-js-sdk';
 import { useAtomValue } from 'jotai';
 import { useCallback, useMemo } from 'react';
 import { allRoomsAtom } from '../state/room-list/roomList';
@@ -6,24 +5,16 @@ import { useMatrixClient } from './useMatrixClient';
 
 export const useAllJoinedRoomsSet = () => {
   const allRooms = useAtomValue(allRoomsAtom);
-  const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
-
-  return allJoinedRooms;
+  return useMemo(() => new Set(allRooms), [allRooms]);
 };
 
-export type GetRoomCallback = (roomId: string) => Room | undefined;
+type LegacyRoom = NonNullable<ReturnType<ReturnType<typeof useMatrixClient>['getRoom']>>;
+
+export type GetRoomCallback = (roomId: string) => LegacyRoom | undefined;
 export const useGetRoom = (rooms: Set<string>): GetRoomCallback => {
   const mx = useMatrixClient();
-
-  const getRoom: GetRoomCallback = useCallback(
-    (rId: string) => {
-      if (rooms.has(rId)) {
-        return mx.getRoom(rId) ?? undefined;
-      }
-      return undefined;
-    },
+  return useCallback(
+    (roomId: string) => (rooms.has(roomId) ? mx.getRoom(roomId) ?? undefined : undefined),
     [mx, rooms]
   );
-
-  return getRoom;
 };

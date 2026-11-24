@@ -14,16 +14,13 @@ import {
   as,
   config,
 } from 'folds';
-import { Room } from 'matrix-js-sdk';
 import type { ReactionCountView } from '@harrier/core';
-import { getMemberDisplayName } from '../../../utils/room';
+import { useRoomMembers } from '../../../hooks/useRoomMembers';
 import { getMxIdLocalPart } from '../../../utils/matrix';
 import * as css from './ReactionViewer.css';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { Reaction } from '../../../components/message';
 import { getHexcodeForEmoji, getShortcodeFor } from '../../../plugins/emoji';
 import { UserAvatar } from '../../../components/user-avatar';
-import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useOpenUserRoomProfile } from '../../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../../hooks/useSpace';
 import { getMouseEventCords } from '../../../utils/dom';
@@ -51,15 +48,14 @@ function ReactionSenderAvatar({ userId, avatarMxc, name }: ReactionSenderAvatarP
 }
 
 export type ReactionViewerProps = {
-  room: Room;
+  roomId: string;
   initialKey?: string;
   reactions: readonly ReactionCountView[];
   requestClose: () => void;
 };
 export const ReactionViewer = as<'div', ReactionViewerProps>(
-  ({ className, room, initialKey, reactions, requestClose, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
+  ({ className, roomId, initialKey, reactions, requestClose, ...props }, ref) => {
+    const members = useRoomMembers(roomId);
     const space = useSpaceOptionally();
     const openProfile = useOpenUserRoomProfile();
 
@@ -88,12 +84,10 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
                 return (
                   <Reaction
                     key={key}
-                    mx={mx}
                     reaction={key}
                     count={count}
                     aria-selected={key === selectedKey}
                     onClick={() => setSelectedKey(key)}
-                    useAuthentication={useAuthentication}
                   />
                 );
               })}
@@ -115,12 +109,14 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
             <Scroll visibility="Hover" hideTrack size="300">
               <Box className={css.Content} direction="Column">
                 {selectedSenders.map((senderId) => {
-                  const member = room.getMember(senderId);
+                  const member = members.find((entry) => entry.userId === senderId);
+                  const rawDisplayName = member?.rawDisplayName;
                   const name =
-                    (member ? getMemberDisplayName(room, senderId) : getMxIdLocalPart(senderId)) ??
-                    senderId;
+                    rawDisplayName !== undefined && rawDisplayName !== senderId
+                      ? rawDisplayName
+                      : getMxIdLocalPart(senderId) ?? senderId;
 
-                  const avatarMxcUrl = member?.getMxcAvatarUrl();
+                  const avatarMxcUrl = member?.avatarMxc;
 
                   return (
                     <MenuItem
@@ -129,7 +125,7 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
                       radii="400"
                       onClick={(event: React.MouseEvent<HTMLElement>) => {
                         openProfile(
-                          room.roomId,
+                          roomId,
                           space?.roomId,
                           senderId,
                           getMouseEventCords(event.nativeEvent),

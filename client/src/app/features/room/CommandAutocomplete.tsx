@@ -1,8 +1,7 @@
 import React, { KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo } from 'react';
 import { Editor } from 'slate';
 import { Box, config, MenuItem, Text } from 'folds';
-import { Room } from 'matrix-js-sdk';
-import { Command, useCommands } from '../../hooks/useCommands';
+import { Command, CommandRecord } from '../../hooks/useCommands';
 import {
   AutocompleteMenu,
   AutocompleteQuery,
@@ -11,15 +10,13 @@ import {
   replaceWithElement,
 } from '../../components/editor';
 import { UseAsyncSearchOptions, useAsyncSearch } from '../../hooks/useAsyncSearch';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useCore } from '../../hooks/useCore';
 import { useKeyDown } from '../../hooks/useKeyDown';
 import { onTabPress } from '../../utils/keyboard';
 
 type CommandAutoCompleteHandler = (commandName: string) => void;
 
 type CommandAutocompleteProps = {
-  room: Room;
+  commands: CommandRecord;
   editor: Editor;
   query: AutocompleteQuery<string>;
   requestClose: () => void;
@@ -32,14 +29,11 @@ const SEARCH_OPTIONS: UseAsyncSearchOptions = {
 };
 
 export function CommandAutocomplete({
-  room,
+  commands,
   editor,
   query,
   requestClose,
 }: CommandAutocompleteProps) {
-  const mx = useMatrixClient();
-  const core = useCore();
-  const commands = useCommands(mx, room, core);
   const commandNames = useMemo(() => Object.keys(commands) as Command[], [commands]);
 
   const [result, search, resetSearch] = useAsyncSearch(

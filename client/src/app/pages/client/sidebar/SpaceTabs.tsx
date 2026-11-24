@@ -25,7 +25,7 @@ import {
   toRem,
 } from 'folds';
 import { useAtom, useAtomValue } from 'jotai';
-import { Room, WritableAccountDataEvents } from 'matrix-js-sdk';
+import type { JsonObject } from '@harrier/core';
 import {
   draggable,
   dropTargetForElements,
@@ -94,6 +94,10 @@ import { useOpenSpaceSettings } from '../../../state/hooks/spaceSettings';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
+import { setAccountData } from '../../../utils/coreRoomActions';
+
+type MatrixClient = ReturnType<typeof useMatrixClient>;
+type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
 
 type SpaceMenuProps = {
   room: Room;
@@ -152,7 +156,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
       <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
         {invitePrompt && room && (
           <InviteUserPrompt
-            room={room}
+            roomId={room.roomId}
             requestClose={() => {
               setInvitePrompt(false);
               requestClose();
@@ -620,6 +624,7 @@ type SpaceTabsProps = {
 export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const navigate = useNavigate();
   const mx = useMatrixClient();
+  const core = useCore();
   const screenSize = useScreenSizeContext();
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
@@ -753,14 +758,15 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
           newItems.push(i);
         });
 
-        const newSpacesContent = makeCinnySpacesContent(mx, newItems);
-        localEchoSidebarItem(parseSidebar(mx, orphanSpaces, newSpacesContent));
-        mx.setAccountData(
-          AccountDataEvent.CinnySpaces as keyof WritableAccountDataEvents,
-          newSpacesContent
+        const newSpacesContent = makeCinnySpacesContent(core, newItems);
+        localEchoSidebarItem(parseSidebar(core, orphanSpaces, newSpacesContent));
+        setAccountData(
+          core,
+          AccountDataEvent.CinnySpaces,
+          newSpacesContent as unknown as JsonObject
         );
       },
-      [mx, sidebarItems, setOpenedFolder, localEchoSidebarItem, orphanSpaces]
+      [core, sidebarItems, setOpenedFolder, localEchoSidebarItem, orphanSpaces]
     )
   );
 
@@ -802,14 +808,11 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
       if (orphanSpaces.includes(roomId)) return;
       const newItems = sidebarItemWithout(sidebarItems, roomId);
 
-      const newSpacesContent = makeCinnySpacesContent(mx, newItems);
-      localEchoSidebarItem(parseSidebar(mx, orphanSpaces, newSpacesContent));
-      mx.setAccountData(
-        AccountDataEvent.CinnySpaces as keyof WritableAccountDataEvents,
-        newSpacesContent
-      );
+      const newSpacesContent = makeCinnySpacesContent(core, newItems);
+      localEchoSidebarItem(parseSidebar(core, orphanSpaces, newSpacesContent));
+      setAccountData(core, AccountDataEvent.CinnySpaces, newSpacesContent as unknown as JsonObject);
     },
-    [mx, sidebarItems, orphanSpaces, localEchoSidebarItem]
+    [core, sidebarItems, orphanSpaces, localEchoSidebarItem]
   );
 
   if (sidebarItems.length === 0) return null;

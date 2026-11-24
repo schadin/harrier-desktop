@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react';
-import { RelationsEvent, type Relations } from 'matrix-js-sdk/lib/models/relations';
+
+type RelationsLike = {
+  on(event: string, listener: () => void): void;
+  removeListener(event: string, listener: () => void): void;
+};
+
+const RelationsEvent = {
+  Add: 'add',
+  Redaction: 'redaction',
+  Remove: 'remove',
+} as const;
 
 export const useRelations = <T>(
-  relations: Relations,
-  getRelations: (relations: Relations) => T
+  relations: RelationsLike,
+  getRelations: (relations: RelationsLike) => T
 ) => {
   const [data, setData] = useState(() => getRelations(relations));
 
