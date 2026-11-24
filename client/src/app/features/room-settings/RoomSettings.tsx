@@ -3,8 +3,7 @@ import { useAtomValue } from 'jotai';
 import { Avatar, Box, config, Icon, IconButton, Icons, IconSrc, MenuItem, Text } from 'folds';
 import { PageNav, PageNavContent, PageNavHeader, PageRoot } from '../../components/page';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../state/mDirectList';
@@ -61,7 +60,6 @@ type RoomSettingsProps = {
 };
 export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
   const room = useRoom();
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const mDirects = useAtomValue(mDirectAtom);
 
@@ -69,9 +67,10 @@ export function RoomSettings({ initialPage, requestClose }: RoomSettingsProps) {
   const roomAvatar = mDirects.has(room.roomId) ? meta.dmAvatarMxc : meta.avatarMxc;
   const roomName = meta.name;
 
-  const avatarUrl = roomAvatar
-    ? mxcUrlToHttp(mx, roomAvatar, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(toMediaRef(roomAvatar ?? '', { width: 96, height: 96, resizeMethod: 'crop' }), {
+      useAuthentication,
+    }) ?? undefined;
 
   const screenSize = useScreenSizeContext();
   const [activePage, setActivePage] = useState<RoomSettingsPage | undefined>(() => {

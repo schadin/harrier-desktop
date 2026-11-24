@@ -2,9 +2,8 @@ import { Box, Text } from 'folds';
 import React from 'react';
 import { Atom, atom, useAtomValue } from 'jotai';
 import * as css from './styles.css';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
 
 export type PreviewData = {
   key: string;
@@ -17,8 +16,19 @@ export const createPreviewDataAtom = (initial?: PreviewData) =>
 type PreviewProps = {
   previewAtom: Atom<PreviewData | undefined>;
 };
+
+type PreviewImageProps = {
+  mxc: string;
+  shortcode: string;
+  useAuthentication: boolean;
+};
+function PreviewImage({ mxc, shortcode, useAuthentication }: PreviewImageProps) {
+  const src = useMediaUrl(toMediaRef(mxc), { useAuthentication }) ?? mxc;
+
+  return <img className={css.PreviewImg} src={src} alt={shortcode} />;
+}
+
 export function Preview({ previewAtom }: PreviewProps) {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
 
   const { key, shortcode } = useAtomValue(previewAtom) ?? {};
@@ -35,11 +45,7 @@ export function Preview({ previewAtom }: PreviewProps) {
           justifyContent="Center"
         >
           {key.startsWith('mxc://') ? (
-            <img
-              className={css.PreviewImg}
-              src={mxcUrlToHttp(mx, key, useAuthentication) ?? key}
-              alt={shortcode}
-            />
+            <PreviewImage mxc={key} shortcode={shortcode} useAuthentication={useAuthentication} />
           ) : (
             key
           )}

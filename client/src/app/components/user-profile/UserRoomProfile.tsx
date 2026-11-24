@@ -2,9 +2,10 @@ import { Box, Button, config, Icon, Icons, Text } from 'folds';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserHero, UserHeroName } from './UserHero';
-import { getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdServer } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { getSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { useRoom } from '../../hooks/useRoom';
@@ -27,7 +28,7 @@ type UserRoomProfileProps = {
   userId: string;
 };
 export function UserRoomProfile({ userId }: UserRoomProfileProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const useAuthentication = useMediaAuthentication();
   const navigate = useNavigate();
   const closeUserRoomProfile = useCloseUserRoomProfile();
@@ -41,7 +42,7 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const permissions = useRoomPermissions(creators, powerLevels);
   const { hasMorePower } = useMemberPowerCompare(creators, powerLevels);
 
-  const myUserId = mx.getSafeUserId();
+  const myUserId = getSessionUserId(session);
   const creator = creators.has(userId);
 
   const canKickUser = permissions.action('kick', myUserId) && hasMorePower(myUserId, userId);
@@ -55,7 +56,8 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const server = getMxIdServer(userId);
   const displayName = getMemberDisplayName(room, userId);
   const avatarMxc = getMemberAvatarMxc(room, userId);
-  const avatarUrl = (avatarMxc && mxcUrlToHttp(mx, avatarMxc, useAuthentication)) ?? undefined;
+  const resolvedAvatarUrl = useMediaUrl(toMediaRef(avatarMxc ?? ''), { useAuthentication });
+  const avatarUrl = (avatarMxc && resolvedAvatarUrl) ?? undefined;
 
   const presence = useUserPresence(userId);
 

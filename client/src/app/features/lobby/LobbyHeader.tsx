@@ -32,7 +32,7 @@ import { LeaveSpacePrompt } from '../../components/leave-space-prompt';
 import { stopPropagation } from '../../utils/keyboard';
 import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { BackRouteHandler } from '../../components/BackRouteHandler';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenSpaceSettings } from '../../state/hooks/spaceSettings';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
@@ -143,7 +143,6 @@ type LobbyHeaderProps = {
   powerLevels: IPowerLevels;
 };
 export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const space = useSpace();
   const setPeopleDrawer = useSetSetting(settingsAtom, 'isPeopleDrawer');
@@ -154,9 +153,10 @@ export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
   const screenSize = useScreenSizeContext();
 
   const { name, avatarMxc } = useCoreRoomMeta(space.roomId);
-  const avatarUrl = avatarMxc
-    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(toMediaRef(avatarMxc ?? '', { width: 96, height: 96, resizeMethod: 'crop' }), {
+      useAuthentication,
+    }) ?? undefined;
 
   const handleOpenMenu: MouseEventHandler<HTMLButtonElement> = (evt) => {
     setMenuAnchor(evt.currentTarget.getBoundingClientRect());

@@ -41,7 +41,8 @@ import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { useCore } from '../../hooks/useCore';
 import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { VirtualTile } from '../../components/virtualizer';
-import { mxcUrlToHttp, rateLimitedActions } from '../../utils/matrix';
+import { rateLimitedActions } from '../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
@@ -285,21 +286,23 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
                                       roomId={room.roomId}
                                       src={
                                         dm
-                                          ? mxcUrlToHttp(
-                                              mx,
-                                              room.dmAvatarMxc ?? room.avatarMxc ?? '',
-                                              useAuthentication,
-                                              96,
-                                              96,
-                                              'crop'
+                                          ? resolveMediaUrl(
+                                              core,
+                                              toMediaRef(room.dmAvatarMxc ?? room.avatarMxc ?? '', {
+                                                width: 96,
+                                                height: 96,
+                                                resizeMethod: 'crop',
+                                              }),
+                                              { useAuthentication }
                                             ) ?? undefined
-                                          : mxcUrlToHttp(
-                                              mx,
-                                              room.avatarMxc ?? '',
-                                              useAuthentication,
-                                              96,
-                                              96,
-                                              'crop'
+                                          : resolveMediaUrl(
+                                              core,
+                                              toMediaRef(room.avatarMxc ?? '', {
+                                                width: 96,
+                                                height: 96,
+                                                resizeMethod: 'crop',
+                                              }),
+                                              { useAuthentication }
                                             ) ?? undefined
                                       }
                                       alt={room.name}

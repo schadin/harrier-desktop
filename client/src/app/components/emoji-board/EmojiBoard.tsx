@@ -23,7 +23,8 @@ import { useRelevantImagePacks } from '../../hooks/useImagePacks';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useCore } from '../../hooks/useCore';
 import { useRecentEmoji } from '../../hooks/useRecentEmoji';
-import { isUserId, mxcUrlToHttp } from '../../utils/matrix';
+import { isUserId } from '../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
 import { editableActiveElement, targetFromEvent } from '../../utils/dom';
 import { useAsyncSearch, UseAsyncSearchOptions } from '../../hooks/useAsyncSearch';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -155,6 +156,7 @@ type EmojiSidebarProps = {
 };
 function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
 
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupAtom);
@@ -186,7 +188,9 @@ function EmojiSidebar({ activeGroupAtom, packs, onScrollToGroup }: EmojiSidebarP
             if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
 
             const url =
-              mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
+              resolveMediaUrl(core, toMediaRef(pack.getAvatarUrl(usage) ?? ''), {
+                useAuthentication,
+              }) ?? undefined;
 
             return (
               <ImageGroupIcon
@@ -231,6 +235,7 @@ type StickerSidebarProps = {
 };
 function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSidebarProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
 
   const [activeGroupId, setActiveGroupId] = useAtom(activeGroupAtom);
@@ -249,7 +254,9 @@ function StickerSidebar({ activeGroupAtom, packs, onScrollToGroup }: StickerSide
           if (!label) label = isUserId(pack.id) ? 'Personal Pack' : mx.getRoom(pack.id)?.name;
 
           const url =
-            mxcUrlToHttp(mx, pack.getAvatarUrl(usage) ?? '', useAuthentication) ?? undefined;
+            resolveMediaUrl(core, toMediaRef(pack.getAvatarUrl(usage) ?? ''), {
+              useAuthentication,
+            }) ?? undefined;
 
           return (
             <ImageGroupIcon

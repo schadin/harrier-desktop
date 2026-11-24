@@ -53,7 +53,8 @@ import {
   getMemberAvatarMxc,
   getMemberDisplayName,
 } from '../../../utils/room';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
 import { timeDayMonthYear, timeHourMinute } from '../../../utils/time';
 import { MessageLayout, MessageSpacing } from '../../../state/settings';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
@@ -804,6 +805,11 @@ export const Message = as<'div', MessageProps>(
     const senderDisplayName =
       getMemberDisplayName(room, senderId) ?? getMxIdLocalPart(senderId) ?? senderId;
     const senderAvatarMxc = getMemberAvatarMxc(room, senderId);
+    const senderAvatarUrl =
+      useMediaUrl(
+        toMediaRef(senderAvatarMxc ?? '', { width: 48, height: 48, resizeMethod: 'crop' }),
+        { useAuthentication }
+      ) ?? undefined;
 
     const tagColor = memberPowerTag?.color
       ? accessibleTagColors?.get(memberPowerTag.color)
@@ -884,11 +890,7 @@ export const Message = as<'div', MessageProps>(
         >
           <UserAvatar
             userId={senderId}
-            src={
-              senderAvatarMxc
-                ? mxcUrlToHttp(mx, senderAvatarMxc, useAuthentication, 48, 48, 'crop') ?? undefined
-                : undefined
-            }
+            src={senderAvatarUrl}
             alt={senderDisplayName}
             renderFallback={() => <Icon size="200" src={Icons.User} filled />}
           />

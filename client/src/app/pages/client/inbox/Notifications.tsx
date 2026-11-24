@@ -23,7 +23,8 @@ import { JoinRule, RelationType } from '../../../../types/matrix/legacyStructura
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
+import { resolveMediaUrl, toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
 import { InboxNotificationsPathSearchParams } from '../../paths';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -216,6 +217,11 @@ function RoomNotificationsGroupComp({
   const useAuthentication = useMediaAuthentication();
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
   const { name, avatarMxc, roomType, joinRule } = useCoreRoomMeta(room.roomId);
+  const roomAvatarUrl =
+    useMediaUrl(toMediaRef(avatarMxc ?? '', { width: 96, height: 96, resizeMethod: 'crop' }), {
+      useAuthentication,
+      allowRedirects: false,
+    }) ?? undefined;
   const members = useRoomMembers(room.roomId);
   const membersByUserId = useMemo(
     () => new Map(members.map((member) => [member.userId, member])),
@@ -412,20 +418,7 @@ function RoomNotificationsGroupComp({
           <Avatar size="200" radii="300">
             <RoomAvatar
               roomId={room.roomId}
-              src={
-                avatarMxc
-                  ? mxcUrlToHttp(
-                      mx,
-                      avatarMxc,
-                      useAuthentication,
-                      96,
-                      96,
-                      'crop',
-                      undefined,
-                      false
-                    ) ?? undefined
-                  : undefined
-              }
+              src={roomAvatarUrl}
               alt={name}
               renderFallback={() => (
                 <RoomIcon
@@ -502,13 +495,14 @@ function RoomNotificationsGroupComp({
                         userId={event.sender}
                         src={
                           senderAvatarMxc
-                            ? mxcUrlToHttp(
-                                mx,
-                                senderAvatarMxc,
-                                useAuthentication,
-                                48,
-                                48,
-                                'crop'
+                            ? resolveMediaUrl(
+                                core,
+                                toMediaRef(senderAvatarMxc, {
+                                  width: 48,
+                                  height: 48,
+                                  resizeMethod: 'crop',
+                                }),
+                                { useAuthentication }
                               ) ?? undefined
                             : undefined
                         }

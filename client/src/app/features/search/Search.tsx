@@ -28,10 +28,11 @@ import React, {
 import { useTranslation } from 'react-i18next';
 import { useAtom, useAtomValue } from 'jotai';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
 import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
 import { nameInitials } from '../../utils/common';
 import { useListFocusIndex } from '../../hooks/useListFocusIndex';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
@@ -155,6 +156,7 @@ type SearchProps = {
 };
 export function Search({ requestClose }: SearchProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const { t } = useTranslation();
   const useAuthentication = useMediaAuthentication();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -418,21 +420,23 @@ export function Search({ requestClose }: SearchProps) {
                                       roomId={room.roomId}
                                       src={
                                         item.dm
-                                          ? mxcUrlToHttp(
-                                              mx,
-                                              room.dmAvatarMxc ?? room.avatarMxc ?? '',
-                                              useAuthentication,
-                                              32,
-                                              32,
-                                              'crop'
+                                          ? resolveMediaUrl(
+                                              core,
+                                              toMediaRef(room.dmAvatarMxc ?? room.avatarMxc ?? '', {
+                                                width: 32,
+                                                height: 32,
+                                                resizeMethod: 'crop',
+                                              }),
+                                              { useAuthentication }
                                             ) ?? undefined
-                                          : mxcUrlToHttp(
-                                              mx,
-                                              room.avatarMxc ?? '',
-                                              useAuthentication,
-                                              32,
-                                              32,
-                                              'crop'
+                                          : resolveMediaUrl(
+                                              core,
+                                              toMediaRef(room.avatarMxc ?? '', {
+                                                width: 32,
+                                                height: 32,
+                                                resizeMethod: 'crop',
+                                              }),
+                                              { useAuthentication }
                                             ) ?? undefined
                                       }
                                       alt={room.name}

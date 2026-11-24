@@ -3,7 +3,6 @@ import { Avatar, Overlay, OverlayBackdrop, OverlayCenter, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { useSpace } from '../../hooks/useSpace';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomAvatar } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -11,18 +10,18 @@ import { RoomTopicViewer } from '../../components/room-topic-viewer';
 import * as css from './LobbyHero.css';
 import { PageHero } from '../../components/page';
 import { onEnterOrSpace, stopPropagation } from '../../utils/keyboard';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 
 export function LobbyHero() {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const space = useSpace();
 
   const { name, topic, avatarMxc } = useCoreRoomMeta(space.roomId);
-  const avatarUrl = avatarMxc
-    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(toMediaRef(avatarMxc ?? '', { width: 96, height: 96, resizeMethod: 'crop' }), {
+      useAuthentication,
+    }) ?? undefined;
 
   return (
     <PageHero

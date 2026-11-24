@@ -31,10 +31,10 @@ import { useRoomImagePacks } from '../../../hooks/useImagePacks';
 import { LineClamp2 } from '../../../styles/Text.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../../utils/coreMedia';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
 import { StateEvent } from '../../../../types/matrix/room';
@@ -145,7 +145,7 @@ type RoomPacksProps = {
   onViewPack: (imagePack: ImagePack) => void;
 };
 export function RoomPacks({ onViewPack }: RoomPacksProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
@@ -155,7 +155,7 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canEdit = permissions.stateEvent(StateEvent.PoniesRoomEmotes, mx.getSafeUserId());
+  const canEdit = permissions.stateEvent(StateEvent.PoniesRoomEmotes, getSessionUserId(session));
 
   const unfilteredPacks = useRoomImagePacks(room);
   const packs = useMemo(() => unfilteredPacks.filter((pack) => !pack.deleted), [unfilteredPacks]);
@@ -194,7 +194,9 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
 
   const renderPack = (pack: ImagePack) => {
     const avatarMxc = pack.getAvatarUrl(ImageUsage.Emoticon);
-    const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
+    const avatarUrl = avatarMxc
+      ? resolveMediaUrl(core, toMediaRef(avatarMxc), { useAuthentication })
+      : undefined;
     const { address } = pack;
     if (!address) return null;
     const removed = !!removedPacks.find((addr) => packAddressEqual(addr, address));

@@ -3,8 +3,9 @@ import { useAtom } from 'jotai';
 import { Text } from 'folds';
 import { SidebarItem, SidebarItemTooltip, SidebarAvatar } from '../../../components/sidebar';
 import { UserAvatar } from '../../../components/user-avatar';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
+import { getMxIdLocalPart } from '../../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
 import { nameInitials } from '../../../utils/common';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { Settings, SettingsPages } from '../../../features/settings';
@@ -14,17 +15,19 @@ import { settingsPageAtom } from '../../../state/settingsNav';
 import { StatusButton } from './StatusButton';
 
 export function SettingsTab() {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const useAuthentication = useMediaAuthentication();
-  const userId = mx.getUserId()!;
+  const userId = getSessionUserId(session);
   const profile = useUserProfile(userId);
 
   const [settingsPage, setSettingsPage] = useAtom(settingsPageAtom);
 
   const displayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
-  const avatarUrl = profile.avatarUrl
-    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(
+      toMediaRef(profile.avatarUrl ?? '', { width: 96, height: 96, resizeMethod: 'crop' }),
+      { useAuthentication }
+    ) ?? undefined;
 
   const openSettings = () => setSettingsPage(SettingsPages.GeneralPage);
   const closeSettings = () => setSettingsPage(null);

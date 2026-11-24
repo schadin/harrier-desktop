@@ -21,8 +21,9 @@ import { ScreenSize, useScreenSizeContext } from '../../hooks/useScreenSize';
 import { Account } from './account';
 import { Status } from './status';
 import { useUserProfile } from '../../hooks/useUserProfile';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
+import { getMxIdLocalPart } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { UserAvatar } from '../../components/user-avatar';
 import { nameInitials } from '../../utils/common';
@@ -111,14 +112,16 @@ type SettingsProps = {
   requestClose: () => void;
 };
 export function Settings({ initialPage, requestClose }: SettingsProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const useAuthentication = useMediaAuthentication();
-  const userId = mx.getUserId()!;
+  const userId = getSessionUserId(session);
   const profile = useUserProfile(userId);
   const displayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
-  const avatarUrl = profile.avatarUrl
-    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(
+      toMediaRef(profile.avatarUrl ?? '', { width: 96, height: 96, resizeMethod: 'crop' }),
+      { useAuthentication }
+    ) ?? undefined;
 
   const screenSize = useScreenSizeContext();
   const [activePage, setActivePage] = useState<SettingsPages | undefined>(() => {

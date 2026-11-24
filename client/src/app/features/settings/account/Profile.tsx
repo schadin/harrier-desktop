@@ -30,7 +30,8 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { UserProfile, useUserProfile } from '../../../hooks/useUserProfile';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
 import { UserAvatar } from '../../../components/user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { nameInitials } from '../../../utils/common';
@@ -56,9 +57,11 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
   const disableSetAvatar = capabilities['m.set_avatar_url']?.enabled === false;
 
   const defaultDisplayName = profile.displayName ?? getMxIdLocalPart(userId) ?? userId;
-  const avatarUrl = profile.avatarUrl
-    ? mxcUrlToHttp(mx, profile.avatarUrl, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(
+      toMediaRef(profile.avatarUrl ?? '', { width: 96, height: 96, resizeMethod: 'crop' }),
+      { useAuthentication }
+    ) ?? undefined;
 
   const [imageFile, setImageFile] = useState<File>();
   const imageFileURL = useObjectURL(imageFile);

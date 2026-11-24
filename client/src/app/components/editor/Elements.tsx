@@ -10,10 +10,9 @@ import {
 
 import * as css from '../../styles/CustomHtml.css';
 import { CommandElement, EmoticonElement, LinkElement, MentionElement } from './slate';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getBeginCommand } from './utils';
 import { BlockType } from './types';
-import { mxcUrlToHttp } from '../../utils/matrix';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 
 // Put this at the start and end of an inline component to work around this Chromium bug:
@@ -72,12 +71,22 @@ function RenderCommandElement({
   );
 }
 
+type EmoticonImageProps = {
+  mxc: string;
+  shortcode: string;
+  useAuthentication: boolean;
+};
+function EmoticonImage({ mxc, shortcode, useAuthentication }: EmoticonImageProps) {
+  const src = useMediaUrl(toMediaRef(mxc), { useAuthentication }) ?? mxc;
+
+  return <img className={css.EmoticonImg} src={src} alt={shortcode} />;
+}
+
 function RenderEmoticonElement({
   attributes,
   element,
   children,
 }: { element: EmoticonElement } & RenderElementProps) {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const selected = useSelected();
   const focused = useFocused();
@@ -91,10 +100,10 @@ function RenderEmoticonElement({
         contentEditable={false}
       >
         {element.key.startsWith('mxc://') ? (
-          <img
-            className={css.EmoticonImg}
-            src={mxcUrlToHttp(mx, element.key, useAuthentication) ?? element.key}
-            alt={element.shortcode}
+          <EmoticonImage
+            mxc={element.key}
+            shortcode={element.shortcode}
+            useAuthentication={useAuthentication}
           />
         ) : (
           element.key

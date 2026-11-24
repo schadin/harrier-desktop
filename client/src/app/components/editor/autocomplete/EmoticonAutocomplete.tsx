@@ -5,7 +5,7 @@ import type { RoomView } from '@harrier/core';
 
 import { AutocompleteQuery } from './autocompleteQuery';
 import { AutocompleteMenu } from './AutocompleteMenu';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { UseAsyncSearchOptions, useAsyncSearch } from '../../../hooks/useAsyncSearch';
 import { onTabPress } from '../../../utils/keyboard';
 import { createEmoticonElement, moveCursor, replaceWithElement } from '../utils';
@@ -13,7 +13,7 @@ import { useRecentEmoji } from '../../../hooks/useRecentEmoji';
 import { useRelevantImagePacks } from '../../../hooks/useImagePacks';
 import { IEmoji, emojis } from '../../../plugins/emoji';
 import { useKeyDown } from '../../../hooks/useKeyDown';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../../utils/coreMedia';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { ImageUsage, PackImageReader } from '../../../plugins/custom-emoji';
 import { getEmoticonSearchStr } from '../../../plugins/utils';
@@ -41,7 +41,7 @@ export function EmoticonAutocomplete({
   query,
   requestClose,
 }: EmoticonAutocompleteProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
 
   const imagePacks = useRelevantImagePacks(ImageUsage.Emoticon, imagePackRooms);
@@ -88,7 +88,7 @@ export function EmoticonAutocomplete({
       {autoCompleteEmoticon.map((emoticon) => {
         const isCustomEmoji = 'url' in emoticon;
         const key = isCustomEmoji ? emoticon.url : emoticon.unicode;
-        const customEmojiUrl = mxcUrlToHttp(mx, key, useAuthentication);
+        const customEmojiUrl = resolveMediaUrl(core, toMediaRef(key), { useAuthentication });
 
         return (
           <MenuItem

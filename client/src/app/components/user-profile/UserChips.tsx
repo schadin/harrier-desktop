@@ -21,7 +21,9 @@ import {
   Avatar,
 } from 'folds';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { getMxIdServer, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdServer } from '../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
+import { useCore } from '../../hooks/useCore';
 import { useCloseUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { stopPropagation } from '../../utils/keyboard';
 import { copyToClipboard } from '../../utils/dom';
@@ -236,6 +238,7 @@ type MutualRoomsData = {
 
 export function MutualRoomsChip({ userId }: { userId: string }) {
   const mx = useMatrixClient();
+  const core = useCore();
   const mutualRoomSupported = useMutualRoomsSupport();
   const mutualRoomUnstable = useUnstableMutualRoomsSupport();
   const mutualRoomsState = useMutualRooms(userId);
@@ -296,7 +299,11 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
     const dm = directs.includes(roomId);
     const avatarMxc = dm ? room.dmAvatarMxc : room.avatarMxc;
     const avatarUrl = avatarMxc
-      ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96, 'crop') ?? undefined
+      ? resolveMediaUrl(
+          core,
+          toMediaRef(avatarMxc, { width: 96, height: 96, resizeMethod: 'crop' }),
+          { useAuthentication }
+        ) ?? undefined
       : undefined;
 
     return (

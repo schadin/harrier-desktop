@@ -24,8 +24,8 @@ import { mDirectAtom } from '../../../state/mDirectList';
 import { BreakWord, LineClamp3 } from '../../../styles/Text.css';
 import { LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
 import { RoomAvatar, RoomIcon } from '../../../components/room-avatar';
-import { mxcUrlToHttp } from '../../../utils/matrix';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -57,16 +57,13 @@ export function RoomProfileEdit({
   onClose,
 }: RoomProfileEditProps) {
   const room = useRoom();
-  const mx = useMatrixClient();
   const core = useCore();
   const alive = useAlive();
   const useAuthentication = useMediaAuthentication();
   const { joinRule } = useCoreRoomMeta(room.roomId);
   const [roomAvatar, setRoomAvatar] = useState(avatar);
 
-  const avatarUrl = roomAvatar
-    ? mxcUrlToHttp(mx, roomAvatar, useAuthentication) ?? undefined
-    : undefined;
+  const avatarUrl = useMediaUrl(toMediaRef(roomAvatar ?? ''), { useAuthentication }) ?? undefined;
 
   const [imageFile, setImageFile] = useState<File>();
   const avatarFileUrl = useObjectURL(imageFile);
@@ -262,7 +259,7 @@ type RoomProfileProps = {
   permissions: RoomPermissionsAPI;
 };
 export function RoomProfile({ permissions }: RoomProfileProps) {
-  const mx = useMatrixClient();
+  const session = useCoreSession();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const directs = useAtomValue(mDirectAtom);
@@ -270,14 +267,16 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
   const { name, topic, joinRule, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
   const avatar = directs.has(room.roomId) ? dmAvatarMxc : avatarMxc;
 
-  const canEditAvatar = permissions.stateEvent(StateEvent.RoomAvatar, mx.getSafeUserId());
-  const canEditName = permissions.stateEvent(StateEvent.RoomName, mx.getSafeUserId());
-  const canEditTopic = permissions.stateEvent(StateEvent.RoomTopic, mx.getSafeUserId());
+  const userId = getSessionUserId(session);
+  const canEditAvatar = permissions.stateEvent(StateEvent.RoomAvatar, userId);
+  const canEditName = permissions.stateEvent(StateEvent.RoomName, userId);
+  const canEditTopic = permissions.stateEvent(StateEvent.RoomTopic, userId);
   const canEdit = canEditAvatar || canEditName || canEditTopic;
 
-  const avatarUrl = avatar
-    ? mxcUrlToHttp(mx, avatar, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
+  const avatarUrl =
+    useMediaUrl(toMediaRef(avatar ?? '', { width: 96, height: 96, resizeMethod: 'crop' }), {
+      useAuthentication,
+    }) ?? undefined;
 
   const [edit, setEdit] = useState(false);
 

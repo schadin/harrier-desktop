@@ -13,8 +13,7 @@ import {
   Chip,
 } from 'folds';
 import Linkify from 'linkify-react';
-import { mxcUrlToHttp } from '../../utils/matrix';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { nameInitials } from '../../utils/common';
 import { BreakWord } from '../../styles/Text.css';
 import { LINKIFY_OPTS } from '../../plugins/react-custom-html-parser';
@@ -50,11 +49,8 @@ type ImagePackProfileProps = {
   onEdit?: () => void;
 };
 export function ImagePackProfile({ meta, canEdit, onEdit }: ImagePackProfileProps) {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
-  const avatarUrl = meta.avatar
-    ? mxcUrlToHttp(mx, meta.avatar, useAuthentication) ?? undefined
-    : undefined;
+  const avatarUrl = useMediaUrl(toMediaRef(meta.avatar ?? ''), { useAuthentication }) ?? undefined;
 
   return (
     <Box gap="400">
@@ -97,11 +93,10 @@ type ImagePackProfileEditProps = {
   onSave: (meta: PackMetaReader) => void;
 };
 export function ImagePackProfileEdit({ meta, onCancel, onSave }: ImagePackProfileEditProps) {
-  const mx = useMatrixClient();
   const useAuthentication = useMediaAuthentication();
   const [avatar, setAvatar] = useState(meta.avatar);
 
-  const avatarUrl = avatar ? mxcUrlToHttp(mx, avatar, useAuthentication) ?? undefined : undefined;
+  const avatarUrl = useMediaUrl(toMediaRef(avatar ?? ''), { useAuthentication }) ?? undefined;
 
   const [imageFile, setImageFile] = useState<File>();
   const avatarFileUrl = useObjectURL(imageFile);

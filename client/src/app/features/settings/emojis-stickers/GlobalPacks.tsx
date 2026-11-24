@@ -28,9 +28,8 @@ import { useGlobalImagePacks, useRoomsImagePacks } from '../../../hooks/useImage
 import { SequenceCardStyle } from '../styles.css';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
-import { mxcUrlToHttp } from '../../../utils/matrix';
+import { resolveMediaUrl, toMediaRef } from '../../../utils/coreMedia';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import {
   EmoteRoomsContent,
@@ -54,7 +53,6 @@ function GlobalPackSelector({
   useAuthentication: boolean;
   onSelect: (addresses: PackAddress[]) => void;
 }) {
-  const mx = useMatrixClient();
   const core = useCore();
   const roomToPacks = useMemo(() => {
     const rToP = new Map<string, ImagePack[]>();
@@ -171,7 +169,7 @@ function GlobalPackSelector({
                   {roomPacks.map((pack) => {
                     const avatarMxc = pack.getAvatarUrl(ImageUsage.Emoticon);
                     const avatarUrl = avatarMxc
-                      ? mxcUrlToHttp(mx, avatarMxc, useAuthentication)
+                      ? resolveMediaUrl(core, toMediaRef(avatarMxc), { useAuthentication })
                       : undefined;
                     const { address } = pack;
                     if (!address) return null;
@@ -253,7 +251,6 @@ type GlobalPacksProps = {
   onViewPack: (imagePack: ImagePack) => void;
 };
 export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const globalPacks = useGlobalImagePacks();
@@ -351,7 +348,9 @@ export function GlobalPacks({ onViewPack }: GlobalPacksProps) {
 
   const renderPack = (pack: ImagePack) => {
     const avatarMxc = pack.getAvatarUrl(ImageUsage.Emoticon);
-    const avatarUrl = avatarMxc ? mxcUrlToHttp(mx, avatarMxc, useAuthentication) : undefined;
+    const avatarUrl = avatarMxc
+      ? resolveMediaUrl(core, toMediaRef(avatarMxc), { useAuthentication })
+      : undefined;
     const { address } = pack;
     if (!address) return null;
     const removed = !!removedPacks.find((addr) => packAddressEqual(addr, address));
