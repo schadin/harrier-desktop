@@ -267,7 +267,7 @@ export type CryptoModule = {
   trust(userId: string, deviceId: string): SnapshotStore<DeviceTrust>;
   unverifiedCount(userId: string, deviceIds: readonly string[]): SnapshotStore<number | undefined>;
   renameDevice(deviceId: string, displayName: string): Promise<CoreResult<void>>;
-  deleteDevices(deviceIds: readonly string[]): Promise<CoreResult<void>>;
+  deleteDevices(deviceIds: readonly string[], auth?: JsonObject): Promise<CoreResult<void>>;
 };
 
 export type SendModule = {

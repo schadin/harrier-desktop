@@ -2512,12 +2512,28 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: false, error: toCoreError(error) };
         }
       },
-      async deleteDevices(deviceIds) {
+      async deleteDevices(deviceIds, auth) {
         try {
-          await client.deleteMultipleDevices([...deviceIds]);
+          await client.deleteMultipleDevices([...deviceIds], auth as never);
           return await refreshDevices();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          const err = error as {
+            httpStatus?: number;
+            errcode?: string;
+            data?: unknown;
+            message?: string;
+          };
+          return {
+            ok: false,
+            error: new CoreError(
+              'unknown',
+              err.message ?? String(error),
+              false,
+              err.httpStatus,
+              err.errcode,
+              err.data
+            ),
+          };
         }
       },
     },

@@ -1,13 +1,14 @@
 import React, { useCallback, useState } from 'react';
 import { Box, Button, config, Menu, Spinner, Text } from 'folds';
-import type { DeviceView } from '@harrier/core';
-import { AuthDict, MatrixError } from 'matrix-js-sdk';
+import type { CoreError, DeviceView, JsonObject } from '@harrier/core';
+import { AuthDict } from 'matrix-js-sdk';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { ActionUIA, ActionUIAFlowsLoader } from '../../../components/ActionUIA';
 import { DeviceDeleteBtn, DeviceTile } from './DeviceTile';
 import { AsyncState, AsyncStatus, useAsync } from '../../../hooks/useAsyncCallback';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { useUIAMatrixError } from '../../../hooks/useUIAFlows';
 import { DeviceVerificationStatus } from '../../../components/DeviceVerificationStatus';
 import { VerifyOtherDeviceTile } from './Verification';
@@ -24,6 +25,7 @@ type OtherDevicesProps = {
 };
 export function OtherDevices({ devices, refreshDeviceList, showVerification }: OtherDevicesProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const authMetadata = useAuthMetadata();
   const accountManagementActions = useAccountManagementActions();
 
@@ -69,16 +71,17 @@ export function OtherDevices({ devices, refreshDeviceList, showVerification }: O
     });
   }, []);
 
-  const [deleteState, setDeleteState] = useState<AsyncState<void, MatrixError>>({
+  const [deleteState, setDeleteState] = useState<AsyncState<void, CoreError>>({
     status: AsyncStatus.Idle,
   });
 
   const deleteDevices = useAsync(
     useCallback(
       async (authDict?: AuthDict) => {
-        await mx.deleteMultipleDevices(Array.from(deleted), authDict);
+        const result = await core.crypto.deleteDevices(Array.from(deleted), authDict as JsonObject);
+        if (!result.ok) throw result.error;
       },
-      [mx, deleted]
+      [core, deleted]
     ),
     useCallback(
       (state: typeof deleteState) => {
