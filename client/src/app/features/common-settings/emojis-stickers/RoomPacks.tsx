@@ -31,7 +31,7 @@ import { useRoomImagePacks } from '../../../hooks/useImagePacks';
 import { LineClamp2 } from '../../../styles/Text.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
-import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
+import { getSafeSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { resolveMediaUrl, toMediaRef } from '../../../utils/coreMedia';
@@ -155,7 +155,10 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canEdit = permissions.stateEvent(StateEvent.PoniesRoomEmotes, getSessionUserId(session));
+  const canEdit = permissions.stateEvent(
+    StateEvent.PoniesRoomEmotes,
+    getSafeSessionUserId(session)
+  );
 
   const unfilteredPacks = useRoomImagePacks(room);
   const packs = useMemo(() => unfilteredPacks.filter((pack) => !pack.deleted), [unfilteredPacks]);

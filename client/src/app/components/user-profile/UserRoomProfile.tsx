@@ -5,7 +5,7 @@ import { UserHero, UserHeroName } from './UserHero';
 import { getMxIdServer } from '../../utils/matrix';
 import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { getSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
+import { getSafeSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
 import { useRoom } from '../../hooks/useRoom';
@@ -42,7 +42,7 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const permissions = useRoomPermissions(creators, powerLevels);
   const { hasMorePower } = useMemberPowerCompare(creators, powerLevels);
 
-  const myUserId = getSessionUserId(session);
+  const myUserId = getSafeSessionUserId(session);
   const creator = creators.has(userId);
 
   const canKickUser = permissions.action('kick', myUserId) && hasMorePower(myUserId, userId);

@@ -25,7 +25,7 @@ import { BreakWord, LineClamp3 } from '../../../styles/Text.css';
 import { LINKIFY_OPTS } from '../../../plugins/react-custom-html-parser';
 import { RoomAvatar, RoomIcon } from '../../../components/room-avatar';
 import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
-import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
+import { getSafeSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -267,7 +267,7 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
   const { name, topic, joinRule, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
   const avatar = directs.has(room.roomId) ? dmAvatarMxc : avatarMxc;
 
-  const userId = getSessionUserId(session);
+  const userId = getSafeSessionUserId(session);
   const canEditAvatar = permissions.stateEvent(StateEvent.RoomAvatar, userId);
   const canEditName = permissions.stateEvent(StateEvent.RoomName, userId);
   const canEditTopic = permissions.stateEvent(StateEvent.RoomTopic, userId);
