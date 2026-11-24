@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { MatrixClient } from 'matrix-js-sdk';
 import { RoomToUnread } from '../../../../types/matrix/room';
 import { PaletteCategory, PaletteItem } from './types';
 import { buildUnreadPaletteItems, matchUnreadItem, UNREAD_LIST_LIMIT } from './unread';
@@ -27,6 +26,7 @@ const makeRoom = (
   readUpToId?: string,
   members: Record<string, string> = {}
 ) => ({
+  name: 'Room',
   getEventReadUpTo: () => readUpToId,
   getLiveTimeline: () => ({
     getEvents: () =>
@@ -37,18 +37,17 @@ const makeRoom = (
         getContent: () => ev.content ?? {},
         isRedacted: () => false,
         isDecryptionFailure: () => ev.decryptionFailure ?? false,
-        getRelation: () => undefined,
       })),
   }),
   getMember: (userId: string) => (members[userId] ? { name: members[userId] } : undefined),
+  getLastActiveTimestamp: () => 0,
 });
 
-const makeMx = (rooms: Record<string, ReturnType<typeof makeRoom>>) =>
-  ({
-    getUserId: () => '@me:example.org',
-    getUser: () => undefined,
-    getRoom: (roomId: string) => rooms[roomId],
-  } as unknown as MatrixClient);
+const makeMx = (rooms: Record<string, ReturnType<typeof makeRoom> | undefined>) => ({
+  getUserId: () => '@me:example.org',
+  getUser: () => undefined,
+  getRoom: (roomId: string) => rooms[roomId],
+});
 
 const makeRoomItem = (roomId: string, title = roomId): PaletteItem => ({
   id: `room:${roomId}`,

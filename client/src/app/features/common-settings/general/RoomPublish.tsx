@@ -1,7 +1,5 @@
 import React from 'react';
 import { Box, color, Spinner, Switch, Text } from 'folds';
-import { JoinRule } from 'matrix-js-sdk';
-import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
 import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
@@ -12,7 +10,8 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCoreRoomState } from '../../../hooks/useCoreRoomState';
-import { ExtendedJoinRules } from '../../../components/JoinRulesSwitcher';
+import { ExtendedJoinRules, JoinRule } from '../../../components/JoinRulesSwitcher';
+import type { RoomJoinRulesEventContent } from './RoomJoinRules';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
 type RoomPublishProps = {

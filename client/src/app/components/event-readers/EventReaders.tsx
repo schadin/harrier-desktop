@@ -18,12 +18,32 @@ import { useRoomEventReaders } from '../../hooks/useRoomEventReaders';
 import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import * as css from './EventReaders.css';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { UserAvatar } from '../user-avatar';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../hooks/useSpace';
 import { getMouseEventCords } from '../../utils/dom';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
+
+type EventReaderAvatarProps = {
+  userId: string;
+  avatarMxc: string | undefined;
+  name: string;
+};
+
+function EventReaderAvatar({ userId, avatarMxc, name }: EventReaderAvatarProps) {
+  const avatarUrl = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 100, height: 100, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={avatarUrl}
+      alt={name}
+      renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+    />
+  );
+}
 
 export type EventReadersProps = {
   room: Room;
@@ -32,9 +52,7 @@ export type EventReadersProps = {
 };
 export const EventReaders = as<'div', EventReadersProps>(
   ({ className, room, eventId, requestClose, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
-    const latestEventReaders = useRoomEventReaders(room, eventId);
+    const latestEventReaders = useRoomEventReaders(room.roomId, eventId);
     const openProfile = useOpenUserRoomProfile();
     const space = useSpaceOptionally();
 
@@ -62,17 +80,6 @@ export const EventReaders = as<'div', EventReadersProps>(
               {latestEventReaders.map((readerId) => {
                 const name = getName(readerId);
                 const avatarMxcUrl = room.getMember(readerId)?.getMxcAvatarUrl();
-                const avatarUrl = avatarMxcUrl
-                  ? mx.mxcUrlToHttp(
-                      avatarMxcUrl,
-                      100,
-                      100,
-                      'crop',
-                      undefined,
-                      false,
-                      useAuthentication
-                    )
-                  : undefined;
 
                 return (
                   <MenuItem
@@ -90,12 +97,7 @@ export const EventReaders = as<'div', EventReadersProps>(
                     }}
                     before={
                       <Avatar size="200">
-                        <UserAvatar
-                          userId={readerId}
-                          src={avatarUrl ?? undefined}
-                          alt={name}
-                          renderFallback={() => <Icon size="50" src={Icons.User} filled />}
-                        />
+                        <EventReaderAvatar userId={readerId} avatarMxc={avatarMxcUrl} name={name} />
                       </Avatar>
                     }
                   >

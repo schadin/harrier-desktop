@@ -27,6 +27,28 @@ import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useOpenUserRoomProfile } from '../../../state/hooks/userRoomProfile';
 import { useSpaceOptionally } from '../../../hooks/useSpace';
 import { getMouseEventCords } from '../../../utils/dom';
+import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
+
+type ReactionSenderAvatarProps = {
+  userId: string;
+  avatarMxc: string | undefined;
+  name: string;
+};
+
+function ReactionSenderAvatar({ userId, avatarMxc, name }: ReactionSenderAvatarProps) {
+  const avatarUrl = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 100, height: 100, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={avatarUrl}
+      alt={name}
+      renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+    />
+  );
+}
 
 export type ReactionViewerProps = {
   room: Room;
@@ -99,17 +121,6 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
                     senderId;
 
                   const avatarMxcUrl = member?.getMxcAvatarUrl();
-                  const avatarUrl = avatarMxcUrl
-                    ? mx.mxcUrlToHttp(
-                        avatarMxcUrl,
-                        100,
-                        100,
-                        'crop',
-                        undefined,
-                        false,
-                        useAuthentication
-                      )
-                    : undefined;
 
                   return (
                     <MenuItem
@@ -127,11 +138,10 @@ export const ReactionViewer = as<'div', ReactionViewerProps>(
                       }}
                       before={
                         <Avatar size="200">
-                          <UserAvatar
+                          <ReactionSenderAvatar
                             userId={senderId}
-                            src={avatarUrl ?? undefined}
-                            alt={name}
-                            renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+                            avatarMxc={avatarMxcUrl}
+                            name={name}
                           />
                         </Avatar>
                       }

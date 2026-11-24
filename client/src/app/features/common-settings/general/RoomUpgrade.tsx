@@ -16,7 +16,6 @@ import {
   Icons,
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { RoomTombstoneEventContent } from 'matrix-js-sdk/lib/types';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -39,6 +38,11 @@ import { useAlive } from '../../../hooks/useAlive';
 import { creatorsSupported } from '../../../utils/matrix';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { BreakWord } from '../../../styles/Text.css';
+
+type RoomTombstoneEventContent = {
+  body: string;
+  replacement_room: string;
+};
 
 function RoomUpgradeDialog({ requestClose }: { requestClose: () => void }) {
   const core = useCore();

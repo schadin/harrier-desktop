@@ -30,6 +30,7 @@ import {
   type SendStatus,
   type SendStatusView,
   type UploadView,
+  type UserProfileView,
   type VerificationPhaseView,
   type VerificationRequestView,
   type BackupProgressView,
@@ -996,6 +997,25 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     refreshSendStatuses();
   });
 
+  const profileStores = new Map<string, WritableSnapshotStore<UserProfileView>>();
+  const buildProfile = (userId: string): UserProfileView => {
+    const user = client.getUser(userId);
+    return {
+      userId,
+      ...(user?.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+      ...(user?.displayName ? { displayName: user.displayName } : {}),
+    };
+  };
+  const publishProfile = (userId: string) => {
+    profileStores.get(userId)?.publish(buildProfile(userId));
+  };
+  client.on(UserEvent.AvatarUrl, (_event: MatrixEvent | undefined, user: User) =>
+    publishProfile(user.userId)
+  );
+  client.on(UserEvent.DisplayName, (_event: MatrixEvent | undefined, user: User) =>
+    publishProfile(user.userId)
+  );
+
   const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
   const buildPresence = (userId: string): PresenceView | null => {
     const user = client.getUser(userId);
@@ -1603,6 +1623,84 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         creatorStores.set(roomId, store);
         return store;
       },
+      async aliases(roomId) {
+        try {
+          const local = await client.getLocalAliases(roomId);
+          const content = client
+            .getRoom(roomId)
+            ?.currentState.getStateEvents('m.room.canonical_alias', '')
+            ?.getContent<{ alias?: string; alt_aliases?: unknown[] }>();
+          return {
+            ok: true,
+            value: {
+              ...(content?.alias ? { canonical: content.alias } : {}),
+              alternatives: Array.isArray(content?.alt_aliases)
+                ? content.alt_aliases.filter((alias): alias is string => typeof alias === 'string')
+                : [],
+              local: local.aliases,
+            },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async createAlias(alias, roomId) {
+        try {
+          await client.createAlias(alias, roomId);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async deleteAlias(alias) {
+        try {
+          await client.deleteAlias(alias);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async directoryVisibility(roomId) {
+        try {
+          const result = await client.getRoomDirectoryVisibility(roomId);
+          return { ok: true, value: result.visibility === 'public' ? 'public' : 'private' };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async setDirectoryVisibility(roomId, visibility) {
+        try {
+          await client.setRoomDirectoryVisibility(roomId, visibility as never);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async mutualRooms(userId) {
+        const rooms = new Set<string>();
+        let nextBatch: string | undefined;
+        try {
+          do {
+            // eslint-disable-next-line no-await-in-loop
+            const result = await client.http.authedRequest<{
+              joined?: string[];
+              next_batch?: string;
+            }>(Method.Get, '/mutual_rooms', { user_id: userId, from: nextBatch }, undefined, {
+              prefix: '/_matrix/client/v1',
+            });
+            (result.joined ?? []).forEach((roomId) => rooms.add(roomId));
+            nextBatch = result.next_batch;
+          } while (typeof nextBatch === 'string');
+          return { ok: true, value: [...rooms] };
+        } catch {
+          try {
+            const shared = await client._unstable_getSharedRooms(userId);
+            return { ok: true, value: shared };
+          } catch (error) {
+            return { ok: false, error: toCoreError(error) };
+          }
+        }
+      },
       async searchMessages(params, nextBatch) {
         if (!params.term) {
           return { ok: true, value: { highlights: [], groups: [] } };
@@ -2070,6 +2168,27 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
     },
     presence: {
+      profile(userId) {
+        const existing = profileStores.get(userId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildProfile(userId));
+        profileStores.set(userId, store);
+        return store;
+      },
+      async refreshProfile(userId) {
+        try {
+          const info = await client.getProfileInfo(userId);
+          const store = profileStores.get(userId);
+          store?.publish({
+            userId,
+            ...(info.avatar_url ? { avatarUrl: info.avatar_url } : {}),
+            ...(info.displayname ? { displayName: info.displayname } : {}),
+          });
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       presence(userId) {
         const existing = presenceStores.get(userId);
         if (existing) return existing;

@@ -1,9 +1,10 @@
 import React, { ReactNode } from 'react';
 import { as, Avatar, Box, Icon, Icons, Text } from 'folds';
-import { MatrixClient } from 'matrix-js-sdk';
+import type { MatrixClient } from 'matrix-js-sdk';
 import type { MemberView } from '@harrier/core';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../user-avatar';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import * as css from './style.css';
 
 const getName = (member: MemberView) =>
@@ -18,21 +19,24 @@ type MemberTileProps = {
   after?: ReactNode;
 };
 export const MemberTile = as<'button', MemberTileProps>(
+  // Legacy media props remain in the API so existing callers keep working.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ({ as: AsMemberTile = 'button', mx, member, useAuthentication, after, ...props }, ref) => {
     const name = getName(member);
     const username = getMxIdLocalPart(member.userId);
 
-    const avatarMxcUrl = member.avatarMxc;
-    const avatarUrl = avatarMxcUrl
-      ? mx.mxcUrlToHttp(avatarMxcUrl, 100, 100, 'crop', undefined, false, useAuthentication)
-      : undefined;
+    const avatarUrl = useMediaSource(
+      member.avatarMxc
+        ? toMediaRef(member.avatarMxc, { width: 100, height: 100, resizeMethod: 'crop' })
+        : undefined
+    );
 
     return (
       <AsMemberTile className={css.MemberTile} {...props} ref={ref}>
         <Avatar size="300" radii="400">
           <UserAvatar
             userId={member.userId}
-            src={avatarUrl ?? undefined}
+            src={avatarUrl}
             alt={name}
             renderFallback={() => <Icon size="300" src={Icons.User} filled />}
           />

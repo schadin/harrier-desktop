@@ -1,35 +1,32 @@
 import type { CallParticipantView } from '@harrier/core';
 import React, { useState } from 'react';
 import { Avatar, Box, Icon, Icons, Text } from 'folds';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { SequenceCard } from '../../components/sequence-card';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { useRoom } from '../../hooks/useRoom';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
+import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../../components/user-avatar';
 import { getMouseEventCords } from '../../utils/dom';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import * as css from './styles.css';
 
 type CallMemberCardProps = {
   member: CallParticipantView;
 };
 export function CallMemberCard({ member }: CallMemberCardProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const room = useRoom();
 
   const openUserProfile = useOpenUserRoomProfile();
 
   const { userId } = member;
+  const avatarMxc = userId ? getMemberAvatarMxc(room, userId) : undefined;
+  const avatarUrl = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 96, height: 96 }) : undefined
+  );
   if (!userId) return null;
 
   const name = getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
-  const avatarMxc = getMemberAvatarMxc(room, userId);
-  const avatarUrl = avatarMxc
-    ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96) ?? undefined
-    : undefined;
 
   const audioOnly = member.callIntent === 'audio';
 

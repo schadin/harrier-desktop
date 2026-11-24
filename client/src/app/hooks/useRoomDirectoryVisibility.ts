@@ -1,16 +1,16 @@
 import { useCallback, useEffect } from 'react';
-import { Visibility } from 'matrix-js-sdk';
 import { useAsyncCallback } from './useAsyncCallback';
-import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 
 export const useRoomDirectoryVisibility = (roomId: string) => {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const [visibilityState, loadVisibility] = useAsyncCallback(
     useCallback(async () => {
-      const v = await mx.getRoomDirectoryVisibility(roomId);
-      return v.visibility === Visibility.Public;
-    }, [mx, roomId])
+      const result = await core.rooms.directoryVisibility(roomId);
+      if (!result.ok) throw result.error;
+      return result.value === 'public';
+    }, [core, roomId])
   );
 
   useEffect(() => {
@@ -19,13 +19,14 @@ export const useRoomDirectoryVisibility = (roomId: string) => {
 
   const setVisibility = useCallback(
     async (visibility: boolean) => {
-      await mx.setRoomDirectoryVisibility(
+      const result = await core.rooms.setDirectoryVisibility(
         roomId,
-        visibility ? Visibility.Public : Visibility.Private
+        visibility ? 'public' : 'private'
       );
+      if (!result.ok) throw result.error;
       await loadVisibility();
     },
-    [mx, roomId, loadVisibility]
+    [core, roomId, loadVisibility]
   );
 
   return {

@@ -1,5 +1,4 @@
 import type { HarrierCore } from '@harrier/core';
-import { Room } from 'matrix-js-sdk';
 import { RoomType } from '../../../types/matrix/room';
 import { getViaServers } from '../../plugins/via-servers';
 import { CreateRoomAccess } from './types';
@@ -34,7 +33,7 @@ export const createRoomEncryptionState = () => ({
 export type CreateRoomData = {
   version: string;
   type?: RoomType;
-  parent?: Room;
+  parent?: { roomId: string };
   access: CreateRoomAccess;
   name: string;
   topic?: string;

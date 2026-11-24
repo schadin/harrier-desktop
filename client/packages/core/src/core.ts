@@ -7,12 +7,14 @@ import type {
   MemberView,
   PublicRoomView,
   RoomAccountDataEntry,
+  RoomAliasesView,
   RoomStateEntry,
   RoomId,
   RoomSummaryView,
   RoomView,
   PresenceView,
   PresenceStatus,
+  UserProfileView,
   DeviceTrust,
   DeviceView,
   VerificationRequestView,
@@ -160,6 +162,15 @@ export type RoomsModule = {
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   viaServers(roomId: RoomId): readonly string[];
+  mutualRooms(userId: UserId): Promise<CoreResult<readonly RoomId[]>>;
+  aliases(roomId: RoomId): Promise<CoreResult<RoomAliasesView>>;
+  createAlias(alias: string, roomId: RoomId): Promise<CoreResult<void>>;
+  deleteAlias(alias: string): Promise<CoreResult<void>>;
+  directoryVisibility(roomId: RoomId): Promise<CoreResult<'public' | 'private'>>;
+  setDirectoryVisibility(
+    roomId: RoomId,
+    visibility: 'public' | 'private'
+  ): Promise<CoreResult<void>>;
   searchMessages(
     params: MessageSearchParamsView,
     nextBatch?: string
@@ -202,6 +213,8 @@ export type TimelineModule = {
 
 export type PresenceModule = {
   presence(userId: string): SnapshotStore<PresenceView | null>;
+  profile(userId: string): SnapshotStore<UserProfileView>;
+  refreshProfile(userId: string): Promise<CoreResult<void>>;
   typing(roomId: RoomId): SnapshotStore<readonly string[]>;
   setTyping(roomId: RoomId, typing: boolean, timeoutMs?: number): Promise<CoreResult<void>>;
   getOwnPresence(): Promise<CoreResult<PresenceView | null>>;

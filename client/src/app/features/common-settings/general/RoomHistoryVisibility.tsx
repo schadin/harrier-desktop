@@ -12,8 +12,6 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { HistoryVisibility } from 'matrix-js-sdk';
-import { RoomHistoryVisibilityEventContent } from 'matrix-js-sdk/lib/types';
 import FocusTrap from 'focus-trap-react';
 import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -27,6 +25,17 @@ import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
+
+enum HistoryVisibility {
+  Invited = 'invited',
+  Joined = 'joined',
+  Shared = 'shared',
+  WorldReadable = 'world_readable',
+}
+
+type RoomHistoryVisibilityEventContent = {
+  history_visibility: HistoryVisibility;
+};
 
 const useVisibilityStr = () =>
   useMemo(

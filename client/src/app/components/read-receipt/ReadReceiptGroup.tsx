@@ -3,16 +3,36 @@ import classNames from 'classnames';
 import { Modal, Overlay, OverlayBackdrop, OverlayCenter, as } from 'folds';
 import { Room } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { getMemberDisplayName } from '../../utils/room';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../user-avatar';
 import { EventReaders } from '../event-readers';
 import { stopPropagation } from '../../utils/keyboard';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import * as css from './ReadReceiptGroup.css';
 
 const MAX_VISIBLE_AVATARS = 3;
+
+type ReceiptAvatarProps = {
+  userId: string;
+  avatarMxc: string | undefined;
+  name: string;
+};
+
+function ReceiptAvatar({ userId, avatarMxc, name }: ReceiptAvatarProps) {
+  const avatarUrl = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 32, height: 32, resizeMethod: 'crop' }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={avatarUrl}
+      alt={name}
+      renderFallback={() => <span className={css.AvatarLetter}>{name.charAt(0)}</span>}
+    />
+  );
+}
 
 export type ReadReceiptGroupProps = {
   room: Room;
@@ -22,8 +42,6 @@ export type ReadReceiptGroupProps = {
 
 export const ReadReceiptGroup = as<'button', ReadReceiptGroupProps>(
   ({ className, room, eventId, userIds, ...props }, ref) => {
-    const mx = useMatrixClient();
-    const useAuthentication = useMediaAuthentication();
     const [open, setOpen] = useState(false);
 
     const getName = (userId: string) =>
@@ -61,18 +79,10 @@ export const ReadReceiptGroup = as<'button', ReadReceiptGroupProps>(
           {visibleUsers.map((userId) => {
             const name = getName(userId);
             const avatarMxcUrl = room.getMember(userId)?.getMxcAvatarUrl();
-            const avatarUrl = avatarMxcUrl
-              ? mx.mxcUrlToHttp(avatarMxcUrl, 32, 32, 'crop', undefined, false, useAuthentication)
-              : undefined;
 
             return (
               <span key={userId} className={css.AvatarWrap}>
-                <UserAvatar
-                  userId={userId}
-                  src={avatarUrl ?? undefined}
-                  alt={name}
-                  renderFallback={() => <span className={css.AvatarLetter}>{name.charAt(0)}</span>}
-                />
+                <ReceiptAvatar userId={userId} avatarMxc={avatarMxcUrl} name={name} />
               </span>
             );
           })}

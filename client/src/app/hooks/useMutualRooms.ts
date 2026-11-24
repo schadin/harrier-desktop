@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
-import { MatrixClient, Method } from 'matrix-js-sdk';
-import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 import { AsyncState, useAsyncCallbackValue } from './useAsyncCallback';
 import { useSpecVersions } from './useSpecVersions';
 
@@ -25,49 +24,18 @@ export const useMutualRoomsSupport = (): boolean => {
   return !!supported;
 };
 
-type MutualRoomsOK = {
-  joined: string[];
-  next_batch?: string;
-  count: number;
-};
-
-const fetchAllMutualRooms = async (mx: MatrixClient, userId: string): Promise<string[]> => {
-  const mutualRooms: Set<string> = new Set();
-
-  let nextBatch: string | undefined;
-  do {
-    // eslint-disable-next-line no-await-in-loop
-    const result = await mx.http.authedRequest<MutualRoomsOK>(
-      Method.Get,
-      '/mutual_rooms',
-      {
-        user_id: userId,
-        from: nextBatch,
-      },
-      undefined,
-      {
-        prefix: '/_matrix/client/v1',
-      }
-    );
-    result.joined.forEach((r) => mutualRooms.add(r));
-    nextBatch = result.next_batch;
-  } while (typeof nextBatch === 'string');
-
-  return Array.from(mutualRooms);
-};
-
 export const useMutualRooms = (userId: string): AsyncState<string[], unknown> => {
-  const mx = useMatrixClient();
-
+  const core = useCore();
   const unstableSupport = useUnstableMutualRoomsSupport();
   const support = useMutualRoomsSupport();
 
   const [mutualRoomsState] = useAsyncCallbackValue(
-    useCallback(() => {
-      if (support) return fetchAllMutualRooms(mx, userId);
-      if (unstableSupport) return mx._unstable_getSharedRooms(userId);
-      return Promise.resolve([]);
-    }, [mx, userId, unstableSupport, support])
+    useCallback(async () => {
+      if (!support && !unstableSupport) return [];
+      const result = await core.rooms.mutualRooms(userId);
+      if (!result.ok) throw result.error;
+      return [...result.value];
+    }, [core, userId, unstableSupport, support])
   );
 
   return mutualRoomsState;

@@ -13,10 +13,17 @@ import {
   Button,
   Spinner,
 } from 'folds';
-import { JoinRule } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
 import { stopPropagation } from '../utils/keyboard';
 import { getRoomIconSrc } from '../utils/room';
+
+export enum JoinRule {
+  Invite = 'invite',
+  Knock = 'knock',
+  Restricted = 'restricted',
+  Public = 'public',
+  Private = 'private',
+}
 
 export type ExtraJoinRules = 'knock_restricted';
 export type ExtendedJoinRules = JoinRule | ExtraJoinRules;

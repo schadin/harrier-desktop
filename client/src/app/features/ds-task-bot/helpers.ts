@@ -50,10 +50,14 @@ export const isDirectRoomWithBot = (room: Room, botMxid: string): boolean => {
   return joined.length === 2 && joined.some((member) => member.userId === botMxid);
 };
 
+type RoomWithMember = {
+  getMember: (userId: string) => { membership?: string | null } | null | undefined;
+};
+
 // Бот считается присутствующим, только если реально состоит в комнате (`join`):
 // приглашённый бот команд не получает. Помощники команд доступны лишь в таких
 // комнатах.
-export const isBotInRoom = (room: Room, botMxid: string): boolean => {
+export const isBotInRoom = (room: RoomWithMember, botMxid: string): boolean => {
   if (!botMxid) return false;
   return room.getMember(botMxid)?.membership === 'join';
 };

@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from 'react';
-import { WritableAccountDataEvents, AccountDataEvents } from 'matrix-js-sdk';
 import { Box, Text, IconButton, Icon, Icons, Scroll, Switch, Button } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -15,6 +14,10 @@ import {
 import { copyToClipboard } from '../../../utils/dom';
 import { AccountData } from './AccountData';
 
+type AccountDataClient = ReturnType<typeof useMatrixClient>;
+type WritableAccountDataEventType = Parameters<AccountDataClient['setAccountData']>[0];
+type AccountDataEventType = Parameters<AccountDataClient['getAccountData']>[0];
+
 type DeveloperToolsProps = {
   requestClose: () => void;
 };
@@ -26,7 +29,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      await mx.setAccountData(type as keyof WritableAccountDataEvents, content);
+      await mx.setAccountData(type as WritableAccountDataEventType, content);
     },
     [mx]
   );
@@ -37,7 +40,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
         type={accountDataType ?? undefined}
         content={
           accountDataType
-            ? mx.getAccountData(accountDataType as keyof AccountDataEvents)?.getContent()
+            ? mx.getAccountData(accountDataType as AccountDataEventType)?.getContent()
             : undefined
         }
         submitChange={submitAccountData}

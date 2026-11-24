@@ -15,7 +15,6 @@ import React, { FormEventHandler, useCallback, useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import Linkify from 'linkify-react';
 import classNames from 'classnames';
-import { JoinRule } from 'matrix-js-sdk';
 import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
@@ -200,7 +199,7 @@ export function RoomProfileEdit({
                 <RoomIcon
                   roomType={room.getType()}
                   size="400"
-                  joinRule={(joinRule as JoinRule | undefined) ?? JoinRule.Invite}
+                  joinRule={joinRule ?? 'invite'}
                   filled
                 />
               )}
@@ -341,7 +340,7 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
                     <RoomIcon
                       roomType={room.getType()}
                       size="400"
-                      joinRule={(joinRule as JoinRule | undefined) ?? JoinRule.Invite}
+                      joinRule={joinRule ?? 'invite'}
                       filled
                     />
                   )}

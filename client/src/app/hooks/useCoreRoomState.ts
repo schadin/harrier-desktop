@@ -1,7 +1,8 @@
 import type { HarrierCore, JsonObject, RoomStateEntry, SnapshotStore } from '@harrier/core';
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
-import { Room } from 'matrix-js-sdk';
 import { useCore } from './useCore';
+
+type RoomWithId = { roomId: string };
 
 export const sendRoomState = async (
   core: HarrierCore,
@@ -15,7 +16,7 @@ export const sendRoomState = async (
 };
 
 export function useCoreRoomState<T = JsonObject>(
-  room: Room,
+  room: RoomWithId,
   eventType: string,
   stateKey = ''
 ): T | null {
@@ -28,7 +29,10 @@ export function useCoreRoomState<T = JsonObject>(
   return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot) as T | null;
 }
 
-export function useCoreRoomStateList(room: Room, eventType: string): readonly RoomStateEntry[] {
+export function useCoreRoomStateList(
+  room: RoomWithId,
+  eventType: string
+): readonly RoomStateEntry[] {
   const core = useCore();
   const store = useMemo(
     () => core.rooms.stateList(room.roomId, eventType),
@@ -39,7 +43,7 @@ export function useCoreRoomStateList(room: Room, eventType: string): readonly Ro
 }
 
 export function useCoreRoomsStateList(
-  rooms: readonly Room[],
+  rooms: readonly RoomWithId[],
   eventType: string
 ): ReadonlyMap<string, readonly RoomStateEntry[]> {
   const core = useCore();

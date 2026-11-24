@@ -4,13 +4,33 @@ import React from 'react';
 import { Room } from 'matrix-js-sdk';
 import { UserAvatar } from '../../components/user-avatar';
 import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { getMxIdLocalPart, mxcUrlToHttp } from '../../utils/matrix';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
-import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
+import { getMxIdLocalPart } from '../../utils/matrix';
 import { StackedAvatar } from '../../components/stacked-avatar';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { getMouseEventCords } from '../../utils/dom';
+import { toMediaRef, useMediaSource } from '../../utils/coreMedia';
 import * as css from './styles.css';
+
+type GlanceMemberAvatarProps = {
+  userId: string;
+  avatarMxc: string | undefined;
+  name: string;
+};
+
+function GlanceMemberAvatar({ userId, avatarMxc, name }: GlanceMemberAvatarProps) {
+  const avatarUrl = useMediaSource(
+    avatarMxc ? toMediaRef(avatarMxc, { width: 96, height: 96 }) : undefined
+  );
+
+  return (
+    <UserAvatar
+      userId={userId}
+      src={avatarUrl}
+      alt={name}
+      renderFallback={() => <Icon size="50" src={Icons.User} filled />}
+    />
+  );
+}
 
 type MemberGlanceProps = {
   room: Room;
@@ -19,8 +39,6 @@ type MemberGlanceProps = {
   max?: number;
 };
 export function MemberGlance({ room, members, speakers, max = 6 }: MemberGlanceProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const openUserProfile = useOpenUserRoomProfile();
 
   const visibleMembers = members.slice(0, max);
@@ -33,9 +51,6 @@ export function MemberGlance({ room, members, speakers, max = 6 }: MemberGlanceP
         if (!userId) return null;
         const name = getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
         const avatarMxc = getMemberAvatarMxc(room, userId);
-        const avatarUrl = avatarMxc
-          ? mxcUrlToHttp(mx, avatarMxc, useAuthentication, 96, 96) ?? undefined
-          : undefined;
 
         return (
           <StackedAvatar
@@ -56,12 +71,7 @@ export function MemberGlance({ room, members, speakers, max = 6 }: MemberGlanceP
               )
             }
           >
-            <UserAvatar
-              userId={userId}
-              src={avatarUrl}
-              alt={name}
-              renderFallback={() => <Icon size="50" src={Icons.User} filled />}
-            />
+            <GlanceMemberAvatar userId={userId} avatarMxc={avatarMxc} name={name} />
           </StackedAvatar>
         );
       })}

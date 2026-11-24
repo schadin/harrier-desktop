@@ -1,8 +1,30 @@
-import { MatrixClient, MatrixEvent, Room } from 'matrix-js-sdk';
+import { factoryRoomIdByActivity } from '@harrier/core';
 import { RoomToUnread } from '../../../../types/matrix/room';
 import { getMxIdLocalPart } from '../../../utils/matrix';
-import { factoryRoomIdByActivity } from '../../../utils/sort';
 import { PaletteCategory, PaletteItem, ScoredPaletteItem } from './types';
+
+export type UnreadEventLike = {
+  getId: () => string | undefined;
+  getType: () => string;
+  getSender: () => string | undefined;
+  getContent: () => Record<string, unknown>;
+  isRedacted: () => boolean;
+  isDecryptionFailure: () => boolean;
+};
+
+export type UnreadRoomLike = {
+  readonly name: string;
+  getEventReadUpTo: (userId: string) => string | null | undefined;
+  getLiveTimeline: () => { getEvents: () => UnreadEventLike[] };
+  getMember: (userId: string) => { name?: string } | null | undefined;
+  getLastActiveTimestamp: () => number;
+};
+
+export type UnreadClientLike = {
+  getUserId: () => string | null | undefined;
+  getUser: (userId: string) => { displayName?: string } | null | undefined;
+  getRoom: (roomId: string) => UnreadRoomLike | null | undefined;
+};
 
 export type UnreadPreview = {
   sender: string;
@@ -39,7 +61,7 @@ const msgTypeToLabelKey = (msgtype: unknown): keyof UnreadPreviewLabels | undefi
   }
 };
 
-const getMessagePreviewBody = (mEvent: MatrixEvent, labels: UnreadPreviewLabels): string => {
+const getMessagePreviewBody = (mEvent: UnreadEventLike, labels: UnreadPreviewLabels): string => {
   const content = mEvent.getContent();
 
   if (mEvent.isRedacted()) return labels.redacted;
@@ -54,7 +76,11 @@ const getMessagePreviewBody = (mEvent: MatrixEvent, labels: UnreadPreviewLabels)
   return body.length > PREVIEW_BODY_LIMIT ? `${body.slice(0, PREVIEW_BODY_LIMIT)}…` : body;
 };
 
-const getEventSenderName = (mx: MatrixClient, room: Room, senderId: string): string => {
+const getEventSenderName = (
+  mx: UnreadClientLike,
+  room: UnreadRoomLike,
+  senderId: string
+): string => {
   const member = room.getMember(senderId);
   if (member?.name) return member.name;
   const user = mx.getUser(senderId);
@@ -68,7 +94,10 @@ const getEventSenderName = (mx: MatrixClient, room: Room, senderId: string): str
  * пропускаются — read receipt не сдвигается при их отправке, поэтому они не
  * должны попадать в превью как «непрочитанные».
  */
-const getFirstUnreadEvent = (room: Room, myUserId: string): MatrixEvent | undefined => {
+const getFirstUnreadEvent = (
+  room: UnreadRoomLike,
+  myUserId: string
+): UnreadEventLike | undefined => {
   const readUpToId = room.getEventReadUpTo(myUserId);
   const timeline = room.getLiveTimeline().getEvents();
 
@@ -91,8 +120,8 @@ const getFirstUnreadEvent = (room: Room, myUserId: string): MatrixEvent | undefi
 };
 
 export const getUnreadPreview = (
-  mx: MatrixClient,
-  room: Room,
+  mx: UnreadClientLike,
+  room: UnreadRoomLike,
   labels: UnreadPreviewLabels
 ): UnreadPreview | undefined => {
   const myUserId = mx.getUserId();
@@ -114,7 +143,7 @@ export const getUnreadPreview = (
  */
 export const buildUnreadPaletteItems = (
   items: PaletteItem[],
-  mx: MatrixClient,
+  mx: UnreadClientLike,
   roomToUnread: RoomToUnread,
   labels: UnreadPreviewLabels
 ): ScoredPaletteItem[] => {
@@ -140,9 +169,16 @@ export const buildUnreadPaletteItems = (
     });
   });
 
+  const byActivity = factoryRoomIdByActivity((roomId) => {
+    const room = mx.getRoom(roomId);
+    return room
+      ? { name: room.name, lastActiveTimestamp: room.getLastActiveTimestamp() }
+      : undefined;
+  });
+
   unreadItems.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
-    return factoryRoomIdByActivity(mx)(a.item.roomId ?? '', b.item.roomId ?? '');
+    return byActivity(a.item.roomId ?? '', b.item.roomId ?? '');
   });
 
   return unreadItems.slice(0, UNREAD_LIST_LIMIT);

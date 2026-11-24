@@ -1,51 +1,19 @@
-import { useEffect, useState } from 'react';
-import { UserEvent, UserEventHandlerMap } from 'matrix-js-sdk';
-import { useMatrixClient } from './useMatrixClient';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useCore } from './useCore';
 
 export type UserProfile = {
   avatarUrl?: string;
   displayName?: string;
 };
 export const useUserProfile = (userId: string): UserProfile => {
-  const mx = useMatrixClient();
-
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    const user = mx.getUser(userId);
-    return {
-      avatarUrl: user?.avatarUrl,
-      displayName: user?.displayName,
-    };
-  });
+  const core = useCore();
+  const store = useMemo(() => core.presence.profile(userId), [core, userId]);
+  const profile = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
+  const refresh = useCallback(() => core.presence.refreshProfile(userId), [core, userId]);
 
   useEffect(() => {
-    const user = mx.getUser(userId);
-    const onAvatarChange: UserEventHandlerMap[UserEvent.AvatarUrl] = (event, myUser) => {
-      setProfile((cp) => ({
-        ...cp,
-        avatarUrl: myUser.avatarUrl,
-      }));
-    };
-    const onDisplayNameChange: UserEventHandlerMap[UserEvent.DisplayName] = (event, myUser) => {
-      setProfile((cp) => ({
-        ...cp,
-        displayName: myUser.displayName,
-      }));
-    };
+    refresh();
+  }, [refresh]);
 
-    mx.getProfileInfo(userId).then((info) =>
-      setProfile({
-        avatarUrl: info.avatar_url,
-        displayName: info.displayname,
-      })
-    );
-
-    user?.on(UserEvent.AvatarUrl, onAvatarChange);
-    user?.on(UserEvent.DisplayName, onDisplayNameChange);
-    return () => {
-      user?.removeListener(UserEvent.AvatarUrl, onAvatarChange);
-      user?.removeListener(UserEvent.DisplayName, onDisplayNameChange);
-    };
-  }, [mx, userId]);
-
-  return profile;
+  return { avatarUrl: profile.avatarUrl, displayName: profile.displayName };
 };

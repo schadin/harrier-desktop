@@ -1,4 +1,3 @@
-import { Room } from 'matrix-js-sdk';
 import type { TimelineItem } from '@harrier/core';
 import { describe, expect, it } from 'vitest';
 import {
@@ -376,10 +375,9 @@ describe('isCollapseAllowed', () => {
 });
 
 describe('isBotInRoom', () => {
-  const makeRoom = (membership?: string): Room =>
-    ({
-      getMember: () => (membership === undefined ? undefined : { membership }),
-    } as unknown as Room);
+  const makeRoom = (membership?: string) => ({
+    getMember: () => (membership === undefined ? undefined : { membership }),
+  });
 
   it('истинно, когда бот состоит в комнате', () => {
     expect(isBotInRoom(makeRoom('join'), BOT_MXID)).toBe(true);

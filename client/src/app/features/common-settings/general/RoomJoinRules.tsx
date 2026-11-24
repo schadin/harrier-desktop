@@ -1,11 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { color, Text } from 'folds';
-import { JoinRule, RestrictedAllowType } from 'matrix-js-sdk';
-import { RoomJoinRulesEventContent } from 'matrix-js-sdk/lib/types';
 import { useAtomValue } from 'jotai';
 import type { CoreError } from '@harrier/core';
 import {
   ExtendedJoinRules,
+  JoinRule,
   JoinRulesSwitcher,
   useJoinRuleIcons,
   useRoomJoinRuleLabel,
@@ -35,9 +34,18 @@ import {
 } from '../../../utils/matrix';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
+enum RestrictedAllowType {
+  RoomMembership = 'm.room_membership',
+}
+
 type RestrictedRoomAllowContent = {
   room_id: string;
   type: RestrictedAllowType;
+};
+
+export type RoomJoinRulesEventContent = {
+  join_rule: JoinRule;
+  allow?: RestrictedRoomAllowContent[];
 };
 
 type RoomJoinRulesProps = {

@@ -48,6 +48,12 @@ export type RoomSummaryView = {
   readonly notificationMode?: NotificationMode;
 };
 
+export type RoomAliasesView = {
+  readonly canonical?: string;
+  readonly alternatives: readonly string[];
+  readonly local: readonly string[];
+};
+
 export type RoomView = RoomSummaryView & {
   readonly topic?: string;
   readonly encrypted: boolean;
@@ -408,6 +414,12 @@ export type DeviceView = {
 };
 
 export type PresenceStatus = 'online' | 'offline' | 'unavailable';
+
+export type UserProfileView = {
+  readonly userId: UserId;
+  readonly avatarUrl?: string;
+  readonly displayName?: string;
+};
 
 export type PresenceView = {
   readonly userId: UserId;
