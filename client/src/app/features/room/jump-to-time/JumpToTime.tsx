@@ -44,7 +44,7 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
 
   const todayTs = getToday();
   const yesterdayTs = getYesterday();
-  const createTs = useMemo(() => createStateEvent?.getTs() ?? 0, [createStateEvent]);
+  const createTs = useMemo(() => createStateEvent?.timestamp ?? 0, [createStateEvent]);
   const [ts, setTs] = useState(() => Date.now());
 
   const [hour24Clock] = useSetting(settingsAtom, 'hour24Clock');

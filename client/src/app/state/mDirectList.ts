@@ -25,7 +25,8 @@ export const useBindMDirectAtom = (mDirect: typeof mDirectAtom) => {
   useEffect(() => {
     const rooms = new Set<string>();
     Object.values(content ?? {}).forEach((value) => {
-      if (Array.isArray(value)) value.forEach((roomId) => typeof roomId === 'string' && rooms.add(roomId));
+      if (Array.isArray(value))
+        value.forEach((roomId) => typeof roomId === 'string' && rooms.add(roomId));
     });
     setMDirect({ type: 'UPDATE', rooms });
   }, [content, setMDirect]);

@@ -1,4 +1,3 @@
-import { MatrixEvent, Room } from 'matrix-js-sdk';
 import {
   createContext,
   useCallback,
@@ -8,7 +7,12 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { fillMissingPowers, readPowerLevel, type IPowerLevels } from '@harrier/core';
+import {
+  fillMissingPowers,
+  readPowerLevel,
+  type IPowerLevels,
+  type JsonObject,
+} from '@harrier/core';
 import { useCore } from './useCore';
 
 export { readPowerLevel, getPermissionPower, applyPermissionPower } from '@harrier/core';
@@ -20,11 +24,8 @@ export type {
   ReadPowerLevelAPI,
 } from '@harrier/core';
 
-export const getPowersLevelFromMatrixEvent = (mEvent?: MatrixEvent): IPowerLevels => {
-  const plContent = mEvent?.getContent<IPowerLevels>();
-
-  return fillMissingPowers(plContent ?? {});
-};
+export const getPowersLevelFromContent = (content?: JsonObject): IPowerLevels =>
+  fillMissingPowers((content ?? {}) as IPowerLevels);
 
 const useCorePowerLevelsStore = (roomId: string): IPowerLevels => {
   const core = useCore();
@@ -33,7 +34,7 @@ const useCorePowerLevelsStore = (roomId: string): IPowerLevels => {
   return useSyncExternalStore(store.subscribe, getSnapshot, getSnapshot);
 };
 
-export function usePowerLevels(room: Room): IPowerLevels {
+export function usePowerLevels(room: { roomId: string }): IPowerLevels {
   return useCorePowerLevelsStore(room.roomId);
 }
 
@@ -47,7 +48,9 @@ export const usePowerLevelsContext = (): IPowerLevels => {
   return pl;
 };
 
-export const useRoomsPowerLevels = (rooms: Room[]): Map<string, IPowerLevels> => {
+export const useRoomsPowerLevels = (
+  rooms: readonly { roomId: string }[]
+): Map<string, IPowerLevels> => {
   const core = useCore();
   const stores = useMemo(
     () => rooms.map((room) => [room.roomId, core.rooms.powerLevels(room.roomId)] as const),

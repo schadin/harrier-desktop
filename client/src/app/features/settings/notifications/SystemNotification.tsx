@@ -1,6 +1,5 @@
 import React, { useCallback } from 'react';
 import { Box, Text, Switch, Button, color, Spinner } from 'folds';
-import { IPusherRequest } from '../../../../types/matrix/pushRules';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -10,17 +9,17 @@ import { useNotificationPermission } from '../../../hooks/useNotificationPermiss
 import { isTauri } from '../../../utils/notification';
 import { useEmailNotifications } from '../../../hooks/useEmailNotifications';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 
 function EmailNotification() {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [result, refreshResult] = useEmailNotifications();
 
   const [setState, setEnable] = useAsyncCallback(
     useCallback(
       async (email: string, enable: boolean) => {
         if (enable) {
-          await mx.setPusher({
+          const setResult = await core.notifications.setPusher({
             kind: 'email',
             app_id: 'm.email',
             pushkey: email,
@@ -32,15 +31,17 @@ function EmailNotification() {
             },
             append: true,
           });
+          if (!setResult.ok) throw setResult.error;
           return;
         }
-        await mx.setPusher({
+        const setResult = await core.notifications.setPusher({
           pushkey: email,
           app_id: 'm.email',
           kind: null,
-        } as unknown as IPusherRequest);
+        });
+        if (!setResult.ok) throw setResult.error;
       },
-      [mx]
+      [core]
     )
   );
 

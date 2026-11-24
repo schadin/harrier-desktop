@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useSyncExternalStore } from 'react';
 import { Box, Text, Badge } from 'folds';
 import {
   ConditionKind,
@@ -6,15 +6,18 @@ import {
   PushRuleKind,
   RuleId,
 } from '../../../../types/matrix/pushRules';
-import { useAccountData } from '../../../hooks/useAccountData';
-import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { useUserProfile } from '../../../hooks/useUserProfile';
 import { getMxIdLocalPart } from '../../../utils/matrix';
-import { makePushRuleData, PushRuleData, usePushRule } from '../../../hooks/usePushRule';
+import {
+  makePushRuleData,
+  PushRuleData,
+  usePushRule,
+  usePushRules,
+} from '../../../hooks/usePushRule';
 import {
   getNotificationModeActions,
   NotificationMode,
@@ -100,7 +103,7 @@ type PushRulesProps = {
   defaultPushRuleData: PushRuleData;
 };
 function MentionModeSwitcher({ ruleId, pushRules, defaultPushRuleData }: PushRulesProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const { kind, pushRule } = usePushRule(pushRules, ruleId) ?? defaultPushRuleData;
   const getModeActions = useNotificationModeActions(NOTIFY_MODE_OPS);
@@ -108,23 +111,26 @@ function MentionModeSwitcher({ ruleId, pushRules, defaultPushRuleData }: PushRul
   const handleChange = useCallback(
     async (mode: NotificationMode) => {
       const actions = getModeActions(mode);
-      await mx.setPushRuleActions('global', kind, ruleId, actions);
+      const result = await core.notifications.setPushRuleActions(kind, ruleId, actions);
+      if (!result.ok) throw result.error;
     },
-    [mx, getModeActions, kind, ruleId]
+    [core, getModeActions, kind, ruleId]
   );
 
   return <NotificationModeSwitcher pushRule={pushRule} onChange={handleChange} />;
 }
 
 export function SpecialMessagesNotifications() {
-  const mx = useMatrixClient();
-  const userId = mx.getUserId()!;
-  const { displayName } = useUserProfile(userId);
-  const pushRulesEvt = useAccountData(AccountDataEvent.PushRules);
-  const pushRules = useMemo(
-    () => (pushRulesEvt as IPushRules | null) ?? { global: {} },
-    [pushRulesEvt]
+  const core = useCore();
+  const sessionStore = core.auth.session;
+  const { value: session } = useSyncExternalStore(
+    sessionStore.subscribe,
+    sessionStore.getSnapshot,
+    sessionStore.getSnapshot
   );
+  const { userId } = session!;
+  const { displayName } = useUserProfile(userId);
+  const pushRules = usePushRules();
 
   return (
     <Box direction="Column" gap="100">

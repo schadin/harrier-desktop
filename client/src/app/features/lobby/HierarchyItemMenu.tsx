@@ -214,11 +214,12 @@ export function HierarchyItemMenu({
   onTogglePin,
 }: HierarchyItemMenuProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const canInvite = (): boolean => {
     if (!powerLevels) return false;
-    const creators = getRoomCreatorsForRoomId(mx, item.roomId);
+    const creators = getRoomCreatorsForRoomId(core, item.roomId);
     const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
     return permissions.action('invite', mx.getSafeUserId());

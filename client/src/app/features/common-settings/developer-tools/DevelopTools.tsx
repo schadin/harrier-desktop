@@ -250,7 +250,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                         src={expanded ? Icons.ChevronBottom : Icons.ChevronRight}
                                       />
                                     }
-                                    after={<Text size="L400">{stateKeyToEvents.size}</Text>}
+                                    after={<Text size="L400">{stateKeyToEvents.length}</Text>}
                                   >
                                     <Box grow="Yes">
                                       <Text size="T200" truncate>
@@ -281,7 +281,8 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                                           </Text>
                                         </Box>
                                       </MenuItem>
-                                      {Array.from(stateKeyToEvents.keys())
+                                      {stateKeyToEvents
+                                        .map((entry) => entry.stateKey)
                                         .sort()
                                         .map((stateKey) => (
                                           <MenuItem

@@ -48,12 +48,13 @@ import { RoomAvatar, RoomIcon } from './room-avatar';
 import { useRoomNavigate } from '../hooks/useRoomNavigate';
 import { getStateEvent } from '../utils/room';
 import { StateEvent } from '../../types/matrix/room';
-import { getPowersLevelFromMatrixEvent } from '../hooks/usePowerLevels';
+import { getPowersLevelFromContent } from '../hooks/usePowerLevels';
 import { getRoomCreatorsForRoomId } from '../hooks/useRoomCreators';
 import { getRoomPermissionsAPI } from '../hooks/useRoomPermissions';
 import { useLivekitSupport } from '../hooks/useLivekitSupport';
 import { CallAvatarAnimation } from '../styles/Animations.css';
 import { webRTCSupported } from '../utils/rtc';
+import { useCore } from '../hooks/useCore';
 
 type IncomingCallInfo = {
   room: Room;
@@ -215,6 +216,7 @@ type IncomingCallListenerProps = {
 };
 function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const directs = useAtomValue(mDirectAtom);
   const { navigateRoom } = useRoomNavigate();
 
@@ -263,8 +265,8 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
       }
 
       const powerLevelsEvent = getStateEvent(room, StateEvent.RoomPowerLevels);
-      const powerLevels = getPowersLevelFromMatrixEvent(powerLevelsEvent);
-      const creators = getRoomCreatorsForRoomId(mx, room.roomId);
+      const powerLevels = getPowersLevelFromContent(powerLevelsEvent?.getContent());
+      const creators = getRoomCreatorsForRoomId(core, room.roomId);
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
       const hasCallPermission = permissions.stateEvent(
@@ -288,7 +290,7 @@ function IncomingCallListener({ callEmbed, joined }: IncomingCallListenerProps) 
 
       setCallInfo(info);
     },
-    [mx]
+    [mx, core]
   );
 
   useEffect(() => {

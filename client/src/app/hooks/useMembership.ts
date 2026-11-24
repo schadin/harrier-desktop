@@ -1,28 +1,11 @@
-import { useEffect, useState } from 'react';
-import { Room, RoomMemberEvent, RoomMemberEventHandlerMap } from 'matrix-js-sdk';
+import { useMemo, useSyncExternalStore } from 'react';
 import { Membership } from '../../types/matrix/room';
+import { useCore } from './useCore';
 
-export const useMembership = (room: Room, userId: string): Membership => {
-  const member = room.getMember(userId);
-
-  const [membership, setMembership] = useState<Membership>(
-    () => (member?.membership as Membership | undefined) ?? Membership.Leave
-  );
-
-  useEffect(() => {
-    const handleMembershipChange: RoomMemberEventHandlerMap[RoomMemberEvent.Membership] = (
-      event,
-      m
-    ) => {
-      if (event.getRoomId() === room.roomId && m.userId === userId) {
-        setMembership((m.membership as Membership | undefined) ?? Membership.Leave);
-      }
-    };
-    member?.on(RoomMemberEvent.Membership, handleMembershipChange);
-    return () => {
-      member?.removeListener(RoomMemberEvent.Membership, handleMembershipChange);
-    };
-  }, [room, member, userId]);
-
-  return membership;
+export const useMembership = (room: { roomId: string }, userId: string): Membership => {
+  const core = useCore();
+  const store = useMemo(() => core.rooms.members(room.roomId), [core, room.roomId]);
+  const members = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
+  return (members.find((member) => member.userId === userId)?.membership ??
+    Membership.Leave) as Membership;
 };

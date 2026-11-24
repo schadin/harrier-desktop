@@ -93,6 +93,7 @@ export type AuthOperations = {
 
 export type AuthModule = {
   readonly session: SnapshotStore<SessionView | null>;
+  accessToken(): string | null;
   readonly sync: SnapshotStore<SyncView>;
   readonly capabilities: SnapshotStore<CapabilitiesView>;
   readonly authMetadata: SnapshotStore<AuthMetadataView | null>;
@@ -186,7 +187,13 @@ export type RoomsModule = {
   searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;
   hierarchy(roomId: RoomId, params: HierarchyParams): Promise<CoreResult<PublicRoomsResult>>;
   state(roomId: RoomId, eventType: string, stateKey?: string): SnapshotStore<JsonObject | null>;
+  stateEntry(
+    roomId: RoomId,
+    eventType: string,
+    stateKey?: string
+  ): SnapshotStore<RoomStateEntry | null>;
   stateList(roomId: RoomId, eventType: string): SnapshotStore<readonly RoomStateEntry[]>;
+  stateEntries(roomId: RoomId): SnapshotStore<readonly RoomStateEntry[]>;
   sendState(
     roomId: RoomId,
     eventType: string,
@@ -264,6 +271,20 @@ export type MediaModule = {
 
 export type NotificationsModule = {
   readonly preferences: SnapshotStore<NotificationPreferencesView>;
+  readonly pushRules: SnapshotStore<JsonObject>;
+  setPushRuleActions(
+    kind: string,
+    ruleId: string,
+    actions: readonly unknown[]
+  ): Promise<CoreResult<void>>;
+  addPushRule(
+    kind: string,
+    ruleId: string,
+    actions: readonly unknown[],
+    options?: { conditions?: readonly unknown[]; pattern?: string }
+  ): Promise<CoreResult<void>>;
+  deletePushRule(kind: string, ruleId: string): Promise<CoreResult<void>>;
+  setPusher(pusher: JsonObject): Promise<CoreResult<void>>;
   setRoomMode(
     roomId: RoomId,
     mode: RoomNotificationModeView,

@@ -440,9 +440,12 @@ export type RoomAccountDataEntry = {
 };
 
 export type RoomStateEntry = {
+  readonly eventType?: string;
   readonly stateKey: string;
   readonly content: JsonObject;
   readonly eventId?: string;
+  readonly sender?: string;
+  readonly timestamp?: number;
 };
 
 export type PublicRoomView = {

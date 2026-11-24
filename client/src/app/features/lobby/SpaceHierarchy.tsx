@@ -18,6 +18,7 @@ import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { SequenceCard } from '../../components/sequence-card';
 import { getRoomCreatorsForRoomId } from '../../hooks/useRoomCreators';
 import { getRoomPermissionsAPI } from '../../hooks/useRoomPermissions';
+import { useCore } from '../../hooks/useCore';
 
 type SpaceHierarchyProps = {
   summary: PublicRoomView | undefined;
@@ -68,6 +69,7 @@ export const SpaceHierarchy = forwardRef<HTMLDivElement, SpaceHierarchyProps>(
     ref
   ) => {
     const mx = useMatrixClient();
+    const core = useCore();
 
     const { fetching, error, rooms } = useFetchSpaceHierarchyLevel(spaceItem.roomId, true);
 
@@ -82,7 +84,7 @@ export const SpaceHierarchy = forwardRef<HTMLDivElement, SpaceHierarchyProps>(
     }, [rooms]);
 
     const spacePowerLevels = roomsPowerLevels.get(spaceItem.roomId);
-    const spaceCreators = getRoomCreatorsForRoomId(mx, spaceItem.roomId);
+    const spaceCreators = getRoomCreatorsForRoomId(core, spaceItem.roomId);
     const spacePermissions =
       spacePowerLevels && getRoomPermissionsAPI(spaceCreators, spacePowerLevels);
 
@@ -91,7 +93,7 @@ export const SpaceHierarchy = forwardRef<HTMLDivElement, SpaceHierarchyProps>(
 
     const { parentId } = spaceItem;
     const parentPowerLevels = parentId ? roomsPowerLevels.get(parentId) : undefined;
-    const parentCreators = parentId ? getRoomCreatorsForRoomId(mx, parentId) : undefined;
+    const parentCreators = parentId ? getRoomCreatorsForRoomId(core, parentId) : undefined;
     const parentPermissions =
       parentCreators &&
       parentPowerLevels &&

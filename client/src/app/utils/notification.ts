@@ -1,4 +1,3 @@
-import { MatrixEvent, MsgType } from 'matrix-js-sdk';
 import {
   isPermissionGranted,
   requestPermission,
@@ -72,26 +71,36 @@ function hashStringToInt(str: string): number {
   return Math.abs(hash) % 2147483647;
 }
 
-export function extractMessagePreview(mEvent: MatrixEvent): string {
+export type NotificationMessageContent = {
+  msgtype?: string;
+  body?: string;
+};
+
+export type NotificationMessageEvent = {
+  getContent(): NotificationMessageContent;
+  isRedacted(): boolean;
+};
+
+export function extractMessagePreview(mEvent: NotificationMessageEvent): string {
   const content = mEvent.getContent();
   const msgtype = content?.msgtype;
   const body = content?.body;
 
   if (mEvent.isRedacted()) return 'Message deleted';
 
-  if (msgtype === MsgType.Text || msgtype === MsgType.Notice) {
+  if (msgtype === 'm.text' || msgtype === 'm.notice') {
     return body ? truncate(body, 100) : 'Sent a message';
   }
 
-  if (msgtype === MsgType.Emote) {
+  if (msgtype === 'm.emote') {
     return body ? truncate(`* ${body}`, 100) : 'Sent an emote';
   }
 
-  if (msgtype === MsgType.Image) return 'Sent an image';
-  if (msgtype === MsgType.Video) return 'Sent a video';
-  if (msgtype === MsgType.Audio) return 'Sent an audio';
-  if (msgtype === MsgType.File) return 'Sent a file';
-  if (msgtype === MsgType.Location) return 'Sent a location';
+  if (msgtype === 'm.image') return 'Sent an image';
+  if (msgtype === 'm.video') return 'Sent a video';
+  if (msgtype === 'm.audio') return 'Sent an audio';
+  if (msgtype === 'm.file') return 'Sent a file';
+  if (msgtype === 'm.location') return 'Sent a location';
 
   if (msgtype === 'm.bad.encrypted') return 'Unable to decrypt message';
 

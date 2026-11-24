@@ -67,7 +67,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
   const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, mx.getSafeUserId());
 
   const joinRuleEvent = useStateEvent(room, StateEvent.RoomJoinRules);
-  const content = joinRuleEvent?.getContent<RoomJoinRulesEventContent>();
+  const content = joinRuleEvent?.content as RoomJoinRulesEventContent | undefined;
   const rule: JoinRule = content?.join_rule ?? JoinRule.Invite;
 
   const joinRules: Array<ExtendedJoinRules> = useMemo(() => {

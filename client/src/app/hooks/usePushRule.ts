@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import {
   IPushRule,
   IPushRules,
@@ -7,6 +7,7 @@ import {
   PushRuleKind,
   RuleId,
 } from '../../types/matrix/pushRules';
+import { useCore } from './useCore';
 
 export type PushRuleData = {
   kind: PushRuleKind;
@@ -63,6 +64,15 @@ export const getPushRule = (
   });
 
   return ruleData;
+};
+
+export const usePushRules = (): IPushRules => {
+  const core = useCore();
+  const store = core.notifications.pushRules;
+  const { value } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const pushRules = value as unknown as IPushRules | null;
+
+  return useMemo(() => (pushRules?.global ? pushRules : { global: {} }), [pushRules]);
 };
 
 export const usePushRule = (

@@ -68,6 +68,7 @@ const useCanDropLobbyItem = (
   getRoom: (roomId: string) => Room | undefined
 ): CanDropCallback => {
   const mx = useMatrixClient();
+  const core = useCore();
 
   const canDropSpace: CanDropCallback = useCallback(
     (item, container) => {
@@ -80,7 +81,7 @@ const useCanDropLobbyItem = (
       const containerSpaceId = space.roomId;
 
       const powerLevels = roomsPowerLevels.get(containerSpaceId) ?? {};
-      const creators = getRoomCreatorsForRoomId(mx, containerSpaceId);
+      const creators = getRoomCreatorsForRoomId(core, containerSpaceId);
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
       if (
@@ -92,7 +93,7 @@ const useCanDropLobbyItem = (
 
       return true;
     },
-    [space, roomsPowerLevels, getRoom, mx]
+    [space, roomsPowerLevels, getRoom, mx, core]
   );
 
   const canDropRoom: CanDropCallback = useCallback(
@@ -107,7 +108,7 @@ const useCanDropLobbyItem = (
       // current space if can't change `m.room.join_rules` `content.allow`
       if (draggingOutsideSpace && restrictedItem) {
         const itemPowerLevels = roomsPowerLevels.get(item.roomId) ?? {};
-        const itemCreators = getRoomCreatorsForRoomId(mx, item.roomId);
+        const itemCreators = getRoomCreatorsForRoomId(core, item.roomId);
         const itemPermissions = getRoomPermissionsAPI(itemCreators, itemPowerLevels);
 
         const canChangeJoinRuleAllow = itemPermissions.stateEvent(
@@ -120,7 +121,7 @@ const useCanDropLobbyItem = (
       }
 
       const powerLevels = roomsPowerLevels.get(containerSpaceId) ?? {};
-      const creators = getRoomCreatorsForRoomId(mx, containerSpaceId);
+      const creators = getRoomCreatorsForRoomId(core, containerSpaceId);
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
       if (
         getRoom(containerSpaceId) === undefined ||
@@ -130,7 +131,7 @@ const useCanDropLobbyItem = (
       }
       return true;
     },
-    [mx, getRoom, roomsPowerLevels]
+    [mx, core, getRoom, roomsPowerLevels]
   );
 
   const canDrop: CanDropCallback = useCallback(
@@ -290,7 +291,7 @@ export function Lobby() {
             const parentPL = roomsPowerLevels.get(reorder.item.parentId);
             if (!parentPL) return false;
 
-            const creators = getRoomCreatorsForRoomId(mx, reorder.item.parentId);
+            const creators = getRoomCreatorsForRoomId(core, reorder.item.parentId);
             const permissions = getRoomPermissionsAPI(creators, parentPL);
             const canEdit = permissions.stateEvent(StateEvent.SpaceChild, mx.getSafeUserId());
             return canEdit && reorder.orderKey !== currentOrders[index];

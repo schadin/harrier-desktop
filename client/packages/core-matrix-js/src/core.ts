@@ -750,6 +750,56 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
 
+  const stateEntryStores = new Map<string, WritableSnapshotStore<RoomStateEntry | null>>();
+  const buildStateEntry = (
+    roomId: string,
+    eventType: string,
+    key: string
+  ): RoomStateEntry | null => {
+    const event = client.getRoom(roomId)?.currentState.getStateEvents(eventType, key);
+    if (!event) return null;
+    return {
+      stateKey: event.getStateKey() ?? '',
+      content: event.getContent() as JsonObject,
+      eventId: event.getId() ?? undefined,
+      sender: event.getSender() ?? undefined,
+      timestamp: event.getTs() ?? undefined,
+    };
+  };
+  const publishStateEntry = (roomId: string, eventType: string, key: string) => {
+    const store = stateEntryStores.get(stateKeyOf(roomId, eventType, key));
+    if (!store) return;
+    const next = buildStateEntry(roomId, eventType, key);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+
+  const stateEntriesStores = new Map<string, WritableSnapshotStore<readonly RoomStateEntry[]>>();
+  const buildStateEntries = (roomId: string): readonly RoomStateEntry[] => {
+    const entries: RoomStateEntry[] = [];
+    client.getRoom(roomId)?.currentState.events.forEach((stateKeyToEvents, eventType) => {
+      if (eventType === 'm.room.member') return;
+      stateKeyToEvents.forEach((event) => {
+        entries.push({
+          eventType,
+          stateKey: event.getStateKey() ?? '',
+          content: event.getContent() as JsonObject,
+          eventId: event.getId() ?? undefined,
+          sender: event.getSender() ?? undefined,
+          timestamp: event.getTs() ?? undefined,
+        });
+      });
+    });
+    return entries;
+  };
+  const publishStateEntries = (roomId: string) => {
+    const store = stateEntriesStores.get(roomId);
+    if (!store) return;
+    const next = buildStateEntries(roomId);
+    if (JSON.stringify(next) === JSON.stringify(store.getSnapshot().value)) return;
+    store.publish(next);
+  };
+
   const stateListStores = new Map<string, WritableSnapshotStore<readonly RoomStateEntry[]>>();
   const stateListKeyOf = (roomId: string, eventType: string) => `${roomId}|${eventType}`;
   const buildStateList = (roomId: string, eventType: string): readonly RoomStateEntry[] => {
@@ -898,6 +948,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       const [roomId, eventType, stateKey] = key.split('|');
       if (roomId && eventType && stateKey !== undefined) publishState(roomId, eventType, stateKey);
     });
+    stateEntryStores.forEach((_store, key) => {
+      const [roomId, eventType, stateKey] = key.split('|');
+      if (roomId && eventType && stateKey !== undefined) {
+        publishStateEntry(roomId, eventType, stateKey);
+      }
+    });
+    stateEntriesStores.forEach((_store, roomId) => publishStateEntries(roomId));
     stateListStores.forEach((_store, key) => {
       const [roomId, eventType] = key.split('|');
       if (roomId && eventType) publishStateList(roomId, eventType);
@@ -1298,6 +1355,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     })
     .catch(() => undefined);
 
+  const pushRulesStore = createSnapshotStore<JsonObject>({});
   const notificationPreferencesStore = createSnapshotStore<NotificationPreferencesView>({
     mute: [],
     specialMessages: [],
@@ -1317,9 +1375,11 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
 
   const refreshNotificationPreferences = async (): Promise<CoreResult<void>> => {
-    const content = client
+    const rawContent = client
       .getAccountData(EventType.PushRules)
       ?.getContent<{ global?: { override?: PushRule[]; room?: PushRule[] } }>();
+    pushRulesStore.publish((rawContent ?? {}) as JsonObject);
+    const content = rawContent;
     const isRoomId = (id: string) => /^!.*:.*$/.test(id);
     const mute = (content?.global?.override ?? [])
       .filter(
@@ -1503,6 +1563,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     capabilities: { calls: true, threads: true },
     auth: {
       session: sessionStore,
+      accessToken: () => client.getAccessToken() ?? null,
       capabilities: capabilitiesStore,
       authMetadata: authMetadataStore,
       accountDataTypes: globalAccountDataTypesStore,
@@ -1837,6 +1898,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (existing) return existing;
         const store = createSnapshotStore(buildState(roomId, eventType, stateKey));
         stateStores.set(key, store);
+        return store;
+      },
+      stateEntry(roomId, eventType, stateKey = '') {
+        const key = stateKeyOf(roomId, eventType, stateKey);
+        const existing = stateEntryStores.get(key);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildStateEntry(roomId, eventType, stateKey));
+        stateEntryStores.set(key, store);
+        return store;
+      },
+      stateEntries(roomId) {
+        const existing = stateEntriesStores.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildStateEntries(roomId));
+        stateEntriesStores.set(roomId, store);
         return store;
       },
       stateList(roomId, eventType) {
@@ -2373,7 +2449,44 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     },
     notifications: {
       preferences: notificationPreferencesStore,
+      pushRules: pushRulesStore,
       refreshPreferences: refreshNotificationPreferences,
+      async setPushRuleActions(kind, ruleId, actions) {
+        try {
+          await client.setPushRuleActions('global', kind as never, ruleId, actions as never);
+          return await refreshNotificationPreferences();
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async addPushRule(kind, ruleId, actions, options) {
+        try {
+          await client.addPushRule('global', kind as never, ruleId, {
+            actions: actions as never,
+            ...(options?.conditions ? { conditions: options.conditions as never } : {}),
+            ...(options?.pattern !== undefined ? { pattern: options.pattern } : {}),
+          });
+          return await refreshNotificationPreferences();
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async deletePushRule(kind, ruleId) {
+        try {
+          await client.deletePushRule('global', kind as never, ruleId);
+          return await refreshNotificationPreferences();
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      async setPusher(pusher) {
+        try {
+          await client.setPusher(pusher as never);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       async list(from, limit, onlyHighlight) {
         try {
           const response = await client.http.authedRequest<{

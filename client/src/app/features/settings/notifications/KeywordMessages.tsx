@@ -1,12 +1,10 @@
 import React, { ChangeEventHandler, FormEventHandler, useCallback, useMemo, useState } from 'react';
 import { Box, Text, Badge, Button, Input, config, IconButton, Icons, Icon, Spinner } from 'folds';
-import { IPushRule, IPushRules, PushRuleKind } from '../../../../types/matrix/pushRules';
-import { useAccountData } from '../../../hooks/useAccountData';
-import { AccountDataEvent } from '../../../../types/matrix/accountData';
+import { IPushRule, PushRuleKind } from '../../../../types/matrix/pushRules';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import {
   getNotificationModeActions,
   NotificationMode,
@@ -15,25 +13,29 @@ import {
 } from '../../../hooks/useNotificationMode';
 import { NotificationModeSwitcher } from './NotificationModeSwitcher';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
+import { usePushRules } from '../../../hooks/usePushRule';
 
 const NOTIFY_MODE_OPS: NotificationModeOptions = {
   highlight: true,
 };
 
 function KeywordInput() {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [keyword, setKeyword] = useState<string>('');
 
   const [keywordState, addKeyword] = useAsyncCallback(
     useCallback(
       async (k: string) => {
-        mx.addPushRule('global', PushRuleKind.ContentSpecific, k, {
-          actions: getNotificationModeActions(NotificationMode.Notify, NOTIFY_MODE_OPS),
-          pattern: k,
-        });
+        const result = await core.notifications.addPushRule(
+          PushRuleKind.ContentSpecific,
+          k,
+          getNotificationModeActions(NotificationMode.Notify, NOTIFY_MODE_OPS),
+          { pattern: k }
+        );
+        if (!result.ok) throw result.error;
         setKeyword('');
       },
-      [mx]
+      [core]
     )
   );
   const addingKeyword = keywordState.status === AsyncStatus.Loading;
@@ -108,12 +110,15 @@ type PushRulesProps = {
 };
 
 function KeywordCross({ pushRule }: PushRulesProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [removeState, remove] = useAsyncCallback(
-    useCallback(
-      () => mx.deletePushRule('global', PushRuleKind.ContentSpecific, pushRule.rule_id),
-      [mx, pushRule]
-    )
+    useCallback(async () => {
+      const result = await core.notifications.deletePushRule(
+        PushRuleKind.ContentSpecific,
+        pushRule.rule_id
+      );
+      if (!result.ok) throw result.error;
+    }, [core, pushRule])
   );
 
   const removing = removeState.status === AsyncStatus.Loading;
@@ -125,32 +130,28 @@ function KeywordCross({ pushRule }: PushRulesProps) {
 }
 
 function KeywordModeSwitcher({ pushRule }: PushRulesProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   const getModeActions = useNotificationModeActions(NOTIFY_MODE_OPS);
 
   const handleChange = useCallback(
     async (mode: NotificationMode) => {
       const actions = getModeActions(mode);
-      await mx.setPushRuleActions(
-        'global',
+      const result = await core.notifications.setPushRuleActions(
         PushRuleKind.ContentSpecific,
         pushRule.rule_id,
         actions
       );
+      if (!result.ok) throw result.error;
     },
-    [mx, getModeActions, pushRule]
+    [core, getModeActions, pushRule]
   );
 
   return <NotificationModeSwitcher pushRule={pushRule} onChange={handleChange} />;
 }
 
 export function KeywordMessagesNotifications() {
-  const pushRulesEvt = useAccountData(AccountDataEvent.PushRules);
-  const pushRules = useMemo(
-    () => (pushRulesEvt as IPushRules | null) ?? { global: {} },
-    [pushRulesEvt]
-  );
+  const pushRules = usePushRules();
 
   const keywordPushRules = useMemo(() => {
     const content = pushRules.global.content ?? [];

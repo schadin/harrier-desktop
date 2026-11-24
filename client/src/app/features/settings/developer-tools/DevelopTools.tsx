@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import type { JsonObject } from '@harrier/core';
 import { Box, Text, IconButton, Icon, Icons, Scroll, Switch, Button } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -6,7 +7,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import {
   AccountDataEditor,
   AccountDataSubmitCallback,
@@ -14,24 +15,21 @@ import {
 import { copyToClipboard } from '../../../utils/dom';
 import { AccountData } from './AccountData';
 
-type AccountDataClient = ReturnType<typeof useMatrixClient>;
-type WritableAccountDataEventType = Parameters<AccountDataClient['setAccountData']>[0];
-type AccountDataEventType = Parameters<AccountDataClient['getAccountData']>[0];
-
 type DeveloperToolsProps = {
   requestClose: () => void;
 };
 export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [developerTools, setDeveloperTools] = useSetting(settingsAtom, 'developerTools');
   const [expand, setExpend] = useState(false);
   const [accountDataType, setAccountDataType] = useState<string | null>();
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      await mx.setAccountData(type as WritableAccountDataEventType, content);
+      const result = await core.auth.setAccountData(type, content as JsonObject);
+      if (!result.ok) throw result.error;
     },
-    [mx]
+    [core]
   );
 
   if (accountDataType !== undefined) {
@@ -40,7 +38,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
         type={accountDataType ?? undefined}
         content={
           accountDataType
-            ? mx.getAccountData(accountDataType as AccountDataEventType)?.getContent()
+            ? core.auth.accountData(accountDataType).getSnapshot().value ?? undefined
             : undefined
         }
         submitChange={submitAccountData}
@@ -101,7 +99,7 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                       after={
                         <Button
                           onClick={() =>
-                            copyToClipboard(mx.getAccessToken() ?? '<NO_ACCESS_TOKEN_FOUND>')
+                            copyToClipboard(core.auth.accessToken() ?? '<NO_ACCESS_TOKEN_FOUND>')
                           }
                           variant="Secondary"
                           fill="Soft"

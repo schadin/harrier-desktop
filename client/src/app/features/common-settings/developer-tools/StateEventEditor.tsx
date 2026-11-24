@@ -259,7 +259,7 @@ export function StateEventEditor({ type, stateKey, requestClose }: StateEventEdi
 
   const eventJSONStr = useMemo(() => {
     if (!stateEvent) return '';
-    return JSON.stringify(stateEvent.event, null, EDITOR_INTENT_SPACE_COUNT);
+    return JSON.stringify(stateEvent.content, null, EDITOR_INTENT_SPACE_COUNT);
   }, [stateEvent]);
 
   const handleCloseEdit = useCallback(() => {
@@ -297,7 +297,7 @@ export function StateEventEditor({ type, stateKey, requestClose }: StateEventEdi
           />
         ) : (
           <StateEventView
-            content={stateEvent?.getContent() ?? {}}
+            content={stateEvent?.content ?? {}}
             onEditContent={canEdit ? setEditContent : undefined}
             eventJSONStr={eventJSONStr}
           />

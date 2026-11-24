@@ -29,7 +29,7 @@ import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useCore } from '../../hooks/useCore';
 import { useRoomUnread } from '../../state/hooks/unread';
 import { roomToUnreadAtom } from '../../state/room/roomToUnread';
-import { getPowersLevelFromMatrixEvent, usePowerLevels } from '../../hooks/usePowerLevels';
+import { getPowersLevelFromContent, usePowerLevels } from '../../hooks/usePowerLevels';
 import { copyToClipboard } from '../../utils/dom';
 import { markAsRead } from '../../utils/notifications';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -259,6 +259,7 @@ export function RoomNavItem({
   linkPath,
 }: RoomNavItemProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const [hover, setHover] = useState(false);
   const { hoverProps } = useHover({ onHoverChange: setHover });
@@ -297,8 +298,8 @@ export function RoomNavItem({
 
   const handleStartCall: MouseEventHandler<HTMLAnchorElement> = (evt) => {
     const powerLevelsEvent = getStateEvent(room, StateEvent.RoomPowerLevels);
-    const powerLevels = getPowersLevelFromMatrixEvent(powerLevelsEvent);
-    const creators = getRoomCreatorsForRoomId(mx, room.roomId);
+    const powerLevels = getPowersLevelFromContent(powerLevelsEvent?.getContent());
+    const creators = getRoomCreatorsForRoomId(core, room.roomId);
     const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
     const hasCallPermission = permissions.stateEvent(
