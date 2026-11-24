@@ -45,6 +45,8 @@ jobs:
         run: cd client && npm run typecheck
       - name: Test client
         run: cd client && npm test
+      - name: Build client for Rust tests
+        run: cd client && npm run build
       - name: Test Tauri
         run: cd src-tauri && cargo test
       - name: Build desktop app with Tauri
