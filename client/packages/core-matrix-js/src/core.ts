@@ -2374,6 +2374,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       config: mediaConfigStore,
       authenticated: mediaAuthenticatedStore,
       refreshConfig: refreshMediaConfig,
+      url(ref, options) {
+        if (ref.encrypted) return null;
+        return (
+          client.mxcUrlToHttp(
+            ref.mxcUrl,
+            ref.width,
+            ref.height,
+            ref.resizeMethod,
+            options?.allowDirectLinks,
+            options?.allowRedirects,
+            options?.useAuthentication ?? mediaAuthenticatedStore.getSnapshot().value
+          ) || null
+        );
+      },
       async resolve(ref) {
         try {
           const url = client.mxcUrlToHttp(

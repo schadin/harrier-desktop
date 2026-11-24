@@ -27,4 +27,42 @@ export const mediaCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest('media URL is a synchronous HTTP(S) URL', async (harness) => {
+    const core = await harness.create();
+    try {
+      const url = core.media.url({ mxcUrl: 'mxc://example.org/file' });
+      expect(typeof url).toBe('string');
+      expect(url).toMatch(/^https?:\/\//);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('media URL returns null for an invalid MXC', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(core.media.url({ mxcUrl: 'not-an-mxc' })).toBeNull();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('media URL does not bypass encrypted attachment decryption', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(
+        core.media.url({
+          mxcUrl: 'mxc://example.org/file',
+          encrypted: {
+            url: 'mxc://example.org/file',
+            key: { kty: 'oct', k: 'secret' },
+            iv: 'initialization-vector',
+          },
+        })
+      ).toBeNull();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
 ];

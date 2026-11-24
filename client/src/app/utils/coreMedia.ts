@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import type { HarrierCore, MediaRef, MediaResizeMethod } from '@harrier/core';
+import type { HarrierCore, MediaRef, MediaResizeMethod, MediaUrlOptions } from '@harrier/core';
 import { useCore } from '../hooks/useCore';
 
 export type MediaRefOptions = {
@@ -31,6 +31,15 @@ export const toMediaRef = (mxcUrl: string, options: MediaRefOptions = {}): Media
       }
     : {}),
 });
+
+export const resolveMediaUrl = (
+  core: HarrierCore,
+  ref: MediaRef,
+  options?: MediaUrlOptions
+): string | null => core.media.url(ref, options);
+
+export const useMediaUrl = (ref: MediaRef, options?: MediaUrlOptions): string | null =>
+  resolveMediaUrl(useCore(), ref, options);
 
 export const loadMediaSrc = async (core: HarrierCore, ref: MediaRef): Promise<string> => {
   const result = await core.media.resolve(ref);

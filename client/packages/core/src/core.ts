@@ -265,9 +265,16 @@ export type BackupModule = {
   retryDecryption(): Promise<CoreResult<void>>;
 };
 
+export type MediaUrlOptions = {
+  readonly useAuthentication?: boolean;
+  readonly allowDirectLinks?: boolean;
+  readonly allowRedirects?: boolean;
+};
+
 export type MediaModule = {
   readonly config: SnapshotStore<MediaConfigView>;
   readonly authenticated: SnapshotStore<boolean>;
+  url(ref: MediaRef, options?: MediaUrlOptions): string | null;
   resolve(ref: MediaRef): Promise<CoreResult<MediaSourceView>>;
   thumbnail(ref: MediaRef): Promise<CoreResult<MediaSourceView>>;
   download(ref: MediaRef, filename: string): Promise<CoreResult<Blob>>;
