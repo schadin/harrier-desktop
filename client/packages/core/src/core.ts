@@ -23,6 +23,9 @@ import type {
   LoginFlowsView,
   LoginRequestView,
   LoginResponseView,
+  PasswordResetResultView,
+  RegistrationResultView,
+  RequestTokenView,
   NotificationPreferencesView,
   NotificationPageView,
   ServerDiscoveryView,
@@ -53,6 +56,27 @@ export type AuthOperations = {
   discover(server: string): Promise<CoreResult<ServerDiscoveryView | null>>;
   login(baseUrl: string, request: LoginRequestView): Promise<CoreResult<LoginResponseView>>;
   loginFlows(baseUrl: string): Promise<CoreResult<LoginFlowsView>>;
+  register(baseUrl: string, request: LoginRequestView): Promise<CoreResult<RegistrationResultView>>;
+  requestEmailToken(
+    baseUrl: string,
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+    nextLink?: string
+  ): Promise<CoreResult<RequestTokenView>>;
+  requestRegisterEmailToken(
+    baseUrl: string,
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+    nextLink?: string
+  ): Promise<CoreResult<RequestTokenView>>;
+  setPassword(
+    baseUrl: string,
+    auth: JsonObject,
+    newPassword: string,
+    logoutDevices: boolean
+  ): Promise<CoreResult<PasswordResetResultView>>;
   ssoUrl(
     baseUrl: string,
     redirectUrl: string,

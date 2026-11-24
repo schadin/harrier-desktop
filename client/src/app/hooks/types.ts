@@ -1,9 +1,9 @@
-import { IRequestTokenResponse } from 'matrix-js-sdk';
+import type { RequestTokenView } from '@harrier/core';
 
 export type RequestEmailTokenResponse = {
   email: string;
   clientSecret: string;
-  result: IRequestTokenResponse;
+  result: RequestTokenView;
 };
 export type RequestEmailTokenCallback = (
   email: string,

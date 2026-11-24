@@ -1,24 +1,21 @@
+import type { LoginFlowView } from '@harrier/core';
 import { useMemo } from 'react';
-import { ILoginFlow, IPasswordFlow, ISSOFlow, LoginFlow } from 'matrix-js-sdk/lib/@types/auth';
 
-export const getSSOFlow = (loginFlows: LoginFlow[]): ISSOFlow | undefined =>
-  loginFlows.find((flow) => flow.type === 'm.login.sso' || flow.type === 'm.login.cas') as
-    | ISSOFlow
-    | undefined;
+export const getSSOFlow = (loginFlows: readonly LoginFlowView[]): LoginFlowView | undefined =>
+  loginFlows.find((flow) => flow.type === 'm.login.sso' || flow.type === 'm.login.cas');
 
-export const getPasswordFlow = (loginFlows: LoginFlow[]): IPasswordFlow | undefined =>
-  loginFlows.find((flow) => flow.type === 'm.login.password') as IPasswordFlow;
-export const getTokenFlow = (loginFlows: LoginFlow[]): LoginFlow | undefined =>
-  loginFlows.find((flow) => flow.type === 'm.login.token') as ILoginFlow & {
-    type: 'm.login.token';
-  };
+export const getPasswordFlow = (loginFlows: readonly LoginFlowView[]): LoginFlowView | undefined =>
+  loginFlows.find((flow) => flow.type === 'm.login.password');
+
+export const getTokenFlow = (loginFlows: readonly LoginFlowView[]): LoginFlowView | undefined =>
+  loginFlows.find((flow) => flow.type === 'm.login.token');
 
 export type ParsedLoginFlows = {
-  password?: LoginFlow;
-  token?: LoginFlow;
-  sso?: ISSOFlow;
+  password?: LoginFlowView;
+  token?: LoginFlowView;
+  sso?: LoginFlowView;
 };
-export const useParsedLoginFlows = (loginFlows: LoginFlow[]) => {
+export const useParsedLoginFlows = (loginFlows: readonly LoginFlowView[]) => {
   const parsedFlow: ParsedLoginFlows = useMemo<ParsedLoginFlows>(
     () => ({
       password: getPasswordFlow(loginFlows),

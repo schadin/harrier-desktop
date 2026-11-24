@@ -1,30 +1,35 @@
-import { MatrixClient, MatrixError } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
+import { createAuthOperations } from '@harrier/core-matrix-js';
 import { useCallback, useRef } from 'react';
 import { AsyncState, useAsyncCallback } from './useAsyncCallback';
 import { RequestEmailTokenCallback, RequestEmailTokenResponse } from './types';
 
-export const usePasswordEmail = (
-  mx: MatrixClient
-): [AsyncState<RequestEmailTokenResponse, MatrixError>, RequestEmailTokenCallback] => {
-  const sendAttemptRef = useRef(1);
+const authOperations = createAuthOperations();
 
+export const usePasswordEmail = (
+  baseUrl: string
+): [AsyncState<RequestEmailTokenResponse, CoreError>, RequestEmailTokenCallback] => {
+  const sendAttemptRef = useRef(1);
   const passwordEmailCallback: RequestEmailTokenCallback = useCallback(
     async (email, clientSecret, nextLink) => {
       const sendAttempt = sendAttemptRef.current;
       sendAttemptRef.current += 1;
-      const result = await mx.requestPasswordEmailToken(email, clientSecret, sendAttempt, nextLink);
-      return {
+      const result = await authOperations.requestEmailToken(
+        baseUrl,
         email,
         clientSecret,
-        result,
-      };
+        sendAttempt,
+        nextLink
+      );
+      if (!result.ok) throw result.error;
+      return { email, clientSecret, result: result.value };
     },
-    [mx]
+    [baseUrl]
   );
 
   const [passwordEmailState, passwordEmail] = useAsyncCallback<
     RequestEmailTokenResponse,
-    MatrixError,
+    CoreError,
     Parameters<RequestEmailTokenCallback>
   >(passwordEmailCallback);
 

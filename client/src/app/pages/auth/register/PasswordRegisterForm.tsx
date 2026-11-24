@@ -10,15 +10,9 @@ import {
   Text,
   color,
 } from 'folds';
-import React, { ChangeEventHandler, useCallback, useMemo, useState } from 'react';
-import {
-  AuthDict,
-  IAuthData,
-  MatrixError,
-  RegisterRequest,
-  UIAFlow,
-  createClient,
-} from 'matrix-js-sdk';
+import React, { ChangeEventHandler, useCallback, useState } from 'react';
+import { AuthDict, IAuthData, UIAFlow } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
 import { PasswordInput } from '../../../components/password-input';
 import {
   getLoginTermUrl,
@@ -42,6 +36,8 @@ import { useRegisterEmail } from '../../../hooks/useRegisterEmail';
 import { ConfirmPasswordMatch } from '../../../components/ConfirmPasswordMatch';
 import { UIAFlowOverlay } from '../../../components/UIAFlowOverlay';
 import { RequestEmailTokenCallback, RequestEmailTokenResponse } from '../../../hooks/types';
+
+export type RegisterRequestData = { type?: string; [key: string]: unknown };
 
 export const SUPPORTED_REGISTER_STAGES = [
   'm.login.registration_token',
@@ -84,9 +80,9 @@ type RegisterUIAFlowProps = {
   formData: FormData;
   flow: UIAFlow;
   authData: IAuthData;
-  registerEmailState: AsyncState<RequestEmailTokenResponse, MatrixError>;
+  registerEmailState: AsyncState<RequestEmailTokenResponse, CoreError>;
   registerEmail: RequestEmailTokenCallback;
-  onRegister: (registerReqData: RegisterRequest) => void;
+  onRegister: (registerReqData: RegisterRequestData) => void;
 };
 function RegisterUIAFlow({
   formData,
@@ -185,20 +181,19 @@ export function PasswordRegisterForm({
 }: PasswordRegisterFormProps) {
   const serverDiscovery = useAutoDiscoveryInfo();
   const baseUrl = serverDiscovery['m.homeserver'].base_url;
-  const mx = useMemo(() => createClient({ baseUrl }), [baseUrl]);
   const params = useUIAParams(authData);
   const termUrl = getLoginTermUrl(params);
   const [formData, setFormData] = useState<FormData>();
 
   const [ongoingFlow, setOngoingFlow] = useState<UIAFlow>();
 
-  const [registerEmailState, registerEmail] = useRegisterEmail(mx);
+  const [registerEmailState, registerEmail] = useRegisterEmail(baseUrl);
 
   const [registerState, handleRegister] = useAsyncCallback<
     RegisterResult,
-    MatrixError,
-    [RegisterRequest]
-  >(useCallback(async (registerReqData) => register(mx, registerReqData), [mx]));
+    CoreError,
+    [RegisterRequestData]
+  >(useCallback(async (registerReqData) => register(baseUrl, registerReqData), [baseUrl]));
   const [ongoingAuthData, customRegisterResp] =
     registerState.status === AsyncStatus.Success ? registerState.data : [];
   const registerError =
@@ -237,7 +232,9 @@ export function PasswordRegisterForm({
       token,
       email,
       terms,
-      clientSecret: mx.generateClientSecret(),
+      clientSecret: Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
+        value.toString(16).padStart(2, '0')
+      ).join(''),
     };
     const pickedStages = pickStages(uiaFlows, fData);
     const pickedFlow = getUIAFlowForStages(uiaFlows, pickedStages);
@@ -297,7 +294,7 @@ export function PasswordRegisterForm({
                 {registerError?.errcode === RegisterError.PasswordWeak && (
                   <FieldError
                     message={
-                      registerError.data.error ??
+                      (registerError.data as { error?: string })?.error ??
                       'Weak Password. Password rejected by server please choosing more strong Password.'
                     }
                   />
@@ -305,7 +302,7 @@ export function PasswordRegisterForm({
                 {registerError?.errcode === RegisterError.PasswordShort && (
                   <FieldError
                     message={
-                      registerError.data.error ??
+                      (registerError.data as { error?: string })?.error ??
                       'Short Password. Password rejected by server please choosing more long Password.'
                     }
                   />
@@ -387,7 +384,12 @@ export function PasswordRegisterForm({
           <FieldError message="Failed to register. Invalid request." />
         )}
         {registerError?.errcode === RegisterError.Unknown && (
-          <FieldError message={registerError.data.error ?? 'Failed to register. Unknown Reason.'} />
+          <FieldError
+            message={
+              (registerError.data as { error?: string })?.error ??
+              'Failed to register. Unknown Reason.'
+            }
+          />
         )}
         <span data-spacing-node />
         <Button variant="Primary" size="500" type="submit">

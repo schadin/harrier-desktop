@@ -1,6 +1,5 @@
 import { createContext, useContext } from 'react';
-import { IAuthData, MatrixError } from 'matrix-js-sdk';
-import { ILoginFlowsResponse } from 'matrix-js-sdk/lib/@types/auth';
+import type { CoreError, JsonObject, LoginFlowsView } from '@harrier/core';
 
 export enum RegisterFlowStatus {
   FlowRequired = 401,
@@ -12,37 +11,29 @@ export enum RegisterFlowStatus {
 export type RegisterFlowsResponse =
   | {
       status: RegisterFlowStatus.FlowRequired;
-      data: IAuthData;
+      data: JsonObject;
     }
   | {
       status: Exclude<RegisterFlowStatus, RegisterFlowStatus.FlowRequired>;
     };
 
-export const parseRegisterErrResp = (matrixError: MatrixError): RegisterFlowsResponse => {
-  switch (matrixError.httpStatus) {
-    case RegisterFlowStatus.InvalidRequest: {
+export const parseRegisterErrResp = (error: CoreError): RegisterFlowsResponse => {
+  switch (error.httpStatus) {
+    case RegisterFlowStatus.InvalidRequest:
       return { status: RegisterFlowStatus.InvalidRequest };
-    }
-    case RegisterFlowStatus.RateLimited: {
+    case RegisterFlowStatus.RateLimited:
       return { status: RegisterFlowStatus.RateLimited };
-    }
-    case RegisterFlowStatus.RegistrationDisabled: {
+    case RegisterFlowStatus.RegistrationDisabled:
       return { status: RegisterFlowStatus.RegistrationDisabled };
-    }
-    case RegisterFlowStatus.FlowRequired: {
-      return {
-        status: RegisterFlowStatus.FlowRequired,
-        data: matrixError.data as IAuthData,
-      };
-    }
-    default: {
+    case RegisterFlowStatus.FlowRequired:
+      return { status: RegisterFlowStatus.FlowRequired, data: (error.data ?? {}) as JsonObject };
+    default:
       return { status: RegisterFlowStatus.InvalidRequest };
-    }
   }
 };
 
 export type AuthFlows = {
-  loginFlows: ILoginFlowsResponse;
+  loginFlows: LoginFlowsView;
   registerFlows: RegisterFlowsResponse;
 };
 

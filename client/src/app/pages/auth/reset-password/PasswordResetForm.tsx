@@ -1,4 +1,4 @@
-import React, { FormEventHandler, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FormEventHandler, useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -14,7 +14,8 @@ import {
 } from 'folds';
 import { useNavigate } from 'react-router-dom';
 import FocusTrap from 'focus-trap-react';
-import { AuthDict, MatrixError, createClient } from 'matrix-js-sdk';
+import { AuthDict } from 'matrix-js-sdk';
+import type { CoreError, JsonObject } from '@harrier/core';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { useAuthServer } from '../../../hooks/useAuthServer';
@@ -79,17 +80,21 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
 
   const serverDiscovery = useAutoDiscoveryInfo();
   const baseUrl = serverDiscovery['m.homeserver'].base_url;
-  const mx = useMemo(() => createClient({ baseUrl }), [baseUrl]);
 
   const [formData, setFormData] = useState<FormData>();
 
-  const [passwordEmailState, passwordEmail] = usePasswordEmail(mx);
+  const [passwordEmailState, passwordEmail] = usePasswordEmail(baseUrl);
 
   const [resetPasswordState, handleResetPassword] = useAsyncCallback<
     ResetPasswordResult,
-    MatrixError,
+    CoreError,
     [AuthDict, string]
-  >(useCallback(async (authDict, newPassword) => resetPassword(mx, authDict, newPassword), [mx]));
+  >(
+    useCallback(
+      async (authDict, newPassword) => resetPassword(baseUrl, authDict as JsonObject, newPassword),
+      [baseUrl]
+    )
+  );
 
   const [ongoingAuthData, resetPasswordResult] =
     resetPasswordState.status === AsyncStatus.Success ? resetPasswordState.data : [];
@@ -142,7 +147,9 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
     }
     if (password !== confirmPassword) return;
 
-    const clientSecret = mx.generateClientSecret();
+    const clientSecret = Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
+      value.toString(16).padStart(2, '0')
+    ).join('');
     passwordEmail(email, clientSecret);
     setFormData({
       email,
@@ -184,7 +191,9 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
         />
         {passwordEmailState.status === AsyncStatus.Error && (
           <FieldError
-            message={`${passwordEmailState.error.errcode}: ${passwordEmailState.error.data?.error}`}
+            message={`${passwordEmailState.error.errcode}: ${
+              (passwordEmailState.error.data as { error?: string })?.error
+            }`}
           />
         )}
       </Box>
@@ -226,7 +235,7 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
       {resetPasswordError && (
         <FieldError
           message={`${resetPasswordError.errcode}: ${
-            resetPasswordError.data?.error ?? 'Failed to reset password.'
+            (resetPasswordError.data as { error?: string })?.error ?? 'Failed to reset password.'
           }`}
         />
       )}
@@ -246,7 +255,7 @@ export function PasswordResetForm({ defaultEmail }: PasswordResetFormProps) {
               type: 'm.login.email.identity',
               errorCode: flowErrorCode,
               error: flowError,
-              session: ongoingAuthData?.session,
+              session: ongoingAuthData?.session as string | undefined,
             }}
             submitAuthDict={handleSubmitRequest}
             email={formData.email}

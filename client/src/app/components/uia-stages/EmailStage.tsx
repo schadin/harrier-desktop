@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, FormEventHandler } from 'react';
 import { Dialog, Text, Box, Button, config, Input, color, Spinner } from 'folds';
-import { MatrixError } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
 import { StageComponentProps } from './types';
 import { AsyncState, AsyncStatus } from '../../hooks/useAsyncCallback';
 import { RequestEmailTokenCallback, RequestEmailTokenResponse } from '../../hooks/types';
@@ -77,7 +77,7 @@ export function EmailStageDialog({
 }: StageComponentProps & {
   email?: string;
   clientSecret: string;
-  emailTokenState: AsyncState<RequestEmailTokenResponse, MatrixError>;
+  emailTokenState: AsyncState<RequestEmailTokenResponse, CoreError>;
   requestEmailToken: RequestEmailTokenCallback;
 }) {
   const { errorCode, error, session } = stageData;
@@ -125,7 +125,7 @@ export function EmailStageDialog({
       <EmailErrorDialog
         title={emailTokenState.error.errcode ?? 'Verify Email'}
         message={
-          emailTokenState.error?.data?.error ??
+          (emailTokenState.error.data as { error?: string } | undefined)?.error ??
           emailTokenState.error.message ??
           'Failed to send verification Email request.'
         }

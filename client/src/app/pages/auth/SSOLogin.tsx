@@ -5,7 +5,7 @@ import React from 'react';
 import { useAutoDiscoveryInfo } from '../../hooks/useAutoDiscoveryInfo';
 
 type SSOLoginProps = {
-  providers?: IdentityProviderView[];
+  providers?: readonly IdentityProviderView[];
   redirectUrl: string;
   action?: SsoActionView;
   saveScreenSpace?: boolean;

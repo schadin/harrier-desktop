@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Text, color } from 'folds';
 import { Link, useSearchParams } from 'react-router-dom';
-import { SSOAction } from 'matrix-js-sdk';
+import type { IAuthData, UIAFlow } from 'matrix-js-sdk';
 import { useAuthServer } from '../../../hooks/useAuthServer';
 import { RegisterFlowStatus, useAuthFlows } from '../../../hooks/useAuthFlows';
 import { useParsedLoginFlows } from '../../../hooks/useParsedLoginFlows';
@@ -56,7 +56,7 @@ export function Register() {
       {registerFlows.status === RegisterFlowStatus.FlowRequired && (
         <>
           <SupportedUIAFlowsLoader
-            flows={registerFlows.data.flows ?? []}
+            flows={(registerFlows.data.flows ?? []) as unknown as UIAFlow[]}
             supportedStages={SUPPORTED_REGISTER_STAGES}
           >
             {(supportedFlows) =>
@@ -66,7 +66,7 @@ export function Register() {
                 </Text>
               ) : (
                 <PasswordRegisterForm
-                  authData={registerFlows.data}
+                  authData={registerFlows.data as unknown as IAuthData}
                   uiaFlows={supportedFlows}
                   defaultUsername={registerSearchParams.username}
                   defaultEmail={registerSearchParams.email}
@@ -84,7 +84,7 @@ export function Register() {
           <SSOLogin
             providers={sso.identity_providers}
             redirectUrl={ssoRedirectUrl}
-            action={SSOAction.REGISTER}
+            action="register"
             saveScreenSpace={registerFlows.status === RegisterFlowStatus.FlowRequired}
           />
           <span data-spacing-node />

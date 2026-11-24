@@ -171,7 +171,7 @@ export type LoginFlowsView = {
 };
 
 export type LoginRequestView = {
-  readonly type: string;
+  readonly type?: string;
   readonly [key: string]: unknown;
 };
 
@@ -179,6 +179,27 @@ export type LoginResponseView = {
   readonly accessToken: string;
   readonly deviceId: string;
   readonly userId: string;
+};
+
+export type RegisterResponseView = {
+  readonly userId: string;
+  readonly accessToken?: string;
+  readonly deviceId?: string;
+};
+
+export type RequestTokenView = {
+  readonly sid: string;
+  readonly submitUrl?: string;
+};
+
+export type RegistrationResultView = {
+  readonly auth?: JsonObject;
+  readonly response?: RegisterResponseView;
+};
+
+export type PasswordResetResultView = {
+  readonly auth?: JsonObject;
+  readonly response?: JsonObject;
 };
 
 export type SsoActionView = 'login' | 'register';
