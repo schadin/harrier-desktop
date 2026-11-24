@@ -359,10 +359,6 @@ export type TimelineEventHandler = (
   }
 ) => void;
 
-export type EventTimelineSetHandlerMap = {
-  'Room.timeline': TimelineEventHandler;
-};
-
 export type MatrixClientCallEventMap = {
   event: (event: MatrixEventLike) => void;
   toDeviceEvent: (event: MatrixEventLike) => void;

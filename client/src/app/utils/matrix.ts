@@ -8,14 +8,11 @@ import { IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/co
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   EventTimelineDirection,
-  LegacyMatrixError,
   MatrixClientLike,
   MatrixErrorLike,
   MatrixEventLike,
   RoomLike,
   RoomMemberLike,
-  UploadProgressLike,
-  UploadResponseLike,
 } from '../../types/matrix/legacyStructural';
 import { getStateEvent } from './room';
 import { Membership, StateEvent } from '../../types/matrix/room';
@@ -135,45 +132,6 @@ export const decryptFile = async (
 };
 
 export type TUploadContent = File | Blob;
-
-export type ContentUploadOptions = {
-  name?: string;
-  fileType?: string;
-  hideFilename?: boolean;
-  onPromise?: (promise: Promise<UploadResponseLike>) => void;
-  onProgress?: (progress: UploadProgressLike) => void;
-  onSuccess: (mxc: string) => void;
-  onError: (error: MatrixErrorLike) => void;
-};
-
-export const uploadContent = async (
-  mx: MatrixClientLike,
-  file: TUploadContent,
-  options: ContentUploadOptions
-) => {
-  const { name, fileType, hideFilename, onProgress, onPromise, onSuccess, onError } = options;
-
-  const uploadPromise = mx.uploadContent(file, {
-    name,
-    type: fileType,
-    includeFilename: !hideFilename,
-    progressHandler: onProgress,
-  });
-  onPromise?.(uploadPromise);
-  try {
-    const data = await uploadPromise;
-    const mxc = data.content_uri;
-    if (mxc) onSuccess(mxc);
-    else onError(new LegacyMatrixError(data));
-  } catch (e: any) {
-    const error = typeof e?.message === 'string' ? e.message : undefined;
-    const errcode = typeof e?.name === 'string' ? e.message : undefined;
-    onError(new LegacyMatrixError({ error, errcode }));
-  }
-};
-
-export const matrixEventByRecency = (m1: MatrixEventLike, m2: MatrixEventLike) =>
-  m2.getTs() - m1.getTs();
 
 export const factoryEventSentBy = (senderId: string) => (ev: MatrixEventLike) =>
   ev.getSender() === senderId;
@@ -311,16 +269,6 @@ export const downloadMedia = async (src: string): Promise<Blob> => {
   const res = await fetch(src, { method: 'GET' });
   const blob = await res.blob();
   return blob;
-};
-
-export const downloadEncryptedMedia = async (
-  src: string,
-  decryptContent: (buf: ArrayBuffer) => Promise<Blob>
-): Promise<Blob> => {
-  const encryptedContent = await downloadMedia(src);
-  const decryptedContent = await decryptContent(await encryptedContent.arrayBuffer());
-
-  return decryptedContent;
 };
 
 export const rateLimitedActions = async <T, R = void>(

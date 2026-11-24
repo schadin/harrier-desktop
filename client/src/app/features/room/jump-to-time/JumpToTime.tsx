@@ -20,7 +20,6 @@ import {
   RectCords,
 } from 'folds';
 import { CoreError } from '@harrier/core';
-import type { EventTimelineDirection } from '../../../../types/matrix/legacyStructural';
 import { useCore } from '../../../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -35,7 +34,6 @@ import { settingsAtom } from '../../../state/settings';
 import { findCoreTimelineEvent } from './jumpToTime';
 
 const TIMELINE_PAGE_SIZE = 80;
-const FORWARD_DIRECTION: EventTimelineDirection = 'f';
 
 type JumpToTimeProps = {
   onCancel: () => void;
@@ -82,7 +80,6 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
             const event = findCoreTimelineEvent(timeline.items, newTs);
             if (!event) throw new CoreError('not-found', `No event found in ${room.roomId}`);
             if (event.timestamp >= newTs || !timeline.hasBackwardHistory) return event.eventId;
-            if (FORWARD_DIRECTION !== 'f') return event.eventId;
             if (event.eventId === previousFirstEventId) {
               throw new CoreError(
                 'not-found',

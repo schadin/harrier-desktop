@@ -1,10 +1,8 @@
 import { IconName, IconSrc } from 'folds';
 
 import type { TimelineItem } from '@harrier/core';
-import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   EventTimelineDirection,
-  EventTimelineLike,
   EventTimelineSetLike,
   EventType,
   IMentions,
@@ -12,22 +10,11 @@ import {
   JoinRule,
   MatrixClientLike,
   MatrixEventLike,
-  NotificationCountType,
   RelationType,
   RoomLike,
-  RoomMemberLike,
 } from '../../types/matrix/legacyStructural';
 import { MsgType } from '../../types/matrix/protocol';
-import { IPushRule, IPushRules } from '../../types/matrix/pushRules';
-import {
-  IRoomCreateContent,
-  Membership,
-  NotificationType,
-  RoomToParents,
-  RoomType,
-  StateEvent,
-  UnreadInfo,
-} from '../../types/matrix/room';
+import { IRoomCreateContent, RoomToParents, RoomType, StateEvent } from '../../types/matrix/room';
 
 type EventFromRoomState<S> = S extends {
   getStateEvents(eventType: string, stateKey: string): infer E;
@@ -68,59 +55,6 @@ export const getStateEvents = <R extends RoomLike>(
   (room.getLiveTimeline().getState(EventTimelineDirection.FORWARDS)?.getStateEvents(eventType) ??
     []) as RoomEvent<R>[];
 
-export const getAccountData = <M extends MatrixClientLike>(
-  mx: M,
-  eventType: AccountDataEvent
-): ReturnType<M['getAccountData']> =>
-  mx.getAccountData(eventType) as ReturnType<M['getAccountData']>;
-
-export const getMDirects = (mDirectEvent: MatrixEventLike): Set<string> => {
-  const roomIds = new Set<string>();
-  const userIdToDirects = mDirectEvent?.getContent();
-
-  if (userIdToDirects === undefined) return roomIds;
-
-  Object.keys(userIdToDirects).forEach((userId) => {
-    const directs = userIdToDirects[userId];
-    if (Array.isArray(directs)) {
-      directs.forEach((id) => {
-        if (typeof id === 'string') roomIds.add(id);
-      });
-    }
-  });
-
-  return roomIds;
-};
-
-export const isDirectInvite = (room: RoomLike | null, myUserId: string | null): boolean => {
-  if (!room || !myUserId) return false;
-  const me = room.getMember(myUserId);
-  const memberEvent = me?.events?.member;
-  const content = memberEvent?.getContent();
-  return content?.is_direct === true;
-};
-
-export const isSpace = (room: RoomLike | null): boolean => {
-  if (!room) return false;
-  const event = getStateEvent(room, StateEvent.RoomCreate);
-  if (!event) return false;
-  return event.getContent().type === RoomType.Space;
-};
-
-export const isRoom = (room: RoomLike | null): boolean => {
-  if (!room) return false;
-  const event = getStateEvent(room, StateEvent.RoomCreate);
-  if (!event) return true;
-  return event.getContent().type !== RoomType.Space;
-};
-
-export const isUnsupportedRoom = (room: RoomLike | null): boolean => {
-  if (!room) return false;
-  const event = getStateEvent(room, StateEvent.RoomCreate);
-  if (!event) return true; // Consider room unsupported if m.room.create event doesn't exist
-  return event.getContent().type !== undefined && event.getContent().type !== RoomType.Space;
-};
-
 export function isValidChild(mEvent: MatrixEventLike): boolean {
   return (
     mEvent.getType() === StateEvent.SpaceChild &&
@@ -143,15 +77,6 @@ export const getAllParents = (roomToParents: RoomToParents, roomId: string): Set
   return allParents;
 };
 
-export const getSpaceChildren = (room: RoomLike) =>
-  getStateEvents(room, StateEvent.SpaceChild).reduce<string[]>((filtered, mEvent) => {
-    const stateKey = mEvent.getStateKey();
-    if (isValidChild(mEvent) && stateKey) {
-      filtered.push(stateKey);
-    }
-    return filtered;
-  }, []);
-
 export const mapParentWithChildren = (
   roomToParents: RoomToParents,
   roomId: string,
@@ -169,15 +94,6 @@ export const mapParentWithChildren = (
   });
 };
 
-export const getRoomToParents = (mx: MatrixClientLike): RoomToParents => {
-  const map: RoomToParents = new Map();
-  mx.getRooms()
-    .filter((room) => isSpace(room))
-    .forEach((room) => mapParentWithChildren(map, room.roomId, getSpaceChildren(room)));
-
-  return map;
-};
-
 export const getOrphanParents = (roomToParents: RoomToParents, roomId: string): string[] => {
   const parents = getAllParents(roomToParents, roomId);
   const orphanParents = Array.from(parents).filter(
@@ -185,112 +101,6 @@ export const getOrphanParents = (roomToParents: RoomToParents, roomId: string): 
   );
 
   return orphanParents;
-};
-
-export const isMutedRule = (rule: IPushRule) =>
-  // Check for empty actions (new spec) or dont_notify (deprecated)
-  (rule.actions.length === 0 || rule.actions[0] === 'dont_notify') &&
-  rule.conditions?.[0]?.kind === 'event_match';
-
-export const findMutedRule = (overrideRules: IPushRule[], roomId: string) =>
-  overrideRules.find((rule) => rule.rule_id === roomId && isMutedRule(rule));
-
-export const getNotificationType = (mx: MatrixClientLike, roomId: string): NotificationType => {
-  let roomPushRule: IPushRule | undefined;
-  try {
-    roomPushRule = mx.getRoomPushRule('global', roomId);
-  } catch {
-    roomPushRule = undefined;
-  }
-
-  if (!roomPushRule) {
-    const overrideRules = mx.getAccountData(AccountDataEvent.PushRules)?.getContent<IPushRules>()
-      ?.global?.override;
-    if (!overrideRules) return NotificationType.Default;
-
-    return findMutedRule(overrideRules, roomId) ? NotificationType.Mute : NotificationType.Default;
-  }
-
-  if (roomPushRule.actions[0] === 'notify') return NotificationType.AllMessages;
-  return NotificationType.MentionsAndKeywords;
-};
-
-const NOTIFICATION_EVENT_TYPES = [
-  'm.room.create',
-  'm.room.message',
-  'm.room.encrypted',
-  'm.room.member',
-  'm.sticker',
-];
-export const isNotificationEvent = (mEvent: MatrixEventLike) => {
-  const eType = mEvent.getType();
-  if (!NOTIFICATION_EVENT_TYPES.includes(eType)) {
-    return false;
-  }
-  if (eType === 'm.room.member') return false;
-
-  if (mEvent.isRedacted()) return false;
-  if (mEvent.getRelation()?.rel_type === 'm.replace') return false;
-
-  return true;
-};
-
-export const roomHaveNotification = (room: RoomLike): boolean => {
-  const total = room.getUnreadNotificationCount(NotificationCountType.Total);
-  const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
-
-  return total > 0 || highlight > 0;
-};
-
-export const roomHaveUnread = (mx: MatrixClientLike, room: RoomLike) => {
-  const userId = mx.getUserId();
-  if (!userId) return false;
-  const readUpToId = room.getEventReadUpTo(userId);
-  const liveEvents = room.getLiveTimeline().getEvents();
-
-  if (liveEvents[liveEvents.length - 1]?.getSender() === userId) {
-    return false;
-  }
-
-  for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
-    const event = liveEvents[i];
-    if (!event) return false;
-    if (event.getId() === readUpToId) return false;
-    if (isNotificationEvent(event)) return true;
-  }
-  return true;
-};
-
-export const roomIsUnread = (mx: MatrixClientLike, room: RoomLike): boolean => {
-  if (room.getLiveTimeline().getEvents().length === 0) {
-    return roomHaveNotification(room);
-  }
-  return roomHaveUnread(mx, room);
-};
-
-export const getUnreadInfo = (room: RoomLike): UnreadInfo => {
-  const total = room.getUnreadNotificationCount(NotificationCountType.Total);
-  const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
-  return {
-    roomId: room.roomId,
-    highlight,
-    total: highlight > total ? highlight : total,
-  };
-};
-
-export const getUnreadInfos = (mx: MatrixClientLike): UnreadInfo[] => {
-  const unreadInfos = mx.getRooms().reduce<UnreadInfo[]>((unread, room) => {
-    if (room.isSpaceRoom()) return unread;
-    if (room.getMyMembership() !== 'join') return unread;
-    if (getNotificationType(mx, room.roomId) === NotificationType.Mute) return unread;
-
-    if (roomIsUnread(mx, room)) {
-      unread.push(getUnreadInfo(room));
-    }
-
-    return unread;
-  }, []);
-  return unreadInfos;
 };
 
 export const getRoomIconSrc = (
@@ -401,15 +211,6 @@ export const getMemberDisplayName = (room: RoomLike, userId: string): string | u
   return name;
 };
 
-export const getMemberSearchStr = (
-  member: RoomMemberLike,
-  query: string,
-  mxIdToName: (mxId: string) => string
-): string[] => [
-  member.rawDisplayName === member.userId ? mxIdToName(member.userId) : member.rawDisplayName,
-  query.startsWith('@') || query.indexOf(':') > -1 ? member.userId : mxIdToName(member.userId),
-];
-
 export const getMemberAvatarMxc = (room: RoomLike, userId: string): string | undefined => {
   const member = room.getMember(userId);
   return member?.getMxcAvatarUrl();
@@ -484,23 +285,6 @@ export const canEditItem = (
     item.content.msgtype === MsgType.Emote ||
     item.content.msgtype === MsgType.Notice);
 
-export const getLatestEditableEvt = <T extends EventTimelineLike>(
-  timeline: T,
-  canEdit: (mEvent: ReturnType<T['getEvents']>[number]) => boolean
-): ReturnType<T['getEvents']>[number] | undefined => {
-  const events = timeline.getEvents();
-
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const evt = events[i] as ReturnType<T['getEvents']>[number];
-    if (canEdit(evt)) return evt;
-  }
-  return undefined;
-};
-
-export const reactionOrEditEvent = (mEvent: MatrixEventLike) =>
-  mEvent.getRelation()?.rel_type === RelationType.Annotation ||
-  mEvent.getRelation()?.rel_type === RelationType.Replace;
-
 export const getMentionContent = (userIds: string[], room: boolean): IMentions => {
   const mMentions: IMentions = {};
   if (userIds.length > 0) {
@@ -512,39 +296,6 @@ export const getMentionContent = (userIds: string[], room: boolean): IMentions =
 
   return mMentions;
 };
-
-export const getCommonRooms = (
-  mx: MatrixClientLike,
-  rooms: string[],
-  otherUserId: string
-): string[] => {
-  const commonRooms: string[] = [];
-
-  rooms.forEach((roomId) => {
-    const room = mx.getRoom(roomId);
-    if (!room || room.getMyMembership() !== Membership.Join) return;
-
-    const common = room.hasMembershipState(otherUserId, Membership.Join);
-    if (common) {
-      commonRooms.push(roomId);
-    }
-  });
-
-  return commonRooms;
-};
-
-export const bannedInRooms = (
-  mx: MatrixClientLike,
-  rooms: string[],
-  otherUserId: string
-): boolean =>
-  rooms.some((roomId) => {
-    const room = mx.getRoom(roomId);
-    if (!room || room.getMyMembership() !== Membership.Join) return false;
-
-    const banned = room.hasMembershipState(otherUserId, Membership.Ban);
-    return banned;
-  });
 
 export const getAllVersionsRoomCreator = (room: RoomLike): Set<string> => {
   const creators = new Set<string>();

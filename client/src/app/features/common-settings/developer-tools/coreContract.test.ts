@@ -61,11 +61,13 @@ describe('core contract boundary', () => {
     expect(source).toContain('core.send.sendMessage(');
   });
 
-  it('uses core timeline operations and local direction for jump to time', () => {
+  it('uses core timeline operations without legacy timeline directions', () => {
     const source = readTarget(TARGET_FILES[5]);
     expect(source).toContain('core.timeline.timeline(');
     expect(source).toContain('core.timeline.paginateBackward(');
-    expect(source).toContain("FORWARD_DIRECTION: EventTimelineDirection = 'f'");
+    expect(source).not.toContain('EventTimelineDirection');
+    expect(source).not.toContain('FORWARD_DIRECTION');
+    expect(source).not.toMatch(/['"]f['"]/);
     expect(source).toContain('CoreError');
     expect(source).not.toContain('mx.timestampToEvent');
   });
@@ -82,11 +84,5 @@ describe('core contract boundary', () => {
     expect(source).toContain('useMediaSource(');
     expect(source).toContain('toMediaRef(');
     expect(source).not.toContain('mxcUrlToHttp');
-  });
-
-  it('accepts local client structure types in power tags', () => {
-    const source = readTarget(TARGET_FILES[8]);
-    expect(source).toContain("from '../../types/matrix/legacyStructural'");
-    expect(source).toContain('mx: MatrixClientLike');
   });
 });
