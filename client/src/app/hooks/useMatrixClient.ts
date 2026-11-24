@@ -1,12 +1,7 @@
-import { createContext, useContext } from 'react';
-import { MatrixClient } from 'matrix-js-sdk';
-
-const MatrixClientContext = createContext<MatrixClient | null>(null);
-
-export const MatrixClientProvider = MatrixClientContext.Provider;
+import type { MatrixClient } from 'matrix-js-sdk';
+import { getMatrixClient } from '@harrier/core-matrix-js';
+import { useCore } from './useCore';
 
 export function useMatrixClient(): MatrixClient {
-  const mx = useContext(MatrixClientContext);
-  if (!mx) throw new Error('MatrixClient not initialized!');
-  return mx;
+  return getMatrixClient(useCore());
 }

@@ -35,7 +35,6 @@ import { SplashScreen } from '../../components/splash-screen';
 import { ServerConfigsLoader } from '../../components/ServerConfigsLoader';
 import { CapabilitiesProvider } from '../../hooks/useCapabilities';
 import { MediaConfigProvider } from '../../hooks/useMediaConfig';
-import { MatrixClientProvider } from '../../hooks/useMatrixClient';
 import { CoreProvider } from '../../hooks/useCore';
 import { SpecVersions } from './SpecVersions';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
@@ -227,17 +226,15 @@ export function ClientRoot({ children }: ClientRootProps) {
           <ClientRootLoading />
         ) : (
           <CoreProvider value={core}>
-            <MatrixClientProvider value={mx}>
-              <ServerConfigsLoader>
-                {(serverConfigs) => (
-                  <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
-                    <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
-                      {children}
-                    </MediaConfigProvider>
-                  </CapabilitiesProvider>
-                )}
-              </ServerConfigsLoader>
-            </MatrixClientProvider>
+            <ServerConfigsLoader>
+              {(serverConfigs) => (
+                <CapabilitiesProvider value={serverConfigs.capabilities ?? {}}>
+                  <MediaConfigProvider value={serverConfigs.mediaConfig ?? {}}>
+                    {children}
+                  </MediaConfigProvider>
+                </CapabilitiesProvider>
+              )}
+            </ServerConfigsLoader>
           </CoreProvider>
         )}
       </SpecVersions>

@@ -82,6 +82,7 @@ import {
 } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
 import { decryptAttachment } from 'browser-encrypt-attachment';
+import { registerMatrixClient } from './legacy';
 import { clearSecretStorageKeys, storeSecretStorageKey } from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
@@ -1436,7 +1437,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   });
 
-  return {
+  const core: HarrierCore = {
     capabilities: { calls: false, threads: false },
     auth: {
       session: sessionStore,
@@ -2597,4 +2598,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
     },
   };
+  registerMatrixClient(core, client);
+  return core;
 }
