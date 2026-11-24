@@ -15,7 +15,7 @@ import {
   WidgetApiToWidgetAction,
   WidgetDriver,
 } from 'matrix-widget-api';
-import { CallWidgetDriver } from './CallWidgetDriver';
+import { CallWidgetDriver } from '@harrier/core-matrix-js';
 import { trimTrailingSlash } from '../../utils/common';
 import {
   ElementCallIntent,

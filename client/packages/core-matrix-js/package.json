@@ -11,7 +11,8 @@
   "dependencies": {
     "@harrier/core": "0.0.0",
     "browser-encrypt-attachment": "0.3.0",
-    "matrix-js-sdk": "41.7.0"
+    "matrix-js-sdk": "41.7.0",
+    "matrix-widget-api": "1.16.1"
   },
   "devDependencies": {
     "vitest": "4.1.10"

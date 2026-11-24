@@ -23,8 +23,7 @@ import {
   type TimelineEvents,
   MatrixClient,
 } from 'matrix-js-sdk';
-import { getCallCapabilities } from './utils';
-import { downloadMedia, mxcUrlToHttp } from '../../utils/matrix';
+import { getCallCapabilities } from './capabilities';
 
 export class CallWidgetDriver extends WidgetDriver {
   private allowedCapabilities: Set<Capability>;
@@ -304,11 +303,20 @@ export class CallWidgetDriver extends WidgetDriver {
   }
 
   public async downloadFile(contentUri: string): Promise<{ file: XMLHttpRequestBodyInit }> {
-    const httpUrl = mxcUrlToHttp(this.mx, contentUri, true);
+    const httpUrl = this.mx.mxcUrlToHttp(
+      contentUri,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true
+    );
     if (!httpUrl) {
       throw new Error('Call widget failed to download file! No http url!');
     }
-    const blob = await downloadMedia(httpUrl);
+    const response = await fetch(httpUrl, { method: 'GET' });
+    const blob = await response.blob();
     return { file: blob };
   }
 

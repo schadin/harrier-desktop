@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CallEmbed } from '../plugins/call';
 import { useMutationObserver } from './useMutationObserver';
 import { isUserId } from '../utils/matrix';
-import { useCallMembers, useCallSession } from './useCall';
+import { useCoreCallMembers } from './useCall';
 import { useCallJoined } from './useCallEmbed';
 
 export const useCallSpeakers = (callEmbed: CallEmbed): Set<string> => {
   const [speakers, setSpeakers] = useState(new Set<string>());
-  const callSession = useCallSession(callEmbed.room);
-  const callMembers = useCallMembers(callSession);
+  const callMembers = useCoreCallMembers(callEmbed.room.roomId);
   const joined = useCallJoined(callEmbed);
 
   const videoContainers = useMemo(() => {

@@ -15,7 +15,7 @@ import {
   Text,
   toRem,
 } from 'folds';
-import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import type { CallParticipantView } from '@harrier/core';
 import FocusTrap from 'focus-trap-react';
 import { Room } from 'matrix-js-sdk';
 import * as css from './styles.css';
@@ -30,7 +30,7 @@ import { getMouseEventCords } from '../../utils/dom';
 
 type LiveChipProps = {
   room: Room;
-  members: CallMembership[];
+  members: readonly CallParticipantView[];
   count: number;
 };
 export function LiveChip({ count, room, members }: LiveChipProps) {
@@ -71,7 +71,7 @@ export function LiveChip({ count, room, members }: LiveChipProps) {
               <Scroll size="0" hideTrack visibility="Hover">
                 <Box direction="Column" style={{ padding: config.space.S100 }}>
                   {members.map((callMember) => {
-                    const userId = callMember.sender;
+                    const { userId } = callMember;
                     if (!userId) return null;
                     const name =
                       getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;

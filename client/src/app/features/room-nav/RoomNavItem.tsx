@@ -57,7 +57,7 @@ import { getRoomCreatorsForRoomId, useRoomCreators } from '../../hooks/useRoomCr
 import { getRoomPermissionsAPI, useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../components/invite-user-prompt';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
-import { useCallMembers, useCallSession } from '../../hooks/useCall';
+import { useCoreCallMembers } from '../../hooks/useCall';
 import { useCallEmbed, useCallStart } from '../../hooks/useCallEmbed';
 import { callChatAtom } from '../../state/callEmbed';
 import { useCallPreferencesAtom } from '../../state/hooks/callPreferences';
@@ -289,8 +289,7 @@ export function RoomNavItem({
   };
 
   const optionsVisible = hover || !!menuAnchor;
-  const callSession = useCallSession(room);
-  const callMembers = useCallMembers(callSession);
+  const callMembers = useCoreCallMembers(room.roomId);
   const startCall = useCallStart(direct);
   const callEmbed = useCallEmbed();
   const callPref = useAtomValue(useCallPreferencesAtom());

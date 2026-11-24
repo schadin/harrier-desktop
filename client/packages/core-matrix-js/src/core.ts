@@ -1245,6 +1245,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           participants: session.memberships.map((membership) => ({
             userId: membership.userId,
             deviceId: membership.deviceId,
+            memberId: membership.memberId,
+            ...(membership.callIntent ? { callIntent: membership.callIntent } : {}),
           })),
         }
       : null;

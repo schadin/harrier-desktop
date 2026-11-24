@@ -12,7 +12,7 @@ import { ThemeKind, useTheme } from './useTheme';
 import { callEmbedAtom } from '../state/callEmbed';
 import { useResizeObserver } from './useResizeObserver';
 import { CallControlState } from '../plugins/call/CallControlState';
-import { useCallMembersChange, useCallSession } from './useCall';
+import { useCoreCallSession } from './useCall';
 import { CallPreferences } from '../state/callPreferences';
 
 const CallEmbedContext = createContext<CallEmbed | undefined>(undefined);
@@ -103,11 +103,10 @@ export const useCallHangupEvent = (embed: CallEmbed, callback: () => void) => {
 };
 
 export const useCallMemberSoundSync = (embed: CallEmbed) => {
-  const callSession = useCallSession(embed.room);
-  useCallMembersChange(
-    callSession,
-    useCallback(() => embed.control.applySound(), [embed])
-  );
+  const callSession = useCoreCallSession(embed.room.roomId);
+  useEffect(() => {
+    embed.control.applySound();
+  }, [embed, callSession?.participants.length]);
 };
 
 export const useCallThemeSync = (embed: CallEmbed) => {

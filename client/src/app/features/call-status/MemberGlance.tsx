@@ -1,5 +1,5 @@
 import { Box, config, Icon, Icons, Text } from 'folds';
-import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import type { CallParticipantView } from '@harrier/core';
 import React from 'react';
 import { Room } from 'matrix-js-sdk';
 import { UserAvatar } from '../../components/user-avatar';
@@ -14,7 +14,7 @@ import * as css from './styles.css';
 
 type MemberGlanceProps = {
   room: Room;
-  members: CallMembership[];
+  members: readonly CallParticipantView[];
   speakers: Set<string>;
   max?: number;
 };
@@ -39,8 +39,8 @@ export function MemberGlance({ room, members, speakers, max = 6 }: MemberGlanceP
 
         return (
           <StackedAvatar
-            key={callMember.memberId}
-            className={speakers.has(callMember.sender) ? css.SpeakerAvatarOutline : undefined}
+            key={callMember.memberId ?? `${callMember.userId}:${callMember.deviceId ?? ''}`}
+            className={speakers.has(callMember.userId) ? css.SpeakerAvatarOutline : undefined}
             title={name}
             as="button"
             variant="Background"

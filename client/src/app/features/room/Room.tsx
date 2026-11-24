@@ -19,15 +19,14 @@ import { RoomViewHeader } from './RoomViewHeader';
 import { callChatAtom } from '../../state/callEmbed';
 import { CallChatView } from './CallChatView';
 import { useCallEmbed } from '../../hooks/useCallEmbed';
-import { useCallMembers, useCallSession } from '../../hooks/useCall';
+import { useCoreCallMembers } from '../../hooks/useCall';
 
 export function Room() {
   const { eventId } = useParams();
   const room = useRoom();
   const core = useCore();
 
-  const callSession = useCallSession(room);
-  const callMembers = useCallMembers(callSession);
+  const callMembers = useCoreCallMembers(room.roomId);
   const callEmbed = useCallEmbed();
 
   const [isDrawer] = useSetting(settingsAtom, 'isPeopleDrawer');

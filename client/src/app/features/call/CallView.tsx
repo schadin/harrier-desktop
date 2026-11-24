@@ -9,7 +9,7 @@ import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { StateEvent } from '../../../types/matrix/room';
-import { useCallMembers, useCallSession } from '../../hooks/useCall';
+import { useCoreCallMembers } from '../../hooks/useCall';
 import { CallMemberRenderer } from './CallMemberCard';
 import * as css from './styles.css';
 import { CallControls } from './CallControls';
@@ -89,8 +89,7 @@ function CallPrescreen() {
     mx.getSafeUserId()
   );
 
-  const callSession = useCallSession(room);
-  const callMembers = useCallMembers(callSession);
+  const callMembers = useCoreCallMembers(room.roomId);
   const hasParticipant = callMembers.length > 0;
 
   const callEmbed = useCallEmbed();

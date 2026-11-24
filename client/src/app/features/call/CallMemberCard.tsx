@@ -1,4 +1,4 @@
-import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import type { CallParticipantView } from '@harrier/core';
 import React, { useState } from 'react';
 import { Avatar, Box, Icon, Icons, Text } from 'folds';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
@@ -13,7 +13,7 @@ import { getMouseEventCords } from '../../utils/dom';
 import * as css from './styles.css';
 
 type CallMemberCardProps = {
-  member: CallMembership;
+  member: CallParticipantView;
 };
 export function CallMemberCard({ member }: CallMemberCardProps) {
   const mx = useMatrixClient();
@@ -36,7 +36,7 @@ export function CallMemberCard({ member }: CallMemberCardProps) {
   return (
     <SequenceCard
       as="button"
-      key={member.memberId}
+      key={member.memberId ?? `${member.userId}:${member.deviceId ?? ''}`}
       className={css.CallMemberCard}
       variant="SurfaceVariant"
       radii="500"
@@ -74,7 +74,7 @@ export function CallMemberRenderer({
   members,
   max = 4,
 }: {
-  members: CallMembership[];
+  members: readonly CallParticipantView[];
   max?: number;
 }) {
   const [viewMore, setViewMore] = useState(false);
@@ -85,7 +85,10 @@ export function CallMemberRenderer({
   return (
     <>
       {truncatedMembers.map((member) => (
-        <CallMemberCard key={member.memberId} member={member} />
+        <CallMemberCard
+          key={member.memberId ?? `${member.userId}:${member.deviceId ?? ''}`}
+          member={member}
+        />
       ))}
       {members.length > max && (
         <SequenceCard

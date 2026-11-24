@@ -40,11 +40,10 @@ import { useSelectedRoom } from '../hooks/router/useSelectedRoom';
 import { ScreenSize, useScreenSizeContext } from '../hooks/useScreenSize';
 import { useMatrixClient } from '../hooks/useMatrixClient';
 import CallSound from '../../../public/sound/call.ogg';
-import { useCallMembersChange, useCallSession } from '../hooks/useCall';
+import { useCoreCallSession } from '../hooks/useCall';
 import { useCoreRoomMeta } from '../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../state/mDirectList';
-import { useMediaAuthentication } from '../hooks/useMediaAuthentication';
-import { mxcUrlToHttp } from '../utils/matrix';
+import { toMediaRef, useMediaSource } from '../utils/coreMedia';
 import { RoomAvatar, RoomIcon } from './room-avatar';
 import { useRoomNavigate } from '../hooks/useRoomNavigate';
 import { getStateEvent } from '../utils/room';
@@ -73,8 +72,6 @@ type IncomingCallProps = {
   onReject: (room: Room, eventId: string) => void;
 };
 function IncomingCall({ dm, info, onIgnore, onAnswer, onReject }: IncomingCallProps) {
-  const mx = useMatrixClient();
-  const useAuthentication = useMediaAuthentication();
   const livekitSupported = useLivekitSupport();
   const rtcSupported = webRTCSupported();
   const canAnswer = livekitSupported && rtcSupported;
@@ -84,22 +81,14 @@ function IncomingCall({ dm, info, onIgnore, onAnswer, onReject }: IncomingCallPr
 
   const { name: roomName, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
   const roomAvatar = dm ? dmAvatarMxc : avatarMxc;
-  const avatarUrl = roomAvatar
-    ? mxcUrlToHttp(mx, roomAvatar, useAuthentication, 96, 96, 'crop') ?? undefined
-    : undefined;
-
-  const session = useCallSession(room);
-  useCallMembersChange(
-    session,
-    useCallback(
-      (members) => {
-        if (members.length === 0) {
-          onIgnore();
-        }
-      },
-      [onIgnore]
-    )
+  const avatarUrl = useMediaSource(
+    roomAvatar ? toMediaRef(roomAvatar, { width: 96, height: 96, resizeMethod: 'crop' }) : undefined
   );
+
+  const session = useCoreCallSession(room.roomId);
+  useEffect(() => {
+    if (session && session.participants.length === 0) onIgnore();
+  }, [session, onIgnore]);
 
   const playSound = useCallback(() => {
     const audioElement = audioRef.current;

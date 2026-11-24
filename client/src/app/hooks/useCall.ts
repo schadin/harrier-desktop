@@ -1,13 +1,15 @@
-import { Room } from 'matrix-js-sdk';
+import { createSnapshotStore, type CallView } from '@harrier/core';
+import type { Room } from 'matrix-js-sdk';
 import {
-  MatrixRTCSession,
   MatrixRTCSessionEvent,
-  MatrixRTCSessionEventHandlerMap,
+  type MatrixRTCSession,
+  type MatrixRTCSessionEventHandlerMap,
 } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession';
-import { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
-import { useEffect, useState } from 'react';
+import type { CallMembership } from 'matrix-js-sdk/lib/matrixrtc/CallMembership';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { MatrixRTCSessionManagerEvents } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSessionManager';
 import { useMatrixClient } from './useMatrixClient';
+import { useCore } from './useCore';
 
 export const useCallSession = (room: Room): MatrixRTCSession => {
   const mx = useMatrixClient();
@@ -57,4 +59,17 @@ export const useCallMembers = (session: MatrixRTCSession): CallMembership[] => {
   useCallMembersChange(session, setMemberships);
 
   return memberships;
+};
+
+const emptyCallStore = createSnapshotStore<CallView | null>(null);
+
+export const useCoreCallSession = (roomId: string): CallView | null => {
+  const core = useCore();
+  const store = useMemo(() => core.calls?.session(roomId) ?? emptyCallStore, [core, roomId]);
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
+};
+
+export const useCoreCallMembers = (roomId: string) => {
+  const session = useCoreCallSession(roomId);
+  return session?.participants ?? [];
 };

@@ -386,6 +386,8 @@ export type VerificationRequestView = {
 export type CallParticipantView = {
   readonly userId: UserId;
   readonly deviceId?: string;
+  readonly memberId?: string;
+  readonly callIntent?: string;
 };
 
 export type CallView = {

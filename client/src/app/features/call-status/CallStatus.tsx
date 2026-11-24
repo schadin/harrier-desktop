@@ -6,7 +6,7 @@ import * as css from './styles.css';
 import { CallRoomName } from './CallRoomName';
 import { CallControl } from './CallControl';
 import { ContainerColor } from '../../styles/ContainerColor.css';
-import { useCallMembers, useCallSession } from '../../hooks/useCall';
+import { useCoreCallMembers } from '../../hooks/useCall';
 import { ScreenSize, useScreenSize } from '../../hooks/useScreenSize';
 import { MemberGlance } from './MemberGlance';
 import { StatusDivider } from './components';
@@ -21,8 +21,7 @@ type CallStatusProps = {
 export function CallStatus({ callEmbed }: CallStatusProps) {
   const { room } = callEmbed;
 
-  const callSession = useCallSession(room);
-  const callMembers = useCallMembers(callSession);
+  const callMembers = useCoreCallMembers(room.roomId);
   const screenSize = useScreenSize();
   const callJoined = useCallJoined(callEmbed);
   const speakers = useCallSpeakers(callEmbed);
