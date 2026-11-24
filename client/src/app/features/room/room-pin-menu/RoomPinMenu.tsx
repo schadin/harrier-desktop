@@ -44,7 +44,6 @@ import {
 import { UserAvatar } from '../../../components/user-avatar';
 import { getMxIdLocalPart } from '../../../utils/matrix';
 import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { GetContentCallback, StateEvent } from '../../../../types/matrix/room';
@@ -203,7 +202,6 @@ function PinnedMessage({
   const pinnedItem = useCoreEvent(roomId, eventId);
   const members = useRoomMembers(roomId);
   const useAuthentication = useMediaAuthentication();
-  const mx = useMatrixClient();
   const core = useCore();
   const pinnedState = useCoreRoomState<RoomPinnedEventsEventContent>(
     { roomId },
@@ -284,7 +282,7 @@ function PinnedMessage({
     ? accessibleTagColors?.get(memberPowerTag.color)
     : undefined;
   const tagIconSrc = memberPowerTag?.icon
-    ? getPowerTagIconSrc(mx, useAuthentication, memberPowerTag.icon)
+    ? getPowerTagIconSrc(core, useAuthentication, memberPowerTag.icon)
     : undefined;
 
   const usernameColor = legacyUsernameColor ? colorMXID(sender) : tagColor;
@@ -346,7 +344,7 @@ type RoomPinMenuProps = {
 };
 export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
   ({ roomId, requestClose }, ref) => {
-    const mx = useMatrixClient();
+    const core = useCore();
     const session = useCoreSession();
     const userId = session?.userId ?? '';
     const powerLevels = usePowerLevelsContext();
@@ -395,20 +393,20 @@ export const RoomPinMenu = forwardRef<HTMLDivElement, RoomPinMenuProps>(
       () => ({
         ...LINKIFY_OPTS,
         render: factoryRenderLinkifyWithMention((href) =>
-          renderMatrixMention(mx, roomId, href, makeMentionCustomProps(mentionClickHandler))
+          renderMatrixMention(core, roomId, href, makeMentionCustomProps(mentionClickHandler))
         ),
       }),
-      [mx, roomId, mentionClickHandler]
+      [core, roomId, mentionClickHandler]
     );
     const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
       () =>
-        getReactCustomHtmlParser(mx, roomId, {
+        getReactCustomHtmlParser(core, roomId, {
           linkifyOpts,
           useAuthentication,
           handleSpoilerClick: spoilerClickHandler,
           handleMentionClick: mentionClickHandler,
         }),
-      [mx, roomId, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
+      [core, roomId, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
     );
 
     const handleOpen = (targetRoomId: string, eventId: string) => {

@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import type { MemberView } from '@harrier/core';
-import type { MatrixClientLike } from '../../types/matrix/legacyStructural';
+import type { HarrierCore, MemberView } from '@harrier/core';
 import { getPowerLevelTag, PowerLevelTags, usePowerLevelTags } from './usePowerLevelTags';
 import { IPowerLevels, readPowerLevel } from './usePowerLevels';
 import { MemberPowerTag, MemberPowerTagIcon } from '../../types/matrix/room';
@@ -34,12 +33,15 @@ export const useGetMemberPowerTag = (
 };
 
 export const getPowerTagIconSrc = (
-  mx: MatrixClientLike,
+  core: HarrierCore,
   useAuthentication: boolean,
   icon: MemberPowerTagIcon
 ): string | undefined =>
   icon?.key?.startsWith('mxc://')
-    ? mx.mxcUrlToHttp(icon.key, 96, 96, 'scale', undefined, undefined, useAuthentication) ?? '🌻'
+    ? core.media.url(
+        { mxcUrl: icon.key, width: 96, height: 96, resizeMethod: 'scale' },
+        { useAuthentication }
+      ) ?? '🌻'
     : icon?.key;
 
 export const useAccessiblePowerTagColors = (

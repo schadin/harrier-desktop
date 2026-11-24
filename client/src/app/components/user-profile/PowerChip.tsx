@@ -24,6 +24,7 @@ import React, { MouseEventHandler, useCallback, useState } from 'react';
 import FocusTrap from 'focus-trap-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { PowerColorBadge, PowerIcon } from '../power';
 import { useGetMemberPowerLevel, usePowerLevels } from '../../hooks/usePowerLevels';
@@ -146,6 +147,7 @@ function SharedPowerAlert({ power, onCancel, onChange }: SharedPowerAlertProps) 
 
 export function PowerChip({ userId }: { userId: string }) {
   const mx = useMatrixClient();
+  const core = useCore();
   const room = useRoom();
   const space = useSpaceOptionally();
   const useAuthentication = useMediaAuthentication();
@@ -168,7 +170,7 @@ export function PowerChip({ userId }: { userId: string }) {
     (myUserId === userId ? true : hasMorePower(myUserId, userId));
 
   const tag = getMemberPowerTag(userId);
-  const tagIconSrc = tag.icon && getPowerTagIconSrc(mx, useAuthentication, tag.icon);
+  const tagIconSrc = tag.icon && getPowerTagIconSrc(core, useAuthentication, tag.icon);
 
   const [cords, setCords] = useState<RectCords>();
 
@@ -252,7 +254,7 @@ export function PowerChip({ userId }: { userId: string }) {
                 {getPowers(powerLevelTags).map((power) => {
                   const powerTag = powerLevelTags[power];
                   const powerTagIconSrc =
-                    powerTag.icon && getPowerTagIconSrc(mx, useAuthentication, powerTag.icon);
+                    powerTag.icon && getPowerTagIconSrc(core, useAuthentication, powerTag.icon);
 
                   const selected = getMemberPowerLevel(userId) === power;
                   const canAssignPower = creators.has(myUserId)

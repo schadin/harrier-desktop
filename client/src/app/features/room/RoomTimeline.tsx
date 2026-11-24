@@ -308,20 +308,20 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
     () => ({
       ...LINKIFY_OPTS,
       render: factoryRenderLinkifyWithMention((href) =>
-        renderMatrixMention(mx, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
+        renderMatrixMention(core, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
       ),
     }),
-    [mx, room, mentionClickHandler]
+    [core, room, mentionClickHandler]
   );
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
-      getReactCustomHtmlParser(mx, room.roomId, {
+      getReactCustomHtmlParser(core, room.roomId, {
         linkifyOpts,
         useAuthentication,
         handleSpoilerClick: spoilerClickHandler,
         handleMentionClick: mentionClickHandler,
       }),
-    [mx, room, linkifyOpts, spoilerClickHandler, mentionClickHandler, useAuthentication]
+    [core, room, linkifyOpts, spoilerClickHandler, mentionClickHandler, useAuthentication]
   );
   const parseMemberEvent = useMemberEventParser();
 

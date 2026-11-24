@@ -244,26 +244,6 @@ export const removeRoomIdFromMDirect = async (
   await mx.setAccountData(AccountDataEvent.Direct, userIdToRoomIds);
 };
 
-export const mxcUrlToHttp = (
-  mx: MatrixClientLike,
-  mxcUrl: string,
-  useAuthentication?: boolean,
-  width?: number,
-  height?: number,
-  resizeMethod?: string,
-  allowDirectLinks?: boolean,
-  allowRedirects?: boolean
-): string | null =>
-  mx.mxcUrlToHttp(
-    mxcUrl,
-    width,
-    height,
-    resizeMethod,
-    allowDirectLinks,
-    allowRedirects,
-    useAuthentication
-  );
-
 export const downloadMedia = async (src: string): Promise<Blob> => {
   // this request is authenticated by service worker
   const res = await fetch(src, { method: 'GET' });

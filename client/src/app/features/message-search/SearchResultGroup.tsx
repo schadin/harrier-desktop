@@ -4,7 +4,7 @@ import type { MessageSearchEventView } from '@harrier/core';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Avatar, Box, Chip, Header, Icon, Icons, Text, config } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useCoreRoom } from '../../hooks/useCoreRoom';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 import {
@@ -127,7 +127,7 @@ export function SearchResultGroup({
   hour24Clock,
   dateFormatString,
 }: SearchResultGroupProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useCoreRoom(roomId);
   const members = useRoomMembers(roomId);
   const useAuthentication = useMediaAuthentication();
@@ -150,14 +150,14 @@ export function SearchResultGroup({
     () => ({
       ...LINKIFY_OPTS,
       render: factoryRenderLinkifyWithMention((href) =>
-        renderMatrixMention(mx, roomId, href, makeMentionCustomProps(mentionClickHandler))
+        renderMatrixMention(core, roomId, href, makeMentionCustomProps(mentionClickHandler))
       ),
     }),
-    [mx, roomId, mentionClickHandler]
+    [core, roomId, mentionClickHandler]
   );
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
-      getReactCustomHtmlParser(mx, roomId, {
+      getReactCustomHtmlParser(core, roomId, {
         linkifyOpts,
         highlightRegex,
         useAuthentication,
@@ -165,7 +165,7 @@ export function SearchResultGroup({
         handleMentionClick: mentionClickHandler,
       }),
     [
-      mx,
+      core,
       roomId,
       linkifyOpts,
       highlightRegex,
@@ -303,7 +303,7 @@ export function SearchResultGroup({
             ? accessibleTagColors?.get(memberPowerTag.color)
             : undefined;
           const tagIconSrc = memberPowerTag?.icon
-            ? getPowerTagIconSrc(mx, useAuthentication, memberPowerTag.icon)
+            ? getPowerTagIconSrc(core, useAuthentication, memberPowerTag.icon)
             : undefined;
 
           const usernameColor = legacyUsernameColor ? colorMXID(event.sender) : tagColor;

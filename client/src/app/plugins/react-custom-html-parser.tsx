@@ -20,15 +20,10 @@ import { IntermediateRepresentation, Opts as LinkifyOpts, OptFn } from 'linkifyj
 import Linkify from 'linkify-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ChildNode } from 'domhandler';
-import type { MatrixClientLike } from '../../types/matrix/legacyStructural';
+import type { HarrierCore, RoomView } from '@harrier/core';
+import { StateEvent } from '../../types/matrix/room';
 import * as css from '../styles/CustomHtml.css';
-import {
-  getMxIdLocalPart,
-  getCanonicalAliasRoomId,
-  isRoomAlias,
-  mxcUrlToHttp,
-} from '../utils/matrix';
-import { getMemberDisplayName } from '../utils/room';
+import { getMxIdLocalPart, isRoomAlias } from '../utils/matrix';
 import { EMOJI_PATTERN, sanitizeForRegex, URL_NEG_LB } from '../utils/regex';
 import { getHexcodeForEmoji, getShortcodeFor } from './emoji';
 import { findAndReplace } from '../utils/findAndReplace';
@@ -71,26 +66,51 @@ export const makeMentionCustomProps = (
   children: content,
 });
 
+const getMentionRoom = (core: HarrierCore, roomIdOrAlias: string): RoomView | null => {
+  if (!isRoomAlias(roomIdOrAlias)) {
+    return core.rooms.room(roomIdOrAlias).getSnapshot().value;
+  }
+
+  const aliasedRoom = core.rooms.list
+    .getSnapshot()
+    .value.map((summary) => core.rooms.room(summary.roomId).getSnapshot().value)
+    .find(
+      (room): room is RoomView =>
+        room?.canonicalAlias === roomIdOrAlias &&
+        core.rooms.stateEntry(room.roomId, StateEvent.RoomTombstone).getSnapshot().value === null
+    );
+
+  return core.rooms.room(aliasedRoom?.roomId ?? roomIdOrAlias).getSnapshot().value;
+};
+
 export const renderMatrixMention = (
-  mx: MatrixClientLike,
+  core: HarrierCore,
   currentRoomId: string | undefined,
   href: string,
   customProps: ComponentPropsWithoutRef<'a'>
 ) => {
   const userId = parseMatrixToUser(href);
   if (userId) {
-    const currentRoom = currentRoomId ? mx.getRoom(currentRoomId) : null;
+    const currentRoom = currentRoomId ? core.rooms.room(currentRoomId).getSnapshot().value : null;
+    const member = currentRoom
+      ? core.rooms
+          .members(currentRoom.roomId)
+          .getSnapshot()
+          .value.find((entry) => entry.userId === userId)
+      : undefined;
+    const rawDisplayName = member?.rawDisplayName;
+    const memberDisplayName = rawDisplayName === userId ? undefined : rawDisplayName;
 
     return (
       <a
         href={href}
         {...customProps}
-        className={css.Mention({ highlight: mx.getUserId() === userId })}
+        className={css.Mention({
+          highlight: core.auth.session.getSnapshot().value?.userId === userId,
+        })}
         data-mention-id={userId}
       >
-        {`@${
-          (currentRoom && getMemberDisplayName(currentRoom, userId)) ?? getMxIdLocalPart(userId)
-        }`}
+        {`@${memberDisplayName ?? getMxIdLocalPart(userId)}`}
       </a>
     );
   }
@@ -98,11 +118,7 @@ export const renderMatrixMention = (
   const matrixToRoom = parseMatrixToRoom(href);
   if (matrixToRoom) {
     const { roomIdOrAlias, viaServers } = matrixToRoom;
-    const mentionRoom = mx.getRoom(
-      isRoomAlias(roomIdOrAlias)
-        ? getCanonicalAliasRoomId(mx, roomIdOrAlias) ?? roomIdOrAlias
-        : roomIdOrAlias
-    );
+    const mentionRoom = getMentionRoom(core, roomIdOrAlias);
 
     const fallbackContent = mentionRoom ? `#${mentionRoom.name}` : roomIdOrAlias;
 
@@ -124,11 +140,7 @@ export const renderMatrixMention = (
   const matrixToRoomEvent = parseMatrixToRoomEvent(href);
   if (matrixToRoomEvent) {
     const { roomIdOrAlias, eventId, viaServers } = matrixToRoomEvent;
-    const mentionRoom = mx.getRoom(
-      isRoomAlias(roomIdOrAlias)
-        ? getCanonicalAliasRoomId(mx, roomIdOrAlias) ?? roomIdOrAlias
-        : roomIdOrAlias
-    );
+    const mentionRoom = getMentionRoom(core, roomIdOrAlias);
 
     return (
       <a
@@ -315,7 +327,7 @@ export function CodeBlock({
 }
 
 export const getReactCustomHtmlParser = (
-  mx: MatrixClientLike,
+  core: HarrierCore,
   roomId: string | undefined,
   params: {
     linkifyOpts: LinkifyOpts;
@@ -451,7 +463,7 @@ export const getReactCustomHtmlParser = (
             : children.map((c) => (c instanceof DOMText ? c.data : '')).join();
 
           const mention = renderMatrixMention(
-            mx,
+            core,
             roomId,
             tryDecodeURIComponent(props.href),
             makeMentionCustomProps(params.handleMentionClick, content)
@@ -478,8 +490,11 @@ export const getReactCustomHtmlParser = (
         }
 
         if (name === 'img') {
-          const htmlSrc = mxcUrlToHttp(mx, props.src, params.useAuthentication);
-          if (htmlSrc && props.src.startsWith('mxc://') === false) {
+          const isMxcSource = props.src?.startsWith('mxc://') ?? false;
+          const htmlSrc = isMxcSource
+            ? core.media.url({ mxcUrl: props.src }, { useAuthentication: params.useAuthentication })
+            : props.src;
+          if (htmlSrc && isMxcSource === false) {
             return (
               <a href={htmlSrc} target="_blank" rel="noreferrer noopener">
                 {props.alt || props.title || htmlSrc}

@@ -212,7 +212,6 @@ function RoomNotificationsGroupComp({
   hour24Clock,
   dateFormatString,
 }: RoomNotificationsGroupProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const unread = useRoomUnread(room.roomId, roomToUnreadAtom);
@@ -245,20 +244,20 @@ function RoomNotificationsGroupComp({
     () => ({
       ...LINKIFY_OPTS,
       render: factoryRenderLinkifyWithMention((href) =>
-        renderMatrixMention(mx, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
+        renderMatrixMention(core, room.roomId, href, makeMentionCustomProps(mentionClickHandler))
       ),
     }),
-    [mx, room, mentionClickHandler]
+    [core, room, mentionClickHandler]
   );
   const htmlReactParserOptions = useMemo<HTMLReactParserOptions>(
     () =>
-      getReactCustomHtmlParser(mx, room.roomId, {
+      getReactCustomHtmlParser(core, room.roomId, {
         linkifyOpts,
         useAuthentication,
         handleSpoilerClick: spoilerClickHandler,
         handleMentionClick: mentionClickHandler,
       }),
-    [mx, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
+    [core, room, linkifyOpts, mentionClickHandler, spoilerClickHandler, useAuthentication]
   );
 
   const renderMatrixEvent = useMatrixEventRenderer<[NotificationEvent, string, GetContentCallback]>(
@@ -475,7 +474,7 @@ function RoomNotificationsGroupComp({
             ? accessibleTagColors?.get(memberPowerTag.color)
             : undefined;
           const tagIconSrc = memberPowerTag?.icon
-            ? getPowerTagIconSrc(mx, useAuthentication, memberPowerTag.icon)
+            ? getPowerTagIconSrc(core, useAuthentication, memberPowerTag.icon)
             : undefined;
 
           const usernameColor = legacyUsernameColor ? colorMXID(event.sender) : tagColor;

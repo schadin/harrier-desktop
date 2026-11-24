@@ -791,6 +791,7 @@ export const Message = as<'div', MessageProps>(
     ref
   ) => {
     const mx = useMatrixClient();
+    const core = useCore();
     const useAuthentication = useMediaAuthentication();
     const senderId = timelineItem.sender;
     const messageStatus = timelineItem.kind === 'message' ? timelineItem.status : 'sent';
@@ -815,7 +816,7 @@ export const Message = as<'div', MessageProps>(
       ? accessibleTagColors?.get(memberPowerTag.color)
       : undefined;
     const tagIconSrc = memberPowerTag?.icon
-      ? getPowerTagIconSrc(mx, useAuthentication, memberPowerTag.icon)
+      ? getPowerTagIconSrc(core, useAuthentication, memberPowerTag.icon)
       : undefined;
 
     const usernameColor = legacyUsernameColor ? colorMXID(senderId) : tagColor;

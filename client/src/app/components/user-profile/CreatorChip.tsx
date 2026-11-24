@@ -5,7 +5,7 @@ import { isKeyHotkey } from 'is-hotkey';
 import { useRoomCreatorsTag } from '../../hooks/useRoomCreatorsTag';
 import { PowerColorBadge, PowerIcon } from '../power';
 import { getPowerTagIconSrc } from '../../hooks/useMemberPowerTag';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { stopPropagation } from '../../utils/keyboard';
 import { useRoom } from '../../hooks/useRoom';
@@ -16,7 +16,7 @@ import { SpaceSettingsPage } from '../../state/spaceSettings';
 import { RoomSettingsPage } from '../../state/roomSettings';
 
 export function CreatorChip() {
-  const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const room = useRoom();
   const space = useSpaceOptionally();
@@ -25,7 +25,7 @@ export function CreatorChip() {
 
   const [cords, setCords] = useState<RectCords>();
   const tag = useRoomCreatorsTag();
-  const tagIconSrc = tag.icon && getPowerTagIconSrc(mx, useAuthentication, tag.icon);
+  const tagIconSrc = tag.icon && getPowerTagIconSrc(core, useAuthentication, tag.icon);
 
   const open: MouseEventHandler<HTMLButtonElement> = (evt) => {
     setCords(evt.currentTarget.getBoundingClientRect());
