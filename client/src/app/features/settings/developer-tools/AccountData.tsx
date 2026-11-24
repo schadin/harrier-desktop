@@ -1,10 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { Box, Text, Icon, Icons, Button, MenuItem } from 'folds';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
-import { useAccountDataCallback } from '../../../hooks/useAccountDataCallback';
+import { useCore } from '../../../hooks/useCore';
 import { CutoutCard } from '../../../components/cutout-card';
 
 type AccountDataProps = {
@@ -13,17 +12,13 @@ type AccountDataProps = {
   onSelect: (type: string | null) => void;
 };
 export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataProps) {
-  const mx = useMatrixClient();
-  const [accountDataTypes, setAccountDataKeys] = useState(() =>
-    Array.from(mx.store.accountData.keys())
-  );
-
-  useAccountDataCallback(
-    mx,
-    useCallback(() => {
-      setAccountDataKeys(Array.from(mx.store.accountData.keys()));
-    }, [mx])
-  );
+  const core = useCore();
+  const store = core.auth.accountDataTypes;
+  const accountDataTypes = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  ).value;
 
   return (
     <Box direction="Column" gap="100">
@@ -74,7 +69,7 @@ export function AccountData({ expand, onExpandToggle, onSelect }: AccountDataPro
                   </Text>
                 </Box>
               </MenuItem>
-              {accountDataTypes.sort().map((type) => (
+              {[...accountDataTypes].sort().map((type) => (
                 <MenuItem
                   key={type}
                   variant="Surface"

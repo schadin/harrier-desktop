@@ -94,6 +94,10 @@ export type AuthModule = {
   readonly sync: SnapshotStore<SyncView>;
   readonly capabilities: SnapshotStore<CapabilitiesView>;
   readonly authMetadata: SnapshotStore<AuthMetadataView | null>;
+  readonly accountDataTypes: SnapshotStore<readonly string[]>;
+  accountData(type: string): SnapshotStore<JsonObject | null>;
+  onAccountData(listener: (type: string, content: JsonObject) => void): () => void;
+  setAccountData(type: string, content: JsonObject): Promise<CoreResult<void>>;
   refreshCapabilities(): Promise<CoreResult<void>>;
   refreshAuthMetadata(): Promise<CoreResult<void>>;
   start(): Promise<CoreResult<void>>;

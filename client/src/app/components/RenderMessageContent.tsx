@@ -1,8 +1,8 @@
 import React from 'react';
-import { MsgType } from 'matrix-js-sdk';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Opts } from 'linkifyjs';
 import { config } from 'folds';
+import { MsgType } from '../../types/matrix/protocol';
 import type { DecryptionFailureCodeView } from '../utils/decryptionFailure';
 import {
   AudioContent,

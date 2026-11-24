@@ -21,10 +21,9 @@ export const useUserImagePack = (): ImagePack | undefined => {
   const [userPack, setUserPack] = useState(() => getUserImagePack(mx));
 
   useAccountDataCallback(
-    mx,
     useCallback(
-      (mEvent) => {
-        if (mEvent.getType() === AccountDataEvent.PoniesUserEmotes) {
+      (type) => {
+        if (type === AccountDataEvent.PoniesUserEmotes) {
           setUserPack(getUserImagePack(mx));
         }
       },
@@ -40,10 +39,9 @@ export const useGlobalImagePacks = (): ImagePack[] => {
   const [globalPacks, setGlobalPacks] = useState(() => getGlobalImagePacks(mx));
 
   useAccountDataCallback(
-    mx,
     useCallback(
-      (mEvent) => {
-        if (mEvent.getType() === AccountDataEvent.PoniesEmoteRooms) {
+      (type) => {
+        if (type === AccountDataEvent.PoniesEmoteRooms) {
           setGlobalPacks(getGlobalImagePacks(mx));
         }
       },

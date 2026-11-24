@@ -1,14 +1,13 @@
 /* eslint-disable no-continue */
 import type { TimelineItem } from '@harrier/core';
 import { useMemo } from 'react';
-import type { Room as MatrixRoom } from 'matrix-js-sdk';
 import { settingsAtom } from '../state/settings';
 import { useSetting } from '../state/hooks/settings';
 import { StateEvent } from '../../types/matrix/room';
 import { isVisibleTimelineItem } from '../utils/timelineVisibility';
 import { useCoreTimeline } from './useCoreTimeline';
 
-export const useRoomLatestRenderedEvent = (room: MatrixRoom): TimelineItem | undefined => {
+export const useRoomLatestRenderedEvent = (room: { roomId: string }): TimelineItem | undefined => {
   const [hideMembershipEvents] = useSetting(settingsAtom, 'hideMembershipEvents');
   const [hideNickAvatarEvents] = useSetting(settingsAtom, 'hideNickAvatarEvents');
   const [showHiddenEvents] = useSetting(settingsAtom, 'showHiddenEvents');

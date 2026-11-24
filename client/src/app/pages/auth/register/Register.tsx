@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Box, Text, color } from 'folds';
 import { Link, useSearchParams } from 'react-router-dom';
-import type { IAuthData, UIAFlow } from 'matrix-js-sdk';
+import type { AuthData, UIAFlow } from '../../../../types/matrix/uia';
 import { useAuthServer } from '../../../hooks/useAuthServer';
 import { RegisterFlowStatus, useAuthFlows } from '../../../hooks/useAuthFlows';
 import { useParsedLoginFlows } from '../../../hooks/useParsedLoginFlows';
@@ -66,7 +66,7 @@ export function Register() {
                 </Text>
               ) : (
                 <PasswordRegisterForm
-                  authData={registerFlows.data as unknown as IAuthData}
+                  authData={registerFlows.data as unknown as AuthData}
                   uiaFlows={supportedFlows}
                   defaultUsername={registerSearchParams.username}
                   defaultEmail={registerSearchParams.email}

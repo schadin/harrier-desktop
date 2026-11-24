@@ -1,4 +1,4 @@
-import { IAuthData, UIAFlow } from 'matrix-js-sdk';
+import type { AuthData, UIAFlow } from '../../types/matrix/uia';
 
 export const getSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: string[]): UIAFlow[] => {
   const supportedUIAFlows = uiaFlows.filter((flow) =>
@@ -8,30 +8,30 @@ export const getSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: strin
   return supportedUIAFlows;
 };
 
-export const getUIACompleted = (authData: IAuthData): string[] => {
+export const getUIACompleted = (authData: AuthData): string[] => {
   const completed = authData.completed ?? [];
   return completed;
 };
 
 export type UIAParams = Record<string, Record<string, unknown>>;
-export const getUIAParams = (authData: IAuthData): UIAParams => {
+export const getUIAParams = (authData: AuthData): UIAParams => {
   const params = authData.params ?? {};
   return params;
 };
 
-export const getUIASession = (authData: IAuthData): string | undefined => {
+export const getUIASession = (authData: AuthData): string | undefined => {
   const session = authData.session ?? undefined;
   return session;
 };
 
-export const getUIAErrorCode = (authData: IAuthData): string | undefined => {
+export const getUIAErrorCode = (authData: AuthData): string | undefined => {
   const errorCode =
     'errcode' in authData && typeof authData.errcode === 'string' ? authData.errcode : undefined;
 
   return errorCode;
 };
 
-export const getUIAError = (authData: IAuthData): string | undefined => {
+export const getUIAError = (authData: AuthData): string | undefined => {
   const errorCode =
     'error' in authData && typeof authData.error === 'string' ? authData.error : undefined;
 

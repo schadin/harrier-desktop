@@ -1422,6 +1422,23 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
   refreshCapabilities().catch(() => undefined);
 
+  const globalAccountDataTypesStore = createSnapshotStore<readonly string[]>(
+    Array.from(client.store.accountData.keys())
+  );
+  const globalAccountDataStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
+  const globalAccountDataCache = new Map<string, JsonObject | null>();
+  const globalAccountDataListeners = new Set<(type: string, content: JsonObject) => void>();
+  const publishGlobalAccountData = (type: string, content: JsonObject | null) => {
+    globalAccountDataCache.set(type, content);
+    globalAccountDataStores.get(type)?.publish(content);
+  };
+  client.on(ClientEvent.AccountData, (event: MatrixEvent) => {
+    const content = event.getContent<JsonObject>();
+    publishGlobalAccountData(event.getType(), content);
+    globalAccountDataTypesStore.publish(Array.from(client.store.accountData.keys()));
+    globalAccountDataListeners.forEach((listener) => listener(event.getType(), content));
+  });
+
   const authMetadataStore = createSnapshotStore<AuthMetadataView | null>(null);
   const refreshAuthMetadata = async (): Promise<CoreResult<void>> => {
     try {
@@ -1468,6 +1485,31 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       session: sessionStore,
       capabilities: capabilitiesStore,
       authMetadata: authMetadataStore,
+      accountDataTypes: globalAccountDataTypesStore,
+      accountData(type) {
+        const existing = globalAccountDataStores.get(type);
+        if (existing) return existing;
+        const content = globalAccountDataCache.has(type)
+          ? globalAccountDataCache.get(type) ?? null
+          : client.getAccountData(type as never)?.getContent<JsonObject>() ?? null;
+        globalAccountDataCache.set(type, content);
+        const store = createSnapshotStore(content);
+        globalAccountDataStores.set(type, store);
+        return store;
+      },
+      onAccountData(listener) {
+        globalAccountDataListeners.add(listener);
+        return () => globalAccountDataListeners.delete(listener);
+      },
+      async setAccountData(type, content) {
+        try {
+          await client.setAccountData(type as never, content as never);
+          publishGlobalAccountData(type, content);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
       refreshCapabilities,
       refreshAuthMetadata,
       sync: syncStore,

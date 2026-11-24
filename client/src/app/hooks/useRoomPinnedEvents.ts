@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
-import { RoomPinnedEventsEventContent } from 'matrix-js-sdk/lib/types';
-import { Room } from 'matrix-js-sdk';
+import type { RoomPinnedEventsEventContent } from '../../types/matrix/protocol';
 import { StateEvent } from '../../types/matrix/room';
 import { useCoreRoomState } from './useCoreRoomState';
 
-export const useRoomPinnedEvents = (room: Room): string[] => {
-  const content = useCoreRoomState<RoomPinnedEventsEventContent>(room, StateEvent.RoomPinnedEvents);
+export const useRoomPinnedEvents = (room: { roomId: string }): string[] => {
+  const content = useCoreRoomState<RoomPinnedEventsEventContent>(
+    room as Parameters<typeof useCoreRoomState>[0],
+    StateEvent.RoomPinnedEvents
+  );
   const events = useMemo(() => content?.pinned ?? [], [content]);
 
   return events;

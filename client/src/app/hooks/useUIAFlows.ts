@@ -1,6 +1,6 @@
-import { IAuthData, UIAFlow } from 'matrix-js-sdk';
-import type { CoreError } from '@harrier/core';
 import { useCallback, useMemo } from 'react';
+import type { CoreError } from '@harrier/core';
+import type { AuthData, UIAFlow } from '../../types/matrix/uia';
 import {
   getSupportedUIAFlows,
   getUIACompleted,
@@ -22,20 +22,19 @@ export const SUPPORTED_FLOW_TYPES = [
 export const useSupportedUIAFlows = (uiaFlows: UIAFlow[], supportedStages: string[]): UIAFlow[] =>
   useMemo(() => getSupportedUIAFlows(uiaFlows, supportedStages), [uiaFlows, supportedStages]);
 
-export const useUIACompleted = (authData: IAuthData): string[] =>
+export const useUIACompleted = (authData: AuthData): string[] =>
   useMemo(() => getUIACompleted(authData), [authData]);
 
-export const useUIAParams = (authData: IAuthData) =>
+export const useUIAParams = (authData: AuthData) =>
   useMemo(() => getUIAParams(authData), [authData]);
 
-export const useUIASession = (authData: IAuthData) =>
+export const useUIASession = (authData: AuthData) =>
   useMemo(() => getUIASession(authData), [authData]);
 
-export const useUIAErrorCode = (authData: IAuthData) =>
+export const useUIAErrorCode = (authData: AuthData) =>
   useMemo(() => getUIAErrorCode(authData), [authData]);
 
-export const useUIAError = (authData: IAuthData) =>
-  useMemo(() => getUIAError(authData), [authData]);
+export const useUIAError = (authData: AuthData) => useMemo(() => getUIAError(authData), [authData]);
 
 export type StageInfo = Record<string, unknown>;
 export type AuthStageData = {
@@ -52,7 +51,7 @@ export type UIAFlowInterface = {
   hasStage: (stageType: string) => boolean;
   getStageInfo: (stageType: string) => StageInfo | undefined;
 };
-export const useUIAFlow = (authData: IAuthData, uiaFlow: UIAFlow): UIAFlowInterface => {
+export const useUIAFlow = (authData: AuthData, uiaFlow: UIAFlow): UIAFlowInterface => {
   const completed = useUIACompleted(authData);
   const params = useUIAParams(authData);
   const session = useUIASession(authData);
@@ -98,9 +97,9 @@ export const useUIAFlow = (authData: IAuthData, uiaFlow: UIAFlow): UIAFlowInterf
 
 export const useUIAMatrixError = (
   error?: CoreError
-): [undefined, undefined] | [IAuthData, undefined] | [undefined, CoreError] => {
+): [undefined, undefined] | [AuthData, undefined] | [undefined, CoreError] => {
   if (!error) return [undefined, undefined];
-  if (error.httpStatus === 401) return [error.data as IAuthData, undefined];
+  if (error.httpStatus === 401) return [error.data as AuthData, undefined];
 
   return [undefined, error];
 };

@@ -1,6 +1,6 @@
 import React, { ChangeEventHandler, FormEventHandler, useCallback, useMemo, useState } from 'react';
-import { IPushRule, IPushRules, PushRuleKind } from 'matrix-js-sdk';
 import { Box, Text, Badge, Button, Input, config, IconButton, Icons, Icon, Spinner } from 'folds';
+import { IPushRule, IPushRules, PushRuleKind } from '../../../../types/matrix/pushRules';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -148,7 +148,7 @@ function KeywordModeSwitcher({ pushRule }: PushRulesProps) {
 export function KeywordMessagesNotifications() {
   const pushRulesEvt = useAccountData(AccountDataEvent.PushRules);
   const pushRules = useMemo(
-    () => pushRulesEvt?.getContent<IPushRules>() ?? { global: {} },
+    () => (pushRulesEvt as IPushRules | null) ?? { global: {} },
     [pushRulesEvt]
   );
 

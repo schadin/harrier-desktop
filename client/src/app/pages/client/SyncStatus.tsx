@@ -1,41 +1,23 @@
-import { MatrixClient, SyncState } from 'matrix-js-sdk';
-import React, { useCallback, useState } from 'react';
+import type { HarrierCore } from '@harrier/core';
+import React, { useRef, useSyncExternalStore } from 'react';
 import { Box, config, Line, Text } from 'folds';
-import { useSyncState } from '../../hooks/useSyncState';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 
-type StateData = {
-  current: SyncState | null;
-  previous: SyncState | null | undefined;
-};
-
 type SyncStatusProps = {
-  mx: MatrixClient;
+  core: HarrierCore;
 };
-export function SyncStatus({ mx }: SyncStatusProps) {
-  const [stateData, setStateData] = useState<StateData>({
-    current: null,
-    previous: undefined,
-  });
-
-  useSyncState(
-    mx,
-    useCallback((current, previous) => {
-      setStateData((s) => {
-        if (s.current === current && s.previous === previous) {
-          return s;
-        }
-        return { current, previous };
-      });
-    }, [])
+export function SyncStatus({ core }: SyncStatusProps) {
+  const previous = useRef(core.auth.sync.getSnapshot().value.phase);
+  const { value } = useSyncExternalStore(
+    core.auth.sync.subscribe,
+    core.auth.sync.getSnapshot,
+    core.auth.sync.getSnapshot
   );
+  const { phase } = value;
+  const wasSyncing = previous.current === 'syncing';
+  previous.current = phase;
 
-  if (
-    (stateData.current === SyncState.Prepared ||
-      stateData.current === SyncState.Syncing ||
-      stateData.current === SyncState.Catchup) &&
-    stateData.previous !== SyncState.Syncing
-  ) {
+  if ((phase === 'syncing' || phase === 'prepared') && !wasSyncing) {
     return (
       <Box direction="Column" shrink="No">
         <Box
@@ -51,23 +33,7 @@ export function SyncStatus({ mx }: SyncStatusProps) {
     );
   }
 
-  if (stateData.current === SyncState.Reconnecting) {
-    return (
-      <Box direction="Column" shrink="No">
-        <Box
-          className={ContainerColor({ variant: 'Warning' })}
-          style={{ padding: `${config.space.S100} 0` }}
-          alignItems="Center"
-          justifyContent="Center"
-        >
-          <Text size="L400">Connection Lost! Reconnecting...</Text>
-        </Box>
-        <Line variant="Warning" size="300" />
-      </Box>
-    );
-  }
-
-  if (stateData.current === SyncState.Error) {
+  if (phase === 'error') {
     return (
       <Box direction="Column" shrink="No">
         <Box

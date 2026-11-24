@@ -1,8 +1,7 @@
 import { atom, useSetAtom } from 'jotai';
-import { ClientEvent, MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { AccountDataEvent, SpacesSortContent } from '../../types/matrix/accountData';
-import { getAccountData } from '../utils/room';
+import { useCore } from '../hooks/useCore';
 
 export type SpaceSortAction = {
   type: 'INITIALIZE' | 'UPDATE';
@@ -17,30 +16,16 @@ export const spaceSortAtom = atom<SpacesSortContent, [SpaceSortAction], undefine
   }
 );
 
-export const useBindSpaceSortAtom = (mx: MatrixClient, spaceSort: typeof spaceSortAtom) => {
+export const useBindSpaceSortAtom = (spaceSort: typeof spaceSortAtom) => {
+  const core = useCore();
   const setSpaceSort = useSetAtom(spaceSort);
+  const store = core.auth.accountData(AccountDataEvent.SpacesSort);
+  const content = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 
   useEffect(() => {
-    const spacesSortEvent = getAccountData(mx, AccountDataEvent.SpacesSort);
-    if (spacesSortEvent) {
-      setSpaceSort({
-        type: 'INITIALIZE',
-        spacesSort: spacesSortEvent.getContent<SpacesSortContent>() ?? {},
-      });
-    }
-
-    const handleAccountData = (event: MatrixEvent) => {
-      if (event.getType() === AccountDataEvent.SpacesSort) {
-        setSpaceSort({
-          type: 'UPDATE',
-          spacesSort: event.getContent<SpacesSortContent>() ?? {},
-        });
-      }
-    };
-
-    mx.on(ClientEvent.AccountData, handleAccountData);
-    return () => {
-      mx.removeListener(ClientEvent.AccountData, handleAccountData);
-    };
-  }, [mx, setSpaceSort]);
+    setSpaceSort({
+      type: 'UPDATE',
+      spacesSort: (content ?? {}) as SpacesSortContent,
+    });
+  }, [content, setSpaceSort]);
 };

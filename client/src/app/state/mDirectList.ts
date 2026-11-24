@@ -1,8 +1,7 @@
 import { atom, useSetAtom } from 'jotai';
-import { ClientEvent, MatrixClient, MatrixEvent } from 'matrix-js-sdk';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { AccountDataEvent } from '../../types/matrix/accountData';
-import { getAccountData, getMDirects } from '../utils/room';
+import { useCore } from '../hooks/useCore';
 
 export type MDirectAction = {
   type: 'INITIALIZE' | 'UPDATE';
@@ -17,30 +16,17 @@ export const mDirectAtom = atom<Set<string>, [MDirectAction], undefined>(
   }
 );
 
-export const useBindMDirectAtom = (mx: MatrixClient, mDirect: typeof mDirectAtom) => {
+export const useBindMDirectAtom = (mDirect: typeof mDirectAtom) => {
+  const core = useCore();
   const setMDirect = useSetAtom(mDirect);
+  const store = core.auth.accountData(AccountDataEvent.Direct);
+  const content = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
 
   useEffect(() => {
-    const mDirectEvent = getAccountData(mx, AccountDataEvent.Direct);
-    if (mDirectEvent) {
-      setMDirect({
-        type: 'INITIALIZE',
-        rooms: getMDirects(mDirectEvent),
-      });
-    }
-
-    const handleAccountData = (event: MatrixEvent) => {
-      if (event.getType() === AccountDataEvent.Direct) {
-        setMDirect({
-          type: 'UPDATE',
-          rooms: getMDirects(event),
-        });
-      }
-    };
-
-    mx.on(ClientEvent.AccountData, handleAccountData);
-    return () => {
-      mx.removeListener(ClientEvent.AccountData, handleAccountData);
-    };
-  }, [mx, setMDirect]);
+    const rooms = new Set<string>();
+    Object.values(content ?? {}).forEach((value) => {
+      if (Array.isArray(value)) value.forEach((roomId) => typeof roomId === 'string' && rooms.add(roomId));
+    });
+    setMDirect({ type: 'UPDATE', rooms });
+  }, [content, setMDirect]);
 };

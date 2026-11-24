@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { AuthDict, IAuthData, UIAFlow } from 'matrix-js-sdk';
+import type { AuthData, AuthDict, UIAFlow } from '../../types/matrix/uia';
 import { getUIAFlowForStages } from '../utils/matrix-uia';
 import { useSupportedUIAFlows, useUIACompleted, useUIAFlow } from '../hooks/useUIAFlows';
 import { UIAFlowOverlay } from './UIAFlowOverlay';
@@ -15,7 +15,7 @@ export const pickUIAFlow = (uiaFlows: UIAFlow[]): UIAFlow | undefined => {
 };
 
 type ActionUIAProps = {
-  authData: IAuthData;
+  authData: AuthData;
   ongoingFlow: UIAFlow;
   action: (authDict: AuthDict) => void;
   onCancel: () => void;
@@ -55,7 +55,7 @@ export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIA
 }
 
 type ActionUIAFlowsLoaderProps = {
-  authData: IAuthData;
+  authData: AuthData;
   unsupported: () => ReactNode;
   children: (ongoingFlow: UIAFlow) => ReactNode;
 };

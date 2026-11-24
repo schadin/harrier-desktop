@@ -10,7 +10,7 @@ export const useIgnoredUsers = (): string[] => {
   const ignoredUserListEvt = useAccountData(AccountDataEvent.IgnoredUserList);
   const ignoredUsers = useMemo(() => {
     const ignoredUsersRecord =
-      ignoredUserListEvt?.getContent<IgnoredUserListContent>().ignored_users ?? {};
+      (ignoredUserListEvt as IgnoredUserListContent | null)?.ignored_users ?? {};
     return Object.keys(ignoredUsersRecord);
   }, [ignoredUserListEvt]);
 

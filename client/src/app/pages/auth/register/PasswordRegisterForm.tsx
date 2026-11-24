@@ -11,8 +11,8 @@ import {
   color,
 } from 'folds';
 import React, { ChangeEventHandler, useCallback, useState } from 'react';
-import { AuthDict, IAuthData, UIAFlow } from 'matrix-js-sdk';
 import type { CoreError } from '@harrier/core';
+import type { AuthData, AuthDict, UIAFlow } from '../../../../types/matrix/uia';
 import { PasswordInput } from '../../../components/password-input';
 import {
   getLoginTermUrl,
@@ -79,7 +79,7 @@ const pickStages = (uiaFlows: UIAFlow[], formData: FormData): string[] => {
 type RegisterUIAFlowProps = {
   formData: FormData;
   flow: UIAFlow;
-  authData: IAuthData;
+  authData: AuthData;
   registerEmailState: AsyncState<RequestEmailTokenResponse, CoreError>;
   registerEmail: RequestEmailTokenCallback;
   onRegister: (registerReqData: RegisterRequestData) => void;
@@ -166,7 +166,7 @@ function RegisterUIAFlow({
 }
 
 type PasswordRegisterFormProps = {
-  authData: IAuthData;
+  authData: AuthData;
   uiaFlows: UIAFlow[];
   defaultUsername?: string;
   defaultEmail?: string;

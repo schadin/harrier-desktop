@@ -1,5 +1,5 @@
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { MsgType } from 'matrix-js-sdk';
+import type { MsgType } from './protocol';
 
 export const MATRIX_BLUR_HASH_PROPERTY_NAME = 'xyz.amorgan.blurhash';
 export const MATRIX_SPOILER_PROPERTY_NAME = 'page.codeberg.everypizza.msc4193.spoiler';
@@ -44,7 +44,7 @@ export type IThumbnailContent = {
 };
 
 export type IImageContent = {
-  msgtype: MsgType.Image;
+  msgtype: typeof MsgType.Image;
   body?: string;
   filename?: string;
   url?: string;
@@ -55,7 +55,7 @@ export type IImageContent = {
 };
 
 export type IVideoContent = {
-  msgtype: MsgType.Video;
+  msgtype: typeof MsgType.Video;
   body?: string;
   filename?: string;
   url?: string;
@@ -66,7 +66,7 @@ export type IVideoContent = {
 };
 
 export type IAudioContent = {
-  msgtype: MsgType.Audio;
+  msgtype: typeof MsgType.Audio;
   body?: string;
   filename?: string;
   url?: string;
@@ -75,7 +75,7 @@ export type IAudioContent = {
 };
 
 export type IFileContent = {
-  msgtype: MsgType.File;
+  msgtype: typeof MsgType.File;
   body?: string;
   filename?: string;
   url?: string;
@@ -84,7 +84,7 @@ export type IFileContent = {
 };
 
 export type ILocationContent = {
-  msgtype: MsgType.Location;
+  msgtype: typeof MsgType.Location;
   body?: string;
   geo_uri?: string;
   info?: IThumbnailContent;

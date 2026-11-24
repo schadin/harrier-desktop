@@ -1,7 +1,7 @@
 import { atomFamily } from 'jotai/utils';
 import { Descendant } from 'slate';
 import { EncryptedAttachmentInfo } from 'browser-encrypt-attachment';
-import { IEventRelation } from 'matrix-js-sdk';
+import type { IEventRelation } from '../../../types/matrix/protocol';
 import {
   atomWithLocalStorage,
   getLocalStorageItem,

@@ -1,6 +1,12 @@
 import React, { useCallback, useMemo } from 'react';
 import { Badge, Box, Text } from 'folds';
-import { ConditionKind, IPushRules, PushRuleCondition, PushRuleKind, RuleId } from 'matrix-js-sdk';
+import {
+  ConditionKind,
+  IPushRules,
+  PushRuleCondition,
+  PushRuleKind,
+  RuleId,
+} from '../../../../types/matrix/pushRules';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import { NotificationModeSwitcher } from './NotificationModeSwitcher';
@@ -75,7 +81,7 @@ function AllMessagesModeSwitcher({
 export function AllMessagesNotifications() {
   const pushRulesEvt = useAccountData(AccountDataEvent.PushRules);
   const pushRules = useMemo(
-    () => pushRulesEvt?.getContent<IPushRules>() ?? { global: {} },
+    () => (pushRulesEvt as IPushRules | null) ?? { global: {} },
     [pushRulesEvt]
   );
 

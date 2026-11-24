@@ -1,6 +1,6 @@
-import { IContent, MsgType } from 'matrix-js-sdk';
 import type { HarrierCore } from '@harrier/core';
 import to from 'await-to-js';
+import { MsgType, type IContent } from '../../../types/matrix/protocol';
 import {
   IThumbnailContent,
   MATRIX_BLUR_HASH_PROPERTY_NAME,

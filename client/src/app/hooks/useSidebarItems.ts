@@ -85,11 +85,10 @@ export const useSidebarItems = (
   }, [mx, orphanSpaces]);
 
   useAccountDataCallback(
-    mx,
     useCallback(
-      (mEvent) => {
-        if (mEvent.getType() === AccountDataEvent.CinnySpaces) {
-          const newContent = mEvent.getContent<InCinnySpacesContent>();
+      (type, content) => {
+        if (type === AccountDataEvent.CinnySpaces) {
+          const newContent = content as InCinnySpacesContent;
           setSidebarItems(parseSidebar(mx, orphanSpaces, newContent));
         }
       },

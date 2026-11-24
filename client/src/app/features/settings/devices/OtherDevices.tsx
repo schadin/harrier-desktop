@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { Box, Button, config, Menu, Spinner, Text } from 'folds';
 import type { CoreError, DeviceView, JsonObject } from '@harrier/core';
-import { AuthDict } from 'matrix-js-sdk';
+import type { AuthDict } from '../../../../types/matrix/uia';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { ActionUIA, ActionUIAFlowsLoader } from '../../../components/ActionUIA';

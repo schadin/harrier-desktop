@@ -9,14 +9,14 @@ export const getSecretStorageKeyEventType = (key: string): string => `m.secret_s
 
 export const useSecretStorageDefaultKeyId = (): string | undefined => {
   const defaultKeyEvent = useAccountData(AccountDataEvent.SecretStorageDefaultKey);
-  const defaultKeyId = defaultKeyEvent?.getContent<SecretStorageDefaultKeyContent>().key;
+  const defaultKeyId = (defaultKeyEvent as SecretStorageDefaultKeyContent | null)?.key;
 
   return defaultKeyId;
 };
 
 export const useSecretStorageKeyContent = (keyId: string): SecretStorageKeyContent | undefined => {
   const keyEvent = useAccountData(getSecretStorageKeyEventType(keyId));
-  const secretStorageKey = keyEvent?.getContent<SecretStorageKeyContent>();
+  const secretStorageKey = (keyEvent as SecretStorageKeyContent | null) ?? undefined;
 
   return secretStorageKey;
 };

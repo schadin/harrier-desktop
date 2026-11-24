@@ -1,6 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
-import { ConditionKind, IPushRules, PushRuleKind, RuleId } from 'matrix-js-sdk';
 import { Box, Text, Badge } from 'folds';
+import {
+  ConditionKind,
+  IPushRules,
+  PushRuleKind,
+  RuleId,
+} from '../../../../types/matrix/pushRules';
 import { useAccountData } from '../../../hooks/useAccountData';
 import { AccountDataEvent } from '../../../../types/matrix/accountData';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -117,7 +122,7 @@ export function SpecialMessagesNotifications() {
   const { displayName } = useUserProfile(userId);
   const pushRulesEvt = useAccountData(AccountDataEvent.PushRules);
   const pushRules = useMemo(
-    () => pushRulesEvt?.getContent<IPushRules>() ?? { global: {} },
+    () => (pushRulesEvt as IPushRules | null) ?? { global: {} },
     [pushRulesEvt]
   );
 

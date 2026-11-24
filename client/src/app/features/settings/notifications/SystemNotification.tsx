@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Box, Text, Switch, Button, color, Spinner } from 'folds';
-import { IPusherRequest } from 'matrix-js-sdk';
+import { IPusherRequest } from '../../../../types/matrix/pushRules';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';

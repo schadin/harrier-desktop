@@ -1,6 +1,6 @@
 import React, { CSSProperties, ReactNode, useState } from 'react';
 import { Box, Chip, Icon, Icons, Text, toRem } from 'folds';
-import { IContent } from 'matrix-js-sdk';
+import type { IContent } from '../../../types/matrix/protocol';
 import type { DecryptionFailureCodeView } from '../../utils/decryptionFailure';
 import { JUMBO_EMOJI_REG, URL_REG } from '../../utils/regex';
 import { trimReplyFromBody } from '../../utils/room';

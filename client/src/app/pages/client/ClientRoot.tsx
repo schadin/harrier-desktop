@@ -13,17 +13,8 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { MatrixClient } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
-import React, {
-  MouseEventHandler,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import { createMatrixJsCore } from '@harrier/core-matrix-js';
+import React, { MouseEventHandler, ReactNode, useCallback, useEffect, useState } from 'react';
 import type { HarrierCore } from '@harrier/core';
 import {
   clearCacheAndReload,
@@ -55,7 +46,7 @@ function ClientRootLoading() {
   );
 }
 
-function ClientRootOptions({ mx, core }: { mx?: MatrixClient; core?: HarrierCore }) {
+function ClientRootOptions({ core }: { core?: HarrierCore }) {
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const handleToggle: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -97,7 +88,7 @@ function ClientRootOptions({ mx, core }: { mx?: MatrixClient; core?: HarrierCore
           >
             <Menu>
               <Box direction="Column" gap="100" style={{ padding: config.space.S100 }}>
-                {mx && core && (
+                {core && (
                   <MenuItem onClick={() => clearCacheAndReload(core)} size="300" radii="300">
                     <Text as="span" size="T300" truncate>
                       Clear Cache and Reload
@@ -106,7 +97,7 @@ function ClientRootOptions({ mx, core }: { mx?: MatrixClient; core?: HarrierCore
                 )}
                 <MenuItem
                   onClick={() => {
-                    if (mx && core) {
+                    if (core) {
                       logoutClient(core);
                       return;
                     }
@@ -148,7 +139,7 @@ export function ClientRoot({ children }: ClientRootProps) {
   const [loading, setLoading] = useState(true);
   const { baseUrl, userId } = getFallbackSession() ?? {};
 
-  const [loadState, loadMatrix] = useAsyncCallback<MatrixClient, Error, []>(
+  const [loadState, loadMatrix] = useAsyncCallback<HarrierCore, Error, []>(
     useCallback(() => {
       const session = getFallbackSession();
       if (!session) {
@@ -157,8 +148,7 @@ export function ClientRoot({ children }: ClientRootProps) {
       return initClient(session);
     }, [])
   );
-  const mx = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
-  const core = useMemo(() => (mx ? createMatrixJsCore(mx) : undefined), [mx]);
+  const core = loadState.status === AsyncStatus.Success ? loadState.data : undefined;
   const [startState, startMatrix] = useAsyncCallback<void, Error, [HarrierCore]>(
     useCallback(async (currentCore) => {
       const result = await currentCore.auth.start();
@@ -176,15 +166,13 @@ export function ClientRoot({ children }: ClientRootProps) {
   }, [loadState, loadMatrix]);
 
   useEffect(() => {
-    if (core && mx && !mx.clientRunning) {
-      startMatrix(core);
-    }
-  }, [core, mx, startMatrix]);
+    if (core) startMatrix(core);
+  }, [core, startMatrix]);
 
   useSyncState(
-    mx,
+    core,
     useCallback((state) => {
-      if (state === 'PREPARED') {
+      if (state === 'prepared') {
         setLoading(false);
       }
     }, [])
@@ -193,8 +181,8 @@ export function ClientRoot({ children }: ClientRootProps) {
   return (
     <AutoDiscovery userId={userId!} baseUrl={baseUrl!}>
       <SpecVersions baseUrl={baseUrl!}>
-        {mx && <SyncStatus mx={mx} />}
-        {loading && <ClientRootOptions mx={mx} core={core} />}
+        {core && <SyncStatus core={core} />}
+        {loading && <ClientRootOptions core={core} />}
         {(loadState.status === AsyncStatus.Error || startState.status === AsyncStatus.Error) && (
           <SplashScreen>
             <Box
@@ -222,7 +210,7 @@ export function ClientRoot({ children }: ClientRootProps) {
             </Box>
           </SplashScreen>
         )}
-        {loading || !mx || !core ? (
+        {loading || !core ? (
           <ClientRootLoading />
         ) : (
           <CoreProvider value={core}>

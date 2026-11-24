@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Box, Text, config } from 'folds';
-import { EventType } from 'matrix-js-sdk';
 import { ReactEditor } from 'slate-react';
 import { isKeyHotkey } from 'is-hotkey';
 import { useAtomValue } from 'jotai';
 import { useCoreRoomState } from '../../hooks/useCoreRoomState';
-import { StateEvent } from '../../../types/matrix/room';
+import { MessageEvent, StateEvent } from '../../../types/matrix/room';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useEditor } from '../../components/editor';
@@ -93,7 +92,7 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const creators = useRoomCreators(room);
 
   const permissions = useRoomPermissions(creators, powerLevels);
-  const canMessage = permissions.event(EventType.RoomMessage, mx.getSafeUserId());
+  const canMessage = permissions.event(MessageEvent.RoomMessage, mx.getSafeUserId());
 
   const paletteOpened = useAtomValue(searchModalAtom);
   const messageInputFocusToken = useAtomValue(messageInputFocusAtom);

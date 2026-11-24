@@ -1,14 +1,12 @@
-import { ClientEvent, ClientEventHandlerMap, MatrixClient } from 'matrix-js-sdk';
+import type { HarrierCore, SyncView } from '@harrier/core';
 import { useEffect } from 'react';
 
 export const useSyncState = (
-  mx: MatrixClient | undefined,
-  onChange: ClientEventHandlerMap[ClientEvent.Sync]
+  core: HarrierCore | undefined,
+  onChange: (state: SyncView['phase']) => void
 ): void => {
-  useEffect(() => {
-    mx?.on(ClientEvent.Sync, onChange);
-    return () => {
-      mx?.removeListener(ClientEvent.Sync, onChange);
-    };
-  }, [mx, onChange]);
+  useEffect(
+    () => core?.auth.sync.subscribe(() => onChange(core.auth.sync.getSnapshot().value.phase)),
+    [core, onChange]
+  );
 };
