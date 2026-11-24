@@ -262,6 +262,7 @@ export type NotificationsModule = {
 
 export type CallsModule = {
   readonly active: SnapshotStore<readonly CallView[]>;
+  session(roomId: RoomId): SnapshotStore<CallView | null>;
   join(roomId: RoomId): Promise<CoreResult<void>>;
   leave(roomId: RoomId): Promise<CoreResult<void>>;
 };

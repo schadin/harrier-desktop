@@ -7,6 +7,7 @@ export const callsCases = [
     try {
       expect(core.capabilities.calls).toBe(true);
       expect(core.calls?.active.getSnapshot().value).toEqual([]);
+      expect(core.calls?.session('!unknown:example.org').getSnapshot().value).toBeNull();
       const joined = await core.calls?.join('!room:example.org');
       expect(joined?.ok).toBe(true);
       expect(core.calls?.active.getSnapshot().value).toEqual([

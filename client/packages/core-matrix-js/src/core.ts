@@ -84,6 +84,10 @@ import {
   type Verifier,
 } from 'matrix-js-sdk/lib/crypto-api';
 import { VerificationMethod } from 'matrix-js-sdk/lib/types';
+import {
+  MatrixRTCSessionEvent,
+  type MatrixRTCSession,
+} from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession';
 import { decryptAttachment } from 'browser-encrypt-attachment';
 import { registerMatrixClient } from './legacy';
 import { clearSecretStorageKeys, storeSecretStorageKey } from './secretStorageKeys';
@@ -1232,6 +1236,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
 
   const callsStore = createSnapshotStore<readonly CallView[]>([]);
+  const callSessionStores = new Map<string, WritableSnapshotStore<CallView | null>>();
+  const callSessions = new Map<string, MatrixRTCSession>();
+  const buildCallView = (roomId: string, session?: MatrixRTCSession): CallView | null =>
+    session
+      ? {
+          roomId,
+          participants: session.memberships.map((membership) => ({
+            userId: membership.userId,
+            deviceId: membership.deviceId,
+          })),
+        }
+      : null;
+  const refreshCallSession = (roomId: string) => {
+    callSessionStores.get(roomId)?.publish(buildCallView(roomId, callSessions.get(roomId)));
+  };
   const mediaConfigStore = createSnapshotStore<MediaConfigView>({});
   const mediaAuthenticatedStore = createSnapshotStore(false);
   const refreshMediaConfig = async (): Promise<CoreResult<void>> => {
@@ -2158,6 +2177,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     },
     calls: {
       active: callsStore,
+      session(roomId) {
+        const existing = callSessionStores.get(roomId);
+        if (existing) return existing;
+        const room = client.getRoom(roomId);
+        const session = room ? client.matrixRTC.getRoomSession(room) : undefined;
+        if (session) {
+          callSessions.set(roomId, session);
+          session.on(MatrixRTCSessionEvent.MembershipsChanged, () => refreshCallSession(roomId));
+        }
+        const store = createSnapshotStore(buildCallView(roomId, session));
+        callSessionStores.set(roomId, store);
+        return store;
+      },
       async join(roomId) {
         const userId = client.getSafeUserId();
         const deviceId = client.getDeviceId() ?? undefined;
