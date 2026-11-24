@@ -1,3 +1,4 @@
+/* eslint-disable max-classes-per-file */
 import {
   ClientEvent,
   createClient,
@@ -14,6 +15,14 @@ import {
   User,
   UserEvent,
 } from 'matrix-js-sdk';
+import {
+  ImportRoomKeyStage,
+  VerificationPhase,
+  VerificationRequestEvent,
+  VerifierEvent,
+  type CryptoApi,
+  type VerificationRequest,
+} from 'matrix-js-sdk/lib/crypto-api';
 
 export const TEST_USER_ID = '@tester:example.org';
 const DIRECT_PARTNER_ID = '@alice:example.org';
@@ -217,6 +226,90 @@ function reactionEvent(roomId: string, reaction: SyncFixtureReaction): MatrixEve
   });
 }
 
+class FakeEmitter {
+  private listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
+  on(event: string, listener: (...args: unknown[]) => void) {
+    const listeners = this.listeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(event, listeners);
+  }
+
+  removeListener(event: string, listener: (...args: unknown[]) => void) {
+    this.listeners.get(event)?.delete(listener);
+  }
+
+  protected emit(event: string, ...args: unknown[]) {
+    this.listeners.get(event)?.forEach((listener) => listener(...args));
+  }
+}
+
+class FakeVerifier extends FakeEmitter {
+  async verify() {
+    this.emit(VerifierEvent.ShowSas, {
+      sas: { emoji: [['🐱', 'Cat']] },
+      confirm: async () => undefined,
+      mismatch: () => undefined,
+      cancel: () => undefined,
+    });
+  }
+}
+
+class FakeVerificationRequest extends FakeEmitter {
+  phase = VerificationPhase.Requested;
+
+  verifier: FakeVerifier | undefined;
+
+  readonly initiatedByMe = true;
+
+  readonly otherUserId = TEST_USER_ID;
+
+  readonly otherDeviceId = 'DEVICE1';
+
+  readonly isSelfVerification = true;
+
+  async accept() {
+    this.phase = VerificationPhase.Ready;
+    this.emit(VerificationRequestEvent.Change);
+  }
+
+  async startVerification() {
+    this.verifier = new FakeVerifier();
+    this.phase = VerificationPhase.Started;
+    this.emit(VerificationRequestEvent.Change);
+    return this.verifier;
+  }
+
+  async cancel() {
+    this.phase = VerificationPhase.Cancelled;
+    this.emit(VerificationRequestEvent.Change);
+  }
+}
+
+const createFakeCrypto = (): CryptoApi =>
+  ({
+    getDeviceVerificationStatus: async () => ({ crossSigningVerified: false }),
+    getOwnDeviceKeys: async () => ({ ed25519: 'ed25519-test-key' }),
+    requestDeviceVerification: async () =>
+      new FakeVerificationRequest() as unknown as VerificationRequest,
+    getActiveSessionBackupVersion: async () => undefined,
+    getKeyBackupInfo: async () => null,
+    isKeyBackupTrusted: async () => ({ trusted: false, matchesDecryptionKey: false }),
+    restoreKeyBackup: async (options?: { progressCallback?: (progress: unknown) => void }) => {
+      options?.progressCallback?.({ stage: ImportRoomKeyStage.Fetch });
+      options?.progressCallback?.({
+        stage: ImportRoomKeyStage.LoadKeys,
+        total: 1,
+        successes: 1,
+        failures: 0,
+      });
+      return { total: 1, successes: 1, failures: 0 };
+    },
+    bootstrapSecretStorage: async () => undefined,
+    loadSessionBackupPrivateKeyFromSecretStorage: async () => undefined,
+    bootstrapCrossSigning: async () => undefined,
+  } as unknown as CryptoApi);
+
 export function createSyncDriver(): SyncDriver {
   const client = createClient({
     baseUrl: 'https://matrix.example.org',
@@ -238,6 +331,7 @@ export function createSyncDriver(): SyncDriver {
       ...(device.lastSeenTs !== undefined ? { last_seen_ts: device.lastSeenTs } : {}),
     })),
   })) as typeof client.getDevices;
+  client.getCrypto = () => createFakeCrypto();
   const directRooms = new Set<string>();
   const sendFailRooms = new Set<string>();
   const sendAttempts = new Map<string, number>();

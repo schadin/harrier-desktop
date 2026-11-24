@@ -13,17 +13,18 @@ export const backupCases = [
       const refreshed = await core.crypto.backup.refreshStatus();
       expect(refreshed.ok).toBe(true);
       const restored = await core.crypto.backup.restore();
-      expect(restored.ok).toBe(false);
+      expect(restored.ok).toBe(true);
+      expect(core.crypto.backup.progress.getSnapshot().value).toEqual({ status: 'done' });
       const decoded = await core.crypto.backup.decodeRecoveryKey('missing', {
         recoveryKey: 'not a key',
       });
       expect(decoded.ok).toBe(false);
       const unlocked = await core.crypto.backup.unlockSecretStorage();
-      expect(unlocked.ok).toBe(false);
+      expect(unlocked.ok).toBe(true);
       const keyRequest = await core.crypto.backup.requestKey('!room:example.org', '$unknown');
       expect(keyRequest.ok).toBe(false);
       const retried = await core.crypto.backup.retryDecryption();
-      expect(retried.ok).toBe(false);
+      expect(retried.ok).toBe(true);
     } finally {
       await harness.dispose(core);
     }

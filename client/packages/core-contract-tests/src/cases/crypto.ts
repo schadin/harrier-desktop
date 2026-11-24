@@ -45,7 +45,7 @@ export const cryptoCases = [
           lastSeenIp: '192.0.2.1',
           lastSeenTs: 1_700_000_000_000,
           isCurrent: false,
-          trust: 'unsupported',
+          trust: 'unverified',
         },
       ]);
     } finally {
