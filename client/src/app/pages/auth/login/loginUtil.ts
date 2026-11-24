@@ -1,10 +1,8 @@
-import to from 'await-to-js';
-import { LoginRequest, LoginResponse, MatrixError, createClient } from 'matrix-js-sdk';
+import { CoreError, type LoginResponseView } from '@harrier/core';
+import { createAuthOperations } from '@harrier/core-matrix-js';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClientConfig, clientAllowedServer } from '../../../hooks/useClientConfig';
-import { autoDiscovery, specVersions } from '../../../cs-api';
-import { ErrorCode } from '../../../cs-errorcode';
 import {
   deleteAfterLoginRedirectPath,
   getAfterLoginRedirectPath,
@@ -16,29 +14,20 @@ export enum GetBaseUrlError {
   NotAllow = 'NotAllow',
   NotFound = 'NotFound',
 }
+
+const authOperations = createAuthOperations();
+
 export const factoryGetBaseUrl = (clientConfig: ClientConfig, server: string) => {
   const getBaseUrl = async (): Promise<string> => {
     if (!clientAllowedServer(clientConfig, server)) {
       throw new Error(GetBaseUrlError.NotAllow);
     }
 
-    const [, discovery] = await to(autoDiscovery(fetch, server));
-
-    let mxIdBaseUrl: string | undefined;
-    const [, discoveryInfo] = discovery ?? [];
-
-    if (discoveryInfo) {
-      mxIdBaseUrl = discoveryInfo['m.homeserver'].base_url;
-    }
-
-    if (!mxIdBaseUrl) {
+    const discovery = await authOperations.discover(server);
+    if (!discovery.ok || !discovery.value) {
       throw new Error(GetBaseUrlError.NotFound);
     }
-    const [, versions] = await to(specVersions(fetch, mxIdBaseUrl));
-    if (!versions) {
-      throw new Error(GetBaseUrlError.NotFound);
-    }
-    return mxIdBaseUrl;
+    return discovery.value['m.homeserver'].base_url;
   };
   return getBaseUrl;
 };
@@ -55,57 +44,26 @@ export enum LoginError {
 
 export type CustomLoginResponse = {
   baseUrl: string;
-  response: LoginResponse;
+  response: LoginResponseView;
 };
 export const login = async (
   serverBaseUrl: string | (() => Promise<string>),
-  data: LoginRequest
+  data: { type: string; [key: string]: unknown }
 ): Promise<CustomLoginResponse> => {
-  const [urlError, url] =
-    typeof serverBaseUrl === 'function' ? await to(serverBaseUrl()) : [undefined, serverBaseUrl];
-  if (urlError) {
-    throw new MatrixError({
-      errcode:
-        urlError.message === GetBaseUrlError.NotAllow
-          ? LoginError.ServerNotAllowed
-          : LoginError.InvalidServer,
-    });
+  let url: string;
+  try {
+    url = typeof serverBaseUrl === 'function' ? await serverBaseUrl() : serverBaseUrl;
+  } catch (error) {
+    const errcode =
+      error instanceof Error && error.message === GetBaseUrlError.NotAllow
+        ? LoginError.ServerNotAllowed
+        : LoginError.InvalidServer;
+    throw new CoreError('unknown', errcode, false, undefined, errcode);
   }
 
-  const mx = createClient({ baseUrl: url });
-  const [err, res] = await to<LoginResponse, MatrixError>(mx.loginRequest(data));
-
-  if (err) {
-    if (err.httpStatus === 400) {
-      throw new MatrixError({
-        errcode: LoginError.InvalidRequest,
-      });
-    }
-    if (err.httpStatus === 429) {
-      throw new MatrixError({
-        errcode: LoginError.RateLimited,
-      });
-    }
-    if (err.errcode === ErrorCode.M_USER_DEACTIVATED) {
-      throw new MatrixError({
-        errcode: LoginError.UserDeactivated,
-      });
-    }
-
-    if (err.httpStatus === 403) {
-      throw new MatrixError({
-        errcode: LoginError.Forbidden,
-      });
-    }
-
-    throw new MatrixError({
-      errcode: LoginError.Unknown,
-    });
-  }
-  return {
-    baseUrl: url,
-    response: res,
-  };
+  const result = await authOperations.login(url, data);
+  if (!result.ok) throw result.error;
+  return { baseUrl: url, response: result.value };
 };
 
 export const useLoginComplete = (data?: CustomLoginResponse) => {
@@ -114,7 +72,7 @@ export const useLoginComplete = (data?: CustomLoginResponse) => {
   useEffect(() => {
     if (data) {
       const { response: loginRes, baseUrl: loginBaseUrl } = data;
-      setFallbackSession(loginRes.access_token, loginRes.device_id, loginRes.user_id, loginBaseUrl);
+      setFallbackSession(loginRes.accessToken, loginRes.deviceId, loginRes.userId, loginBaseUrl);
       const afterLoginRedirectUrl = getAfterLoginRedirectPath();
       deleteAfterLoginRedirectPath();
       navigate(afterLoginRedirectUrl ?? getHomePath(), { replace: true });

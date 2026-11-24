@@ -11,7 +11,7 @@ import {
   config,
 } from 'folds';
 import React, { useCallback, useEffect } from 'react';
-import { MatrixError } from 'matrix-js-sdk';
+import type { CoreError } from '@harrier/core';
 import { useAutoDiscoveryInfo } from '../../../hooks/useAutoDiscoveryInfo';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { CustomLoginResponse, LoginError, login, useLoginComplete } from './loginUtil';
@@ -49,7 +49,7 @@ export function TokenLogin({ token }: TokenLoginProps) {
 
   const [loginState, startLogin] = useAsyncCallback<
     CustomLoginResponse,
-    MatrixError,
+    CoreError,
     Parameters<typeof login>
   >(useCallback(login, []));
 

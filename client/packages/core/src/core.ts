@@ -20,8 +20,13 @@ import type {
   BackupProgressView,
   CapabilitiesView,
   AuthMetadataView,
+  LoginFlowsView,
+  LoginRequestView,
+  LoginResponseView,
   NotificationPreferencesView,
   NotificationPageView,
+  ServerDiscoveryView,
+  SsoActionView,
   RoomNotificationModeView,
   MediaConfigView,
   MediaRef,
@@ -43,6 +48,19 @@ export type CoreCapabilities = {
 };
 
 export type CoreResult<T> = { ok: true; value: T } | { ok: false; error: CoreError };
+
+export type AuthOperations = {
+  discover(server: string): Promise<CoreResult<ServerDiscoveryView | null>>;
+  login(baseUrl: string, request: LoginRequestView): Promise<CoreResult<LoginResponseView>>;
+  loginFlows(baseUrl: string): Promise<CoreResult<LoginFlowsView>>;
+  ssoUrl(
+    baseUrl: string,
+    redirectUrl: string,
+    idProviderId?: string,
+    action?: SsoActionView
+  ): string | null;
+  mediaUrl(baseUrl: string, mxcUrl: string): string | null;
+};
 
 export type AuthModule = {
   readonly session: SnapshotStore<SessionView | null>;

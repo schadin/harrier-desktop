@@ -1,25 +1,26 @@
 import { Avatar, AvatarImage, Box, Button, Text } from 'folds';
-import { IIdentityProvider, SSOAction, createClient } from 'matrix-js-sdk';
-import React, { useMemo } from 'react';
+import type { IdentityProviderView, SsoActionView } from '@harrier/core';
+import { createAuthOperations } from '@harrier/core-matrix-js';
+import React from 'react';
 import { useAutoDiscoveryInfo } from '../../hooks/useAutoDiscoveryInfo';
 
 type SSOLoginProps = {
-  providers?: IIdentityProvider[];
+  providers?: IdentityProviderView[];
   redirectUrl: string;
-  action?: SSOAction;
+  action?: SsoActionView;
   saveScreenSpace?: boolean;
 };
+const authOperations = createAuthOperations();
+
 export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SSOLoginProps) {
   const discovery = useAutoDiscoveryInfo();
   const baseUrl = discovery['m.homeserver'].base_url;
-  const mx = useMemo(() => createClient({ baseUrl }), [baseUrl]);
-
   const getSSOIdUrl = (ssoId?: string): string =>
-    mx.getSsoLoginUrl(redirectUrl, 'sso', ssoId, action);
+    authOperations.ssoUrl(baseUrl, redirectUrl, ssoId, action) ?? '';
 
   const withoutIcon = providers
     ? providers.find(
-        (provider) => !provider.icon || !mx.mxcUrlToHttp(provider.icon, 96, 96, 'crop', false)
+        (provider) => !provider.icon || !authOperations.mediaUrl(baseUrl, provider.icon)
       )
     : true;
 
@@ -30,7 +31,7 @@ export function SSOLogin({ providers, redirectUrl, action, saveScreenSpace }: SS
       {providers ? (
         providers.map((provider) => {
           const { id, name, icon } = provider;
-          const iconUrl = icon && mx.mxcUrlToHttp(icon, 96, 96, 'crop', false);
+          const iconUrl = icon && authOperations.mediaUrl(baseUrl, icon);
 
           const buttonTitle = `Continue with ${name}`;
 

@@ -5,11 +5,18 @@ export class CoreError extends Error {
 
   readonly retryable: boolean;
 
-  constructor(code: CoreErrorCode, message: string, retryable = false) {
+  constructor(
+    code: CoreErrorCode,
+    message: string,
+    retryable?: boolean,
+    readonly httpStatus?: number,
+    readonly errcode?: string,
+    readonly data?: unknown
+  ) {
     super(message);
     this.name = 'CoreError';
     this.code = code;
-    this.retryable = retryable;
+    this.retryable = retryable ?? false;
   }
 }
 

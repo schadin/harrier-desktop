@@ -149,6 +149,40 @@ export type TimelineView = {
   readonly focusedEventId?: EventId;
 };
 
+export type ServerDiscoveryView = {
+  readonly 'm.homeserver': { readonly base_url: string };
+  readonly [key: string]: unknown;
+};
+
+export type IdentityProviderView = {
+  readonly id?: string;
+  readonly name?: string;
+  readonly icon?: string;
+  readonly brand?: string;
+};
+
+export type LoginFlowView = {
+  readonly type: string;
+  readonly identity_providers?: readonly IdentityProviderView[];
+};
+
+export type LoginFlowsView = {
+  readonly flows: readonly LoginFlowView[];
+};
+
+export type LoginRequestView = {
+  readonly type: string;
+  readonly [key: string]: unknown;
+};
+
+export type LoginResponseView = {
+  readonly accessToken: string;
+  readonly deviceId: string;
+  readonly userId: string;
+};
+
+export type SsoActionView = 'login' | 'register';
+
 export type AuthMetadataView = {
   readonly issuer?: string;
   readonly account_management_uri?: string;
