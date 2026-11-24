@@ -13,7 +13,7 @@ import {
   Spinner,
   Text,
 } from 'folds';
-import { HttpApiEvent, HttpApiEventHandlerMap, MatrixClient } from 'matrix-js-sdk';
+import { MatrixClient } from 'matrix-js-sdk';
 import FocusTrap from 'focus-trap-react';
 import React, {
   MouseEventHandler,
@@ -43,7 +43,6 @@ import { useSyncState } from '../../hooks/useSyncState';
 import { stopPropagation } from '../../utils/keyboard';
 import { SyncStatus } from './SyncStatus';
 import { getFallbackSession } from '../../state/sessions';
-import { clearSecretStorageKeys } from '../../../client/secretStorageKeys';
 import { AutoDiscovery } from './AutoDiscovery';
 
 function ClientRootLoading() {
@@ -132,21 +131,15 @@ function ClientRootOptions({ mx, core }: { mx?: MatrixClient; core?: HarrierCore
   );
 }
 
-const useLogoutListener = (mx?: MatrixClient) => {
-  useEffect(() => {
-    const handleLogout: HttpApiEventHandlerMap[HttpApiEvent.SessionLoggedOut] = async () => {
-      mx?.stopClient();
-      await mx?.clearStores();
-      clearSecretStorageKeys();
-      window.localStorage.clear();
-      window.location.reload();
-    };
-
-    mx?.on(HttpApiEvent.SessionLoggedOut, handleLogout);
-    return () => {
-      mx?.removeListener(HttpApiEvent.SessionLoggedOut, handleLogout);
-    };
-  }, [mx]);
+const useLogoutListener = (core?: HarrierCore) => {
+  useEffect(
+    () =>
+      core?.auth.onLoggedOut(() => {
+        window.localStorage.clear();
+        window.location.reload();
+      }),
+    [core]
+  );
 };
 
 type ClientRootProps = {
@@ -175,7 +168,7 @@ export function ClientRoot({ children }: ClientRootProps) {
     }, [])
   );
 
-  useLogoutListener(mx);
+  useLogoutListener(core);
 
   useEffect(() => {
     if (loadState.status === AsyncStatus.Idle) {

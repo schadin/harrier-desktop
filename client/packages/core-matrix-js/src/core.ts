@@ -46,6 +46,7 @@ import {
 import {
   ClientEvent,
   Direction,
+  HttpApiEvent,
   EventType,
   EventStatus,
   EventTimeline,
@@ -1414,6 +1415,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   });
 
   const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
+  const loggedOutListeners = new Set<() => void>();
+  client.on(HttpApiEvent.SessionLoggedOut, () => {
+    client.stopClient();
+    clearSecretStorageKeys();
+    client.clearStores().catch(() => undefined);
+    sessionStore.publish(null);
+    syncStore.publish({ phase: 'stopped' });
+    loggedOutListeners.forEach((listener) => listener());
+  });
 
   client.on(ClientEvent.Sync, (state: SyncState) => {
     let phase: SyncView['phase'] = 'syncing';
@@ -1445,6 +1455,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           syncStore.publish({ phase: 'error', error: toCoreError(error).message });
           return { ok: false, error: toCoreError(error) };
         }
+      },
+      async retrySync() {
+        try {
+          if (client.clientRunning) client.retryImmediately();
+          else await client.startClient({ lazyLoadMembers: true });
+          syncStore.publish({ phase: 'syncing' });
+          return { ok: true, value: undefined };
+        } catch (error) {
+          syncStore.publish({ phase: 'error', error: toCoreError(error).message });
+          return { ok: false, error: toCoreError(error) };
+        }
+      },
+      onLoggedOut(listener) {
+        loggedOutListeners.add(listener);
+        return () => loggedOutListeners.delete(listener);
       },
       async stop() {
         client.stopClient();

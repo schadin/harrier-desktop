@@ -94,6 +94,8 @@ export type AuthModule = {
   refreshCapabilities(): Promise<CoreResult<void>>;
   refreshAuthMetadata(): Promise<CoreResult<void>>;
   start(): Promise<CoreResult<void>>;
+  retrySync(): Promise<CoreResult<void>>;
+  onLoggedOut(listener: () => void): () => void;
   stop(): Promise<void>;
   logout(): Promise<CoreResult<void>>;
   clearCache(): Promise<CoreResult<void>>;

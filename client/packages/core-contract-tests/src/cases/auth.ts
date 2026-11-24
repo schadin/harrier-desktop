@@ -2,6 +2,22 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const authCases = [
+  contractTest(
+    'sync retry and logged-out lifecycle are available through core',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        const retry = await core.auth.retrySync();
+        expect(retry.ok).toBe(true);
+        const off = core.auth.onLoggedOut(() => undefined);
+        expect(typeof off).toBe('function');
+        off();
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('logout and cache clearing are available through core', async (harness) => {
     const core = await harness.create();
     try {
