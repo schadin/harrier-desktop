@@ -263,6 +263,9 @@ export function createSyncDriver(): SyncDriver {
     if (path.includes('/preview_url')) return {};
     if (path.includes('/notifications')) return { notifications: [], next_token: 't1' };
     if (path.includes('/capabilities')) return {};
+    if (path.endsWith('/search')) {
+      return { search_categories: { room_events: { results: [], highlights: [] } } };
+    }
     if (path.includes('/receipt/')) return {};
     if (path.includes('/typing/')) return {};
     if (path.includes('/send/')) {

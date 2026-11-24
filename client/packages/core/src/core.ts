@@ -32,6 +32,8 @@ import type {
   SsoActionView,
   RoomNotificationModeView,
   MediaConfigView,
+  MessageSearchParamsView,
+  MessageSearchResultView,
   MediaRef,
   MediaSourceView,
   UrlPreviewView,
@@ -153,6 +155,10 @@ export type RoomsModule = {
   powerLevels(roomId: RoomId): SnapshotStore<IPowerLevels>;
   creators(roomId: RoomId): SnapshotStore<readonly string[]>;
   viaServers(roomId: RoomId): readonly string[];
+  searchMessages(
+    params: MessageSearchParamsView,
+    nextBatch?: string
+  ): Promise<CoreResult<MessageSearchResultView>>;
   accountData(roomId: RoomId): SnapshotStore<readonly RoomAccountDataEntry[]>;
   setAccountData(roomId: RoomId, type: string, content: JsonObject): Promise<CoreResult<void>>;
   parents(roomId: RoomId): SnapshotStore<readonly RoomId[]>;

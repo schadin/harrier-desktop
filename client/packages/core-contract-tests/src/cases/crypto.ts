@@ -2,6 +2,17 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const cryptoCases = [
+  contractTest('message search is exposed as plain views', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.rooms.searchMessages({ term: 'hello', order: 'recent' });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.groups).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('via servers are exposed as plain strings', async (harness) => {
     const core = await harness.create();
     try {

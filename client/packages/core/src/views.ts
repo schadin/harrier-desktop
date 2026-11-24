@@ -280,6 +280,49 @@ export type NotificationPageView = {
   readonly nextToken?: string;
 };
 
+export type MessageSearchEventView = {
+  readonly event_id: string;
+  readonly room_id: string;
+  readonly sender: string;
+  readonly type: string;
+  readonly content: JsonObject;
+  readonly origin_server_ts: number;
+  readonly unsigned?: {
+    readonly redacted_because?: { readonly content?: { readonly reason?: string } };
+  };
+};
+
+export type MessageSearchContextView = {
+  readonly start?: string;
+  readonly end?: string;
+  readonly events_before?: readonly MessageSearchEventView[];
+  readonly events_after?: readonly MessageSearchEventView[];
+};
+
+export type MessageSearchItemView = {
+  readonly rank: number;
+  readonly event: MessageSearchEventView;
+  readonly context: MessageSearchContextView;
+};
+
+export type MessageSearchGroupView = {
+  readonly roomId: string;
+  readonly items: readonly MessageSearchItemView[];
+};
+
+export type MessageSearchResultView = {
+  readonly nextToken?: string;
+  readonly highlights: readonly string[];
+  readonly groups: readonly MessageSearchGroupView[];
+};
+
+export type MessageSearchParamsView = {
+  readonly term?: string;
+  readonly order?: 'recent' | 'rank';
+  readonly rooms?: readonly string[];
+  readonly senders?: readonly string[];
+};
+
 export type RoomNotificationModeView = 'unset' | 'mute' | 'special' | 'all';
 
 export type NotificationPreferencesView = {

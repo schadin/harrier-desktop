@@ -17,6 +17,8 @@ import {
   type NotificationPreferencesView,
   type RoomNotificationModeView,
   type MediaConfigView,
+  type MessageSearchContextView,
+  type MessageSearchEventView,
   type PresenceView,
   type PublicRoomView,
   type PublicRoomsResult,
@@ -1535,6 +1537,87 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         const store = createSnapshotStore(buildCreators(roomId));
         creatorStores.set(roomId, store);
         return store;
+      },
+      async searchMessages(params, nextBatch) {
+        if (!params.term) {
+          return { ok: true, value: { highlights: [], groups: [] } };
+        }
+        try {
+          const response = await client.search({
+            body: {
+              search_categories: {
+                room_events: {
+                  event_context: { before_limit: 0, after_limit: 0, include_profile: false },
+                  filter: {
+                    limit: 20,
+                    rooms: params.rooms ? [...params.rooms] : undefined,
+                    senders: params.senders ? [...params.senders] : undefined,
+                  },
+                  include_state: false,
+                  order_by: params.order ?? 'recent',
+                  search_term: params.term,
+                },
+              },
+            },
+            next_batch: nextBatch === '' ? undefined : nextBatch,
+          } as never);
+          const roomEvents = response.search_categories.room_events;
+          const groups: Array<{
+            roomId: string;
+            items: Array<{
+              rank: number;
+              event: MessageSearchEventView;
+              context: MessageSearchContextView;
+            }>;
+          }> = [];
+          (roomEvents?.results ?? []).forEach((item) => {
+            const roomId = item.result.room_id;
+            const resultItem = {
+              rank: item.rank,
+              event: {
+                event_id: item.result.event_id,
+                room_id: item.result.room_id,
+                sender: item.result.sender ?? '',
+                type: item.result.type ?? '',
+                content: (item.result.content ?? {}) as JsonObject,
+                origin_server_ts: item.result.origin_server_ts ?? 0,
+                ...(item.result.unsigned
+                  ? {
+                      unsigned: {
+                        ...(item.result.unsigned.redacted_because
+                          ? {
+                              redacted_because: {
+                                content: {
+                                  reason:
+                                    item.result.unsigned.redacted_because.content?.reason ?? '',
+                                },
+                              },
+                            }
+                          : {}),
+                      },
+                    }
+                  : {}),
+              },
+              context: item.context as unknown as MessageSearchContextView,
+            };
+            const last = groups[groups.length - 1];
+            if (last?.roomId === roomId) {
+              last.items.push(resultItem);
+            } else {
+              groups.push({ roomId, items: [resultItem] });
+            }
+          });
+          return {
+            ok: true,
+            value: {
+              ...(roomEvents?.next_batch ? { nextToken: roomEvents.next_batch } : {}),
+              highlights: roomEvents?.highlights ?? [],
+              groups,
+            },
+          };
+        } catch (error) {
+          return { ok: false, error: toCoreError(error) };
+        }
       },
       viaServers(roomId) {
         const serverOf = (userId: string) => userId.split(':')[1] ?? '';

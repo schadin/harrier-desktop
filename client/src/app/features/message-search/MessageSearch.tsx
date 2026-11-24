@@ -87,7 +87,7 @@ export function MessageSearch({
 
     return {
       term: searchPathSearchParams.term,
-      order: searchPathSearchParams.order ?? 'recent',
+      order: (searchPathSearchParams.order ?? 'recent') as 'recent' | 'rank',
       rooms: searchParamRooms ?? defaultRooms,
       senders: searchParamsSenders ?? senders,
     };

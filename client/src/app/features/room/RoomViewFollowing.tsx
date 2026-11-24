@@ -36,14 +36,14 @@ export const RoomViewFollowing = as<'div', RoomViewFollowingProps>(
     const mx = useMatrixClient();
     const [open, setOpen] = useState(false);
     const latestEvent = useRoomLatestRenderedEvent(room);
-    const latestEventReaders = useRoomEventReaders(room, latestEvent?.getId());
+    const latestEventReaders = useRoomEventReaders(room, latestEvent?.eventId);
     const names = latestEventReaders
       .filter((readerId) => readerId !== mx.getUserId())
       .map(
         (readerId) => getMemberDisplayName(room, readerId) ?? getMxIdLocalPart(readerId) ?? readerId
       );
 
-    const eventId = latestEvent?.getId();
+    const eventId = latestEvent?.eventId;
 
     return (
       <>

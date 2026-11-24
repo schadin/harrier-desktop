@@ -1,58 +1,51 @@
 /* eslint-disable no-continue */
-import { MatrixEvent, Room, RoomEvent, RoomEventHandlerMap } from 'matrix-js-sdk';
-import { useEffect, useState } from 'react';
+import type { TimelineItem } from '@harrier/core';
+import { useMemo } from 'react';
+import type { Room as MatrixRoom } from 'matrix-js-sdk';
 import { settingsAtom } from '../state/settings';
 import { useSetting } from '../state/hooks/settings';
-import { MessageEvent, StateEvent } from '../../types/matrix/room';
-import { isMembershipChanged, reactionOrEditEvent } from '../utils/room';
+import { StateEvent } from '../../types/matrix/room';
+import { isVisibleTimelineItem } from '../utils/timelineVisibility';
+import { useCoreTimeline } from './useCoreTimeline';
 
-export const useRoomLatestRenderedEvent = (room: Room) => {
+export const useRoomLatestRenderedEvent = (room: MatrixRoom): TimelineItem | undefined => {
   const [hideMembershipEvents] = useSetting(settingsAtom, 'hideMembershipEvents');
   const [hideNickAvatarEvents] = useSetting(settingsAtom, 'hideNickAvatarEvents');
   const [showHiddenEvents] = useSetting(settingsAtom, 'showHiddenEvents');
-  const [latestEvent, setLatestEvent] = useState<MatrixEvent>();
+  const timeline = useCoreTimeline(room.roomId);
 
-  useEffect(() => {
-    const getLatestEvent = (): MatrixEvent | undefined => {
-      const liveEvents = room.getLiveTimeline().getEvents();
-      for (let i = liveEvents.length - 1; i >= 0; i -= 1) {
-        const evt = liveEvents[i];
-
-        if (!evt) continue;
-        if (reactionOrEditEvent(evt)) continue;
-        if (evt.getType() === StateEvent.RoomMember) {
-          const membershipChanged = isMembershipChanged(evt);
-          if (membershipChanged && hideMembershipEvents) continue;
-          if (!membershipChanged && hideNickAvatarEvents) continue;
-          return evt;
-        }
-
-        if (
-          evt.getType() === MessageEvent.RoomMessage ||
-          evt.getType() === MessageEvent.RoomMessageEncrypted ||
-          evt.getType() === MessageEvent.Sticker ||
-          evt.getType() === StateEvent.RoomName ||
-          evt.getType() === StateEvent.RoomTopic ||
-          evt.getType() === StateEvent.RoomAvatar
-        ) {
-          return evt;
-        }
-
-        if (showHiddenEvents) return evt;
+  return useMemo(() => {
+    for (let index = timeline.items.length - 1; index >= 0; index -= 1) {
+      const item = timeline.items[index];
+      if (!item?.eventId) continue;
+      if (item.kind === 'state' && item.eventType === StateEvent.RoomMember) {
+        const membershipChanged = item.content.membership !== item.prevContent?.membership;
+        if (membershipChanged && hideMembershipEvents) continue;
+        if (!membershipChanged && hideNickAvatarEvents) continue;
+        return item;
       }
-      return undefined;
-    };
-
-    const handleTimelineEvent: RoomEventHandlerMap[RoomEvent.Timeline] = () => {
-      setLatestEvent(getLatestEvent());
-    };
-    setLatestEvent(getLatestEvent());
-
-    room.on(RoomEvent.Timeline, handleTimelineEvent);
-    return () => {
-      room.removeListener(RoomEvent.Timeline, handleTimelineEvent);
-    };
-  }, [room, hideMembershipEvents, hideNickAvatarEvents, showHiddenEvents]);
-
-  return latestEvent;
+      if (
+        item.kind === 'message' ||
+        item.kind === 'encrypted' ||
+        item.kind === 'sticker' ||
+        (item.kind === 'state' && item.eventType === StateEvent.RoomName) ||
+        (item.kind === 'state' && item.eventType === StateEvent.RoomTopic) ||
+        (item.kind === 'state' && item.eventType === StateEvent.RoomAvatar)
+      ) {
+        return item;
+      }
+      if (
+        showHiddenEvents &&
+        isVisibleTimelineItem(item, {
+          hideMembershipEvents,
+          hideNickAvatarEvents,
+          showHiddenEvents,
+          ignoredUsers: new Set(),
+        })
+      ) {
+        return item;
+      }
+    }
+    return undefined;
+  }, [timeline.items, hideMembershipEvents, hideNickAvatarEvents, showHiddenEvents]);
 };

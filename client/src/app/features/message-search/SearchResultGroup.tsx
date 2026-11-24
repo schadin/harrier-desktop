@@ -1,6 +1,7 @@
 /* eslint-disable react/destructuring-assignment */
 import React, { MouseEventHandler, useMemo } from 'react';
-import { IEventWithRoomId, JoinRule, RelationType, Room } from 'matrix-js-sdk';
+import { JoinRule, RelationType, Room } from 'matrix-js-sdk';
+import type { MessageSearchEventView } from '@harrier/core';
 import { HTMLReactParserOptions } from 'html-react-parser';
 import { Avatar, Box, Chip, Header, Icon, Icons, Text, config } from 'folds';
 import { Opts as LinkifyOpts } from 'linkifyjs';
@@ -120,17 +121,19 @@ export function SearchResultGroup({
     ]
   );
 
-  const renderMatrixEvent = useMatrixEventRenderer<[IEventWithRoomId, string, GetContentCallback]>(
+  const renderMatrixEvent = useMatrixEventRenderer<
+    [MessageSearchEventView, string, GetContentCallback]
+  >(
     {
       [MessageEvent.RoomMessage]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
-          return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+          return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
         }
 
         return (
           <RenderMessageContent
             displayName={displayName}
-            msgType={event.content.msgtype ?? ''}
+            msgType={typeof event.content.msgtype === 'string' ? event.content.msgtype : ''}
             ts={event.origin_server_ts}
             getContent={getContent}
             mediaAutoLoad={mediaAutoLoad}
@@ -144,7 +147,7 @@ export function SearchResultGroup({
       },
       [MessageEvent.Reaction]: (event, displayName, getContent) => {
         if (event.unsigned?.redacted_because) {
-          return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+          return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
         }
         return (
           <MSticker
@@ -165,7 +168,7 @@ export function SearchResultGroup({
         return (
           <Box grow="Yes" direction="Column">
             <Text size="T400" priority="300">
-              Room Tombstone. {content.body}
+              Room Tombstone. {typeof content.body === 'string' ? content.body : ''}
             </Text>
           </Box>
         );
@@ -174,7 +177,7 @@ export function SearchResultGroup({
     undefined,
     (event) => {
       if (event.unsigned?.redacted_because) {
-        return <RedactedContent reason={event.unsigned?.redacted_because.content.reason} />;
+        return <RedactedContent reason={event.unsigned?.redacted_because.content?.reason} />;
       }
       return (
         <Box grow="Yes" direction="Column">
@@ -227,7 +230,13 @@ export function SearchResultGroup({
             event.sender;
           const senderAvatarMxc = getMemberAvatarMxc(room, event.sender);
 
-          const relation = event.content['m.relates_to'];
+          const relation = event.content['m.relates_to'] as
+            | {
+                rel_type?: string;
+                event_id?: string;
+                'm.in_reply_to'?: { event_id?: string };
+              }
+            | undefined;
           const mainEventId =
             relation?.rel_type === RelationType.Replace ? relation.event_id : event.event_id;
 
