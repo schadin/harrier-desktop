@@ -1,25 +1,13 @@
-import { MatrixEvent, MatrixEventEvent, MatrixEventHandlerMap } from 'matrix-js-sdk';
-import React, { ReactNode, useEffect, useState } from 'react';
-import { MessageEvent } from '../../../../types/matrix/room';
+import React, { ReactNode } from 'react';
+import { useCoreEvent } from '../../../hooks/useCoreTimeline';
 
 type EncryptedContentProps = {
-  mEvent: MatrixEvent;
+  roomId: string;
+  eventId: string;
   children: () => ReactNode;
 };
 
-export function EncryptedContent({ mEvent, children }: EncryptedContentProps) {
-  const [, toggleEncrypted] = useState(mEvent.getType() === MessageEvent.RoomMessageEncrypted);
-
-  useEffect(() => {
-    toggleEncrypted(mEvent.getType() === MessageEvent.RoomMessageEncrypted);
-    const handleDecrypted: MatrixEventHandlerMap[MatrixEventEvent.Decrypted] = (event) => {
-      toggleEncrypted(event.getType() === MessageEvent.RoomMessageEncrypted);
-    };
-    mEvent.on(MatrixEventEvent.Decrypted, handleDecrypted);
-    return () => {
-      mEvent.removeListener(MatrixEventEvent.Decrypted, handleDecrypted);
-    };
-  }, [mEvent]);
-
+export function EncryptedContent({ roomId, eventId, children }: EncryptedContentProps) {
+  useCoreEvent(roomId, eventId);
   return <>{children()}</>;
 }

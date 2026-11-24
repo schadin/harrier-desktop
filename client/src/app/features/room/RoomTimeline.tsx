@@ -1032,7 +1032,7 @@ export function RoomTimeline({ room, eventId, roomInputRef, editor }: RoomTimeli
             hour24Clock={hour24Clock}
             dateFormatString={dateFormatString}
           >
-            <EncryptedContent mEvent={mEvent}>
+            <EncryptedContent roomId={room.roomId} eventId={mEventId}>
               {() => {
                 if (timelineItem.kind === 'redacted') return <RedactedContent />;
                 if (timelineItem.kind === 'sticker')

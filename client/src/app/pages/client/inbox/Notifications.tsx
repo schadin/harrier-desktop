@@ -282,7 +282,7 @@ function RoomNotificationsGroupComp({
         }
 
         return (
-          <EncryptedContent mEvent={mEvent}>
+          <EncryptedContent roomId={room.roomId} eventId={evt.event_id}>
             {() => {
               if (mEvent.isRedacted()) return <RedactedContent />;
               if (mEvent.getType() === MessageEvent.Sticker)
