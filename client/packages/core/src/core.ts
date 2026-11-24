@@ -18,6 +18,7 @@ import type {
   VerificationRequestView,
   BackupStatusView,
   BackupProgressView,
+  CallView,
   CapabilitiesView,
   AuthMetadataView,
   LoginFlowsView,
@@ -259,6 +260,12 @@ export type NotificationsModule = {
   ): Promise<CoreResult<NotificationPageView>>;
 };
 
+export type CallsModule = {
+  readonly active: SnapshotStore<readonly CallView[]>;
+  join(roomId: RoomId): Promise<CoreResult<void>>;
+  leave(roomId: RoomId): Promise<CoreResult<void>>;
+};
+
 export type CryptoModule = {
   readonly devices: SnapshotStore<readonly DeviceView[] | null>;
   readonly verification: VerificationModule;
@@ -301,6 +308,7 @@ export type HarrierCore = {
   readonly crypto: CryptoModule;
   readonly notifications: NotificationsModule;
   readonly media: MediaModule;
+  readonly calls?: CallsModule;
   readonly send: SendModule;
   readonly uploads: UploadModule;
 };

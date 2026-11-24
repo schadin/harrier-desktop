@@ -383,6 +383,16 @@ export type VerificationRequestView = {
   readonly sas?: { readonly emoji: readonly SasEmojiView[] };
 };
 
+export type CallParticipantView = {
+  readonly userId: UserId;
+  readonly deviceId?: string;
+};
+
+export type CallView = {
+  readonly roomId: RoomId;
+  readonly participants: readonly CallParticipantView[];
+};
+
 export type DeviceTrust = 'unknown' | 'unverified' | 'verified' | 'unsupported';
 
 export type DeviceView = {

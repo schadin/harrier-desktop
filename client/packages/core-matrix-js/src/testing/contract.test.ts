@@ -8,6 +8,7 @@ import {
   verificationCases,
   backupCases,
   mediaCases,
+  callsCases,
   roomsCases,
   sendCases,
   runCoreContractSuite,
@@ -46,6 +47,7 @@ runCoreContractSuite(matrixJsHarness, [
   ...verificationCases,
   ...backupCases,
   ...mediaCases,
+  ...callsCases,
   ...notificationCases,
   ...authCases,
 ]);

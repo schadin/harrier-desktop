@@ -10,7 +10,7 @@ export const verificationCases = [
       const requested = await core.crypto.verification.request('DEVICE1');
       expect(requested.ok).toBe(true);
       if (!requested.ok) return;
-      const id = requested.value.id;
+      const { id } = requested.value;
       expect(core.crypto.verification.view(id).getSnapshot().value?.phase).toBe('requested');
       expect((await core.crypto.verification.accept(id)).ok).toBe(true);
       expect(core.crypto.verification.view(id).getSnapshot().value?.phase).toBe('ready');

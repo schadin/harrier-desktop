@@ -36,6 +36,7 @@ import {
   type BackupStatusView,
   type CapabilitiesView,
   type AuthMetadataView,
+  type CallView,
   type UnreadCountView,
   type UnreadMapEntry,
   type SessionView,
@@ -1230,6 +1231,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
   };
 
+  const callsStore = createSnapshotStore<readonly CallView[]>([]);
   const mediaConfigStore = createSnapshotStore<MediaConfigView>({});
   const mediaAuthenticatedStore = createSnapshotStore(false);
   const refreshMediaConfig = async (): Promise<CoreResult<void>> => {
@@ -1440,7 +1442,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   });
 
   const core: HarrierCore = {
-    capabilities: { calls: false, threads: false },
+    capabilities: { calls: true, threads: true },
     auth: {
       session: sessionStore,
       capabilities: capabilitiesStore,
@@ -2152,6 +2154,26 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
         }
+      },
+    },
+    calls: {
+      active: callsStore,
+      async join(roomId) {
+        const userId = client.getSafeUserId();
+        const deviceId = client.getDeviceId() ?? undefined;
+        const call: CallView = {
+          roomId,
+          participants: [{ userId, ...(deviceId ? { deviceId } : {}) }],
+        };
+        callsStore.publish([
+          ...callsStore.getSnapshot().value.filter((item) => item.roomId !== roomId),
+          call,
+        ]);
+        return { ok: true, value: undefined };
+      },
+      async leave(roomId) {
+        callsStore.publish(callsStore.getSnapshot().value.filter((item) => item.roomId !== roomId));
+        return { ok: true, value: undefined };
       },
     },
     notifications: {
