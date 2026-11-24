@@ -1,5 +1,5 @@
 import React, { ReactNode, useMemo } from 'react';
-import { useCoreSession } from '../../hooks/useCoreSession';
+import { getSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
 import { makeClosedNavCategoriesAtom } from '../../state/closedNavCategories';
 import { ClosedNavCategoriesProvider } from '../../state/hooks/closedNavCategories';
 import { makeClosedLobbyCategoriesAtom } from '../../state/closedLobbyCategories';
@@ -16,7 +16,7 @@ type ClientInitStorageAtomProps = {
 };
 export function ClientInitStorageAtom({ children }: ClientInitStorageAtomProps) {
   const session = useCoreSession();
-  const userId = session?.userId ?? '';
+  const userId = getSessionUserId(session);
 
   const closedNavCategoriesAtom = useMemo(() => makeClosedNavCategoriesAtom(userId), [userId]);
 

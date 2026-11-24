@@ -10,7 +10,7 @@ import { Box, Button, color, config, Icon, Icons, Input, PopOut, RectCords, Text
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useCoreSession } from '../../../hooks/useCoreSession';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import { useSetting } from '../../../state/hooks/settings';
@@ -30,7 +30,7 @@ const MAX_STATUS_LENGTH = 60;
 export function StatusEditor() {
   const session = useCoreSession();
   const core = useCore();
-  const userId = session?.userId ?? '';
+  const userId = getSessionUserId(session);
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
   const currentText = currentStatus?.text ?? '';

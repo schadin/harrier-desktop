@@ -1,7 +1,7 @@
 import React, { MouseEventHandler, useCallback, useState } from 'react';
 import { Box, color, config, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
-import { useCoreSession } from '../../../hooks/useCoreSession';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { useCustomStatus } from '../../../hooks/useCustomStatus';
 import {
@@ -17,7 +17,7 @@ import { stopPropagation } from '../../../utils/keyboard';
 export function StatusButton() {
   const session = useCoreSession();
   const core = useCore();
-  const userId = session?.userId ?? '';
+  const userId = getSessionUserId(session);
   const currentStatus = useCustomStatus(userId);
   const currentEmoji = currentStatus?.emoji ?? '';
   const currentText = currentStatus?.text ?? '';

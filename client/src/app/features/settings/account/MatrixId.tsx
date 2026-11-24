@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text, Chip } from 'folds';
-import { useCoreSession } from '../../../hooks/useCoreSession';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -8,7 +8,7 @@ import { copyToClipboard } from '../../../utils/dom';
 
 export function MatrixId() {
   const session = useCoreSession();
-  const userId = session?.userId ?? '';
+  const userId = getSessionUserId(session);
 
   return (
     <Box direction="Column" gap="100">
