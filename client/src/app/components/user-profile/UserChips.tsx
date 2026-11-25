@@ -29,7 +29,7 @@ import { stopPropagation } from '../../utils/keyboard';
 import { copyToClipboard } from '../../utils/dom';
 import { getExploreServerPath } from '../../pages/pathUtils';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
+import { factoryRoomIdByAtoZ } from '../../utils/sort';
 import {
   useMutualRooms,
   useMutualRoomsSupport,
@@ -40,6 +40,7 @@ import { useDirectRooms } from '../../pages/client/direct/useDirectRooms';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
 import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
+import { useRoomSortSource } from '../../hooks/useRoomSort';
 import { RoomAvatar, RoomIcon } from '../room-avatar';
 import { nameInitials } from '../../utils/common';
 import { getMatrixToUser } from '../../plugins/matrix-to';
@@ -239,6 +240,7 @@ type MutualRoomsData = {
 export function MutualRoomsChip({ userId }: { userId: string }) {
   const mx = useMatrixClient();
   const core = useCore();
+  const sortSource = useRoomSortSource();
   const mutualRoomSupported = useMutualRoomsSupport();
   const mutualRoomUnstable = useUnstableMutualRoomsSupport();
   const mutualRoomsState = useMutualRooms(userId);
@@ -268,7 +270,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
 
     if (mutualRoomsState.status === AsyncStatus.Success) {
       const mutualRooms = mutualRoomsState.data
-        .sort(factoryRoomIdByAtoZ(mx))
+        .sort(factoryRoomIdByAtoZ(sortSource))
         .map(getRoom)
         .filter((room): room is RoomView => !!room);
       mutualRooms.forEach((room) => {
@@ -284,7 +286,7 @@ export function MutualRoomsChip({ userId }: { userId: string }) {
       });
     }
     return data;
-  }, [mutualRoomsState, getRoom, directs, mx]);
+  }, [mutualRoomsState, getRoom, directs, sortSource]);
 
   if (
     userId === mx.getSafeUserId() ||

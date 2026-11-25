@@ -3,7 +3,7 @@ import { Box, Chip, Icon, IconButton, Icons, Line, Scroll, Spinner, Text, config
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
-import type { HarrierCore, JsonObject, PublicRoomView } from '@harrier/core';
+import type { JsonObject, PublicRoomView } from '@harrier/core';
 import produce from 'immer';
 import { useRequiredCoreSpace } from '../../hooks/useSpace';
 import { Page, PageContent, PageContentCenter, PageHeroSection } from '../../components/page';
@@ -38,6 +38,7 @@ import { sendRoomState } from '../../hooks/useCoreRoomState';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { rateLimitedActions } from '../../utils/matrix';
 import { getSpaceRoomPath } from '../../pages/pathUtils';
+import { getCanonicalAliasOrRoomId } from '../../utils/coreRoomNavigation';
 import { StateEvent } from '../../../types/matrix/room';
 import { CanDropCallback, useDnDMonitor } from './DnD';
 import { ASCIILexicalTable, orderKeys } from '../../utils/ASCIILexicalTable';
@@ -59,25 +60,6 @@ import { getRoomCreatorsForRoomId } from '../../hooks/useRoomCreators';
 type RestrictedAllow = {
   type?: string;
   room_id?: string;
-};
-
-const getCanonicalAliasOrRoomId = (
-  core: HarrierCore,
-  roomId: string,
-  roomIds: readonly string[]
-): string => {
-  const room = core.rooms.room(roomId).getSnapshot().value;
-  if (!room) return roomId;
-  if (core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().value) return roomId;
-  if (!room.canonicalAlias) return roomId;
-
-  const aliasedRoomId = roomIds.find((id) => {
-    const candidate = core.rooms.room(id).getSnapshot().value;
-    const tombstoned =
-      core.rooms.stateEntry(id, StateEvent.RoomTombstone).getSnapshot().value !== null;
-    return candidate?.canonicalAlias === room.canonicalAlias && !tombstoned;
-  });
-  return aliasedRoomId === roomId ? room.canonicalAlias : roomId;
 };
 
 const useCanDropLobbyItem = (

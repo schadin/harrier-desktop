@@ -44,9 +44,10 @@ import {
   useRecursiveChildScopeFactory,
   useSpaceChildren,
 } from '../../../state/hooks/roomList';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { useCoreRoom } from '../../../hooks/useCoreRoom';
+import { useRoomSortSource } from '../../../hooks/useRoomSort';
+import { getSafeSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { getSpaceLobbyPath, getSpacePath, joinPathComponent } from '../../pathUtils';
@@ -63,7 +64,8 @@ import {
 import { RoomsUnreadProvider } from '../../../components/RoomUnreadProvider';
 import { useSelectedSpace } from '../../../hooks/router/useSelectedSpace';
 import { UnreadBadge } from '../../../components/unread-badge';
-import { getCanonicalAliasOrRoomId, isRoomAlias } from '../../../utils/matrix';
+import { getCanonicalAliasOrRoomId } from '../../../utils/coreRoomNavigation';
+import { isRoomAlias } from '../../../utils/matrix';
 import { RoomAvatar } from '../../../components/room-avatar';
 import { nameInitials, randomStr } from '../../../utils/common';
 import {
@@ -98,32 +100,29 @@ import { useRoomPermissions } from '../../../hooks/useRoomPermissions';
 import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { setAccountData } from '../../../utils/coreRoomActions';
 
-type MatrixClient = ReturnType<typeof useMatrixClient>;
-type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
-
 type SpaceMenuProps = {
-  room: Room;
+  roomId: string;
   requestClose: () => void;
   onUnpin?: (roomId: string) => void;
 };
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
-  ({ room, requestClose, onUnpin }, ref) => {
-    const mx = useMatrixClient();
+  ({ roomId, requestClose, onUnpin }, ref) => {
     const core = useCore();
+    const session = useCoreSession();
     const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
     const roomToParents = useAtomValue(roomToParentsAtom);
-    const powerLevels = usePowerLevels(room);
-    const creators = useRoomCreators(room);
+    const powerLevels = usePowerLevels({ roomId });
+    const creators = useRoomCreators({ roomId });
 
     const permissions = useRoomPermissions(creators, powerLevels);
-    const canInvite = permissions.action('invite', mx.getSafeUserId());
+    const canInvite = permissions.action('invite', getSafeSessionUserId(session));
     const openSpaceSettings = useOpenSpaceSettings();
 
     const [invitePrompt, setInvitePrompt] = useState(false);
 
     const allChild = useSpaceChildren(
       allRoomsAtom,
-      room.roomId,
+      roomId,
       useRecursiveChildScopeFactory(roomToParents)
     );
     const unread = useRoomsUnread(allChild, roomToUnreadAtom);
@@ -134,13 +133,13 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
     };
 
     const handleUnpin = () => {
-      onUnpin?.(room.roomId);
+      onUnpin?.(roomId);
       requestClose();
     };
 
     const handleCopyLink = () => {
-      const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
-      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
+      const roomIdOrAlias = getCanonicalAliasOrRoomId(core, roomId);
+      const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, roomId);
       copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
       requestClose();
     };
@@ -150,15 +149,15 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
     };
 
     const handleRoomSettings = () => {
-      openSpaceSettings(room.roomId);
+      openSpaceSettings(roomId);
       requestClose();
     };
 
     return (
       <Menu ref={ref} style={{ maxWidth: toRem(160), width: '100vw' }}>
-        {invitePrompt && room && (
+        {invitePrompt && (
           <InviteUserPrompt
-            roomId={room.roomId}
+            roomId={roomId}
             requestClose={() => {
               setInvitePrompt(false);
               requestClose();
@@ -391,7 +390,7 @@ const useDnDMonitor = (
 };
 
 type SpaceTabProps = {
-  space: Room;
+  spaceId: string;
   selected: boolean;
   onClick: MouseEventHandler<HTMLButtonElement>;
   folder?: ISidebarFolder;
@@ -400,7 +399,7 @@ type SpaceTabProps = {
   onUnpin?: (roomId: string) => void;
 };
 function SpaceTab({
-  space,
+  spaceId,
   selected,
   onClick,
   folder,
@@ -411,12 +410,13 @@ function SpaceTab({
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const targetRef = useRef<HTMLDivElement>(null);
-  const coreSpace = useCoreRoom(space.roomId);
+  const coreSpace = useCoreRoom(spaceId);
+  const spaceName = coreSpace?.name ?? spaceId;
 
   const roomToParents = useAtomValue(roomToParentsAtom);
   const allChild = useSpaceChildren(
     allRoomsAtom,
-    space.roomId,
+    spaceId,
     useRecursiveChildScopeFactory(roomToParents)
   );
 
@@ -425,10 +425,10 @@ function SpaceTab({
       folder
         ? {
             folder,
-            spaceId: space.roomId,
+            spaceId,
           }
-        : space.roomId,
-    [folder, space]
+        : spaceId,
+    [folder, spaceId]
   );
 
   useDraggableItem(spaceDraggable, targetRef, onDragging);
@@ -458,26 +458,26 @@ function SpaceTab({
           data-drop-below={dropType === 'reorder-below'}
           data-inside-folder={!!folder}
         >
-          <SidebarItemTooltip tooltip={disabled ? undefined : space.name}>
+          <SidebarItemTooltip tooltip={disabled ? undefined : spaceName}>
             {(triggerRef) => (
               <SidebarAvatar
                 as="button"
-                data-id={space.roomId}
+                data-id={spaceId}
                 ref={triggerRef}
                 size={folder ? '300' : '400'}
                 onClick={onClick}
                 onContextMenu={handleContextMenu}
               >
                 <RoomAvatar
-                  roomId={space.roomId}
+                  roomId={spaceId}
                   src={
                     coreSpace
                       ? getRoomAvatarUrl(core, coreSpace, 96, useAuthentication) ?? undefined
                       : undefined
                   }
-                  alt={space.name}
+                  alt={spaceName}
                   renderFallback={() => (
-                    <Text size={folder ? 'H6' : 'H4'}>{nameInitials(space.name, 2)}</Text>
+                    <Text size={folder ? 'H6' : 'H4'}>{nameInitials(spaceName, 2)}</Text>
                   )}
                 />
               </SidebarAvatar>
@@ -506,7 +506,7 @@ function SpaceTab({
                   }}
                 >
                   <SpaceMenu
-                    room={space}
+                    roomId={spaceId}
                     requestClose={() => setMenuAnchor(undefined)}
                     onUnpin={onUnpin}
                   />
@@ -566,7 +566,7 @@ function ClosedSpaceFolder({
   onDragging,
   disabled,
 }: ClosedSpaceFolderProps) {
-  const mx = useMatrixClient();
+  const sortSource = useRoomSortSource();
   const handlerRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: FolderDraggable = useMemo(() => ({ folder }), [folder]);
@@ -575,7 +575,8 @@ function ClosedSpaceFolder({
   const dropType = dropState?.type;
 
   const tooltipName =
-    folder.name ?? folder.content.map((i) => mx.getRoom(i)?.name ?? '').join(', ') ?? 'Unnamed';
+    folder.name ??
+    folder.content.map((roomId) => sortSource.getRoom(roomId)?.name ?? '').join(', ');
 
   return (
     <RoomsUnreadProvider rooms={folder.content}>
@@ -591,10 +592,10 @@ function ClosedSpaceFolder({
           <SidebarItemTooltip tooltip={disabled ? undefined : tooltipName}>
             {(tooltipRef) => (
               <SidebarFolder data-id={folder.id} as="button" ref={tooltipRef} onClick={onOpen}>
-                {folder.content.map((sId) => {
-                  const space = mx.getRoom(sId);
+                {folder.content.map((spaceId) => {
+                  const space = sortSource.getRoom(spaceId);
                   if (!space) return null;
-                  return <ClosedSpaceAvatar key={sId} roomId={space.roomId} name={space.name} />;
+                  return <ClosedSpaceAvatar key={spaceId} roomId={spaceId} name={space.name} />;
                 })}
               </SidebarFolder>
             )}
@@ -615,8 +616,8 @@ type SpaceTabsProps = {
 };
 export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const navigate = useNavigate();
-  const mx = useMatrixClient();
   const core = useCore();
+  const sortSource = useRoomSortSource();
   const screenSize = useScreenSizeContext();
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(allRoomsAtom, roomToParents);
@@ -769,7 +770,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
     const targetSpaceId = target.getAttribute('data-id');
     if (!targetSpaceId) return;
 
-    const spacePath = getSpacePath(getCanonicalAliasOrRoomId(mx, targetSpaceId));
+    const spacePath = getSpacePath(getCanonicalAliasOrRoomId(core, targetSpaceId));
     if (screenSize === ScreenSize.Mobile) {
       navigate(spacePath);
       return;
@@ -781,7 +782,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
       return;
     }
 
-    navigate(getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, targetSpaceId)));
+    navigate(getSpaceLobbyPath(getCanonicalAliasOrRoomId(core, targetSpaceId)));
   };
 
   const handleFolderToggle: MouseEventHandler<HTMLButtonElement> = (evt) => {
@@ -817,23 +818,22 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
             if (openedFolder.has(item.id)) {
               return (
                 <OpenedSpaceFolder key={item.id} folder={item} onClose={handleFolderToggle}>
-                  {item.content.map((sId) => {
-                    const space = mx.getRoom(sId);
-                    if (!space) return null;
+                  {item.content.map((spaceId) => {
+                    if (!sortSource.getRoom(spaceId)) return null;
                     return (
                       <SpaceTab
-                        key={space.roomId}
-                        space={space}
-                        selected={space.roomId === selectedSpaceId}
+                        key={spaceId}
+                        spaceId={spaceId}
+                        selected={spaceId === selectedSpaceId}
                         onClick={handleSpaceClick}
                         folder={item}
                         onDragging={setDraggingItem}
                         disabled={
                           typeof draggingItem === 'object'
-                            ? draggingItem.spaceId === space.roomId
+                            ? draggingItem.spaceId === spaceId
                             : false
                         }
-                        onUnpin={orphanSpaces.includes(space.roomId) ? undefined : handleUnpin}
+                        onUnpin={orphanSpaces.includes(spaceId) ? undefined : handleUnpin}
                       />
                     );
                   })}
@@ -855,18 +855,18 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
             );
           }
 
-          const space = mx.getRoom(item);
-          if (!space) return null;
+          const spaceId = item;
+          if (!sortSource.getRoom(spaceId)) return null;
 
           return (
             <SpaceTab
-              key={space.roomId}
-              space={space}
-              selected={space.roomId === selectedSpaceId}
+              key={spaceId}
+              spaceId={spaceId}
+              selected={spaceId === selectedSpaceId}
               onClick={handleSpaceClick}
               onDragging={setDraggingItem}
-              disabled={typeof draggingItem === 'string' ? draggingItem === space.roomId : false}
-              onUnpin={orphanSpaces.includes(space.roomId) ? undefined : handleUnpin}
+              disabled={typeof draggingItem === 'string' ? draggingItem === spaceId : false}
+              onUnpin={orphanSpaces.includes(spaceId) ? undefined : handleUnpin}
             />
           );
         })}

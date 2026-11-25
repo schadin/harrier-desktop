@@ -1,7 +1,9 @@
 import { useMatch, useParams } from 'react-router-dom';
 import { useSyncExternalStore } from 'react';
 import { isRoomAlias } from '../../utils/matrix';
+import { getCanonicalAliasRoomId } from '../../utils/coreRoomNavigation';
 import { useCore } from '../useCore';
+import { useCoreRoomNavigationRevision } from '../useCoreRoomNavigation';
 import { getSpaceLobbyPath, getSpaceSearchPath } from '../../pages/pathUtils';
 
 export const useSelectedSpace = (): string | undefined => {
@@ -11,13 +13,13 @@ export const useSelectedSpace = (): string | undefined => {
     core.rooms.all.getSnapshot,
     core.rooms.all.getSnapshot
   ).value;
+  useCoreRoomNavigationRevision();
   const { spaceIdOrAlias } = useParams();
   if (!spaceIdOrAlias || !isRoomAlias(spaceIdOrAlias)) return spaceIdOrAlias;
-  return (
-    rooms
-      .map((room) => core.rooms.room(room.roomId).getSnapshot().value)
-      .find((room) => room?.canonicalAlias === spaceIdOrAlias)?.roomId ?? spaceIdOrAlias
-  );
+  const aliasedSpaceId = getCanonicalAliasRoomId(core, spaceIdOrAlias);
+  return aliasedSpaceId && rooms.some((room) => room.roomId === aliasedSpaceId)
+    ? aliasedSpaceId
+    : spaceIdOrAlias;
 };
 
 export const useSpaceLobbySelected = (spaceIdOrAlias: string): boolean => {

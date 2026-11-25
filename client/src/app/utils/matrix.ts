@@ -14,8 +14,7 @@ import {
   RoomLike,
   RoomMemberLike,
 } from '../../types/matrix/legacyStructural';
-import { getStateEvent } from './room';
-import { Membership, StateEvent } from '../../types/matrix/room';
+import { Membership } from '../../types/matrix/room';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 
@@ -34,26 +33,6 @@ export const isUserId = (id: string): boolean => validMxId(id) && id.startsWith(
 export const isRoomId = (id: string): boolean => id.startsWith('!');
 
 export const isRoomAlias = (id: string): boolean => validMxId(id) && id.startsWith('#');
-
-export const getCanonicalAliasRoomId = (mx: MatrixClientLike, alias: string): string | undefined =>
-  mx
-    .getRooms()
-    ?.find(
-      (room) =>
-        room.getCanonicalAlias() === alias &&
-        getStateEvent(room, StateEvent.RoomTombstone) === undefined
-    )?.roomId;
-
-export const getCanonicalAliasOrRoomId = (mx: MatrixClientLike, roomId: string): string => {
-  const room = mx.getRoom(roomId);
-  if (!room) return roomId;
-  if (getStateEvent(room, StateEvent.RoomTombstone) !== undefined) return roomId;
-  const alias = room.getCanonicalAlias();
-  if (alias && getCanonicalAliasRoomId(mx, alias) === roomId) {
-    return alias;
-  }
-  return roomId;
-};
 
 export const getImageInfo = (img: HTMLImageElement, fileOrBlob: File | Blob): IImageInfo => {
   const info: IImageInfo = {};

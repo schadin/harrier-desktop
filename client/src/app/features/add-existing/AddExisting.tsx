@@ -32,7 +32,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { RoomView } from '@harrier/core';
 import { stopPropagation } from '../../utils/keyboard';
 import { useDirects, useRooms, useSpaces } from '../../state/hooks/roomList';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useRoomSortSource } from '../../hooks/useRoomSort';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { mDirectAtom } from '../../state/mDirectList';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
@@ -46,7 +46,7 @@ import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
+import { factoryRoomIdByAtoZ } from '../../utils/sort';
 import {
   SearchItemStrGetter,
   useAsyncSearch,
@@ -73,8 +73,8 @@ type AddExistingModalProps = {
   requestClose: () => void;
 };
 export function AddExistingModal({ parentId, space, requestClose }: AddExistingModalProps) {
-  const mx = useMatrixClient();
   const core = useCore();
+  const sortSource = useRoomSortSource();
   const useAuthentication = useMediaAuthentication();
   const alive = useAlive();
 
@@ -95,8 +95,8 @@ export function AddExistingModal({ parentId, space, requestClose }: AddExistingM
 
     return rIds
       .filter((rId) => rId !== parentId && !roomIdToParents.get(rId)?.has(parentId))
-      .sort(factoryRoomIdByAtoZ(mx));
-  }, [spaces, rooms, directs, space, parentId, roomIdToParents, mx]);
+      .sort(factoryRoomIdByAtoZ(sortSource));
+  }, [spaces, rooms, directs, space, parentId, roomIdToParents, sortSource]);
 
   const getRoomNameStr: SearchItemStrGetter<string> = useCallback(
     (rId) => getRoom(rId)?.name ?? rId,

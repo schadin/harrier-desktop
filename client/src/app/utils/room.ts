@@ -7,7 +7,6 @@ import {
   EventTimelineSetLike,
   EventType,
   IMentions,
-  IPowerLevelsContent,
   JoinRule,
   MatrixClientLike,
   MatrixEventLike,
@@ -15,7 +14,7 @@ import {
   RoomLike,
 } from '../../types/matrix/legacyStructural';
 import { MsgType } from '../../types/matrix/protocol';
-import { IRoomCreateContent, RoomToParents, RoomType, StateEvent } from '../../types/matrix/room';
+import { RoomToParents, RoomType, StateEvent } from '../../types/matrix/room';
 
 type EventFromRoomState<S> = S extends {
   getStateEvents(eventType: string, stateKey: string): infer E;
@@ -304,75 +303,4 @@ export const getMentionContent = (userIds: string[], room: boolean): IMentions =
   }
 
   return mMentions;
-};
-
-export const getAllVersionsRoomCreator = (room: RoomLike): Set<string> => {
-  const creators = new Set<string>();
-
-  const createEvent = getStateEvent(room, StateEvent.RoomCreate);
-  const createContent = createEvent?.getContent<IRoomCreateContent>();
-  const creator = createEvent?.getSender();
-  if (typeof creator === 'string') creators.add(creator);
-
-  if (createContent && Array.isArray(createContent.additional_creators)) {
-    createContent.additional_creators.forEach((c) => {
-      if (typeof c === 'string') creators.add(c);
-    });
-  }
-
-  return creators;
-};
-
-export const guessPerfectParent = (
-  mx: MatrixClientLike,
-  roomId: string,
-  parents: string[]
-): string | undefined => {
-  if (parents.length === 1) {
-    return parents[0];
-  }
-
-  const getSpecialUsers = (rId: string): string[] => {
-    const specialUsers: Set<string> = new Set();
-
-    const r = mx.getRoom(rId);
-    if (!r) return [];
-
-    getAllVersionsRoomCreator(r).forEach((c) => specialUsers.add(c));
-
-    const powerLevels = getStateEvent(
-      r,
-      StateEvent.RoomPowerLevels
-    )?.getContent<IPowerLevelsContent>();
-
-    const { users_default: usersDefault, users } = powerLevels ?? {};
-    const defaultPower = typeof usersDefault === 'number' ? usersDefault : 0;
-
-    if (typeof users === 'object')
-      Object.keys(users).forEach((userId) => {
-        if (users[userId] > defaultPower) {
-          specialUsers.add(userId);
-        }
-      });
-
-    return Array.from(specialUsers);
-  };
-
-  let perfectParent: string | undefined;
-  let score = 0;
-
-  const roomSpecialUsers = getSpecialUsers(roomId);
-  parents.forEach((parentId) => {
-    const parentSpecialUsers = getSpecialUsers(parentId);
-    const matchedUsersCount = parentSpecialUsers.filter((userId) =>
-      roomSpecialUsers.includes(userId)
-    ).length;
-
-    if (matchedUsersCount > score) {
-      score = matchedUsersCount;
-      perfectParent = parentId;
-    }
-  });
-
-  return perfectParent;
 };

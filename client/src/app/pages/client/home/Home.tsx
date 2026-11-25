@@ -18,7 +18,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAtom, useAtomValue } from 'jotai';
 import FocusTrap from 'focus-trap-react';
-import { factoryRoomIdByActivity, factoryRoomIdByAtoZ } from '../../../utils/sortLegacy';
+import { factoryRoomIdByActivity, factoryRoomIdByAtoZ } from '../../../utils/sort';
 import {
   NavButton,
   NavCategory,
@@ -37,15 +37,15 @@ import {
   getHomeSearchPath,
   withSearchParam,
 } from '../../pathUtils';
-import { getCanonicalAliasOrRoomId } from '../../../utils/matrix';
+import { getCanonicalAliasOrRoomId } from '../../../utils/coreRoomNavigation';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import {
   useHomeCreateSelected,
   useHomeSearchSelected,
 } from '../../../hooks/router/useHomeSelected';
 import { useHomeRooms } from './useHomeRooms';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
+import { useRoomSortSource } from '../../../hooks/useRoomSort';
 import { VirtualTile } from '../../../components/virtualizer';
 import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
 import { makeNavCategoryId } from '../../../state/closedNavCategories';
@@ -196,7 +196,8 @@ function HomeEmpty() {
 
 const DEFAULT_CATEGORY_ID = makeNavCategoryId('home', 'room');
 export function Home() {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const sortSource = useRoomSortSource();
   useNavToActivePathMapper('home');
   const scrollRef = useRef<HTMLDivElement>(null);
   const rooms = useHomeRooms();
@@ -213,14 +214,14 @@ export function Home() {
   const sortedRooms = useMemo(() => {
     const items = Array.from(rooms).sort(
       closedCategories.has(DEFAULT_CATEGORY_ID)
-        ? factoryRoomIdByActivity(mx)
-        : factoryRoomIdByAtoZ(mx)
+        ? factoryRoomIdByActivity(sortSource)
+        : factoryRoomIdByAtoZ(sortSource)
     );
     if (closedCategories.has(DEFAULT_CATEGORY_ID)) {
       return items.filter((rId) => roomToUnread.has(rId) || rId === selectedRoomId);
     }
     return items;
-  }, [mx, rooms, closedCategories, roomToUnread, selectedRoomId]);
+  }, [sortSource, rooms, closedCategories, roomToUnread, selectedRoomId]);
 
   const virtualizer = useVirtualizer({
     count: sortedRooms.length,
@@ -331,8 +332,6 @@ export function Home() {
               >
                 {virtualizer.getVirtualItems().map((vItem) => {
                   const roomId = sortedRooms[vItem.index];
-                  const room = mx.getRoom(roomId);
-                  if (!room) return null;
                   const selected = selectedRoomId === roomId;
 
                   return (
@@ -342,13 +341,10 @@ export function Home() {
                       ref={virtualizer.measureElement}
                     >
                       <RoomNavItem
-                        room={room}
+                        roomId={roomId}
                         selected={selected}
-                        linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(mx, roomId))}
-                        notificationMode={getRoomNotificationMode(
-                          notificationPreferences,
-                          room.roomId
-                        )}
+                        linkPath={getHomeRoomPath(getCanonicalAliasOrRoomId(core, roomId))}
+                        notificationMode={getRoomNotificationMode(notificationPreferences, roomId)}
                       />
                     </VirtualTile>
                   );

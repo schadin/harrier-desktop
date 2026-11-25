@@ -1,9 +1,9 @@
 import React, { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { IsDirectRoomProvider, RoomProvider } from '../../../hooks/useRoom';
-import { useCore } from '../../../hooks/useCore';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { JoinBeforeNavigate } from '../../../features/join-before-navigate';
 import { useCoreSpace } from '../../../hooks/useSpace';
 import { getAllParents } from '../../../utils/room';
@@ -15,17 +15,16 @@ import { settingsAtom } from '../../../state/settings';
 import { useSetting } from '../../../state/hooks/settings';
 
 export function SpaceRouteRoomProvider({ children }: { children: ReactNode }) {
-  const core = useCore();
   const space = useCoreSpace();
   const [developerTools] = useSetting(settingsAtom, 'developerTools');
-  const [roomToParents, setRoomToParents] = useAtom(roomToParentsAtom);
+  const roomToParents = useAtomValue(roomToParentsAtom);
   const mDirects = useAtomValue(mDirectAtom);
   const allRooms = useAtomValue(allRoomsAtom);
 
   const { roomIdOrAlias, eventId } = useParams();
   const viaServers = useSearchParamsViaServers();
   const roomId = useSelectedRoom();
-  const room = core.rooms.room(roomId ?? '').getSnapshot().value;
+  const room = useCoreRoom(roomId ?? '');
 
   if (!space || !room || !allRooms.includes(room.roomId)) {
     // room is not joined
@@ -48,15 +47,6 @@ export function SpaceRouteRoomProvider({ children }: { children: ReactNode }) {
   }
 
   if (!getAllParents(roomToParents, room.roomId).has(space.roomId)) {
-    if (space.spaceChildren.includes(room.roomId)) {
-      // fill missing roomToParent mapping
-      setRoomToParents({
-        type: 'PUT',
-        parent: space.roomId,
-        children: [room.roomId],
-      });
-    }
-
     return (
       <JoinBeforeNavigate
         roomIdOrAlias={roomIdOrAlias!}

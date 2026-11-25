@@ -3,9 +3,10 @@ import { Chip, Icon, Icons, Text } from 'folds';
 import { useAtomValue } from 'jotai';
 import { RoomIcon } from '../../components/room-avatar';
 import { roomToParentsAtom } from '../../state/room/roomToParents';
-import { getAllParents, guessPerfectParent } from '../../utils/room';
+import { getAllParents } from '../../utils/room';
+import { guessPerfectParent } from '../../utils/coreRoomNavigation';
 import { useOrphanSpaces } from '../../state/hooks/roomList';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
 import { allRoomsAtom } from '../../state/room-list/roomList';
 import { mDirectAtom } from '../../state/mDirectList';
 import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
@@ -17,7 +18,7 @@ type CallRoomNameProps = {
   roomId: string;
 };
 export function CallRoomName({ roomId }: CallRoomNameProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const room = useCoreRoom(roomId);
   const roomToParents = useAtomValue(roomToParentsAtom);
   const orphanSpaces = useOrphanSpaces(allRoomsAtom, roomToParents);
@@ -29,7 +30,7 @@ export function CallRoomName({ roomId }: CallRoomNameProps) {
 
   const allParents = getAllParents(roomToParents, roomId);
   const orphanParents = allParents && orphanSpaces.filter((o) => allParents.has(o));
-  const perfectOrphanParent = orphanParents && guessPerfectParent(mx, roomId, orphanParents);
+  const perfectOrphanParent = orphanParents && guessPerfectParent(core, roomId, orphanParents);
 
   const { navigateRoom } = useRoomNavigate();
 

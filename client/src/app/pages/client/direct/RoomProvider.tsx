@@ -2,17 +2,16 @@ import React, { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { IsDirectRoomProvider, RoomProvider } from '../../../hooks/useRoom';
-import { useCore } from '../../../hooks/useCore';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { JoinBeforeNavigate } from '../../../features/join-before-navigate';
 import { useDirectRooms } from './useDirectRooms';
 
 export function DirectRouteRoomProvider({ children }: { children: ReactNode }) {
-  const core = useCore();
   const rooms = useDirectRooms();
 
   const { roomIdOrAlias, eventId } = useParams();
   const roomId = useSelectedRoom();
-  const room = core.rooms.room(roomId ?? '').getSnapshot().value;
+  const room = useCoreRoom(roomId ?? '');
 
   if (!room || !rooms.includes(room.roomId)) {
     return <JoinBeforeNavigate roomIdOrAlias={roomIdOrAlias!} eventId={eventId} />;

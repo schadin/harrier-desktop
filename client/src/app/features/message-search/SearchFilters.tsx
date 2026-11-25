@@ -27,9 +27,10 @@ import {
 } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
+import { useCore } from '../../hooks/useCore';
+import { useRoomSortSource } from '../../hooks/useRoomSort';
 import { getRoomIconSrc } from '../../utils/room';
-import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
+import { factoryRoomIdByAtoZ } from '../../utils/sort';
 import {
   SearchItemStrGetter,
   UseAsyncSearchOptions,
@@ -126,14 +127,15 @@ type SelectRoomButtonProps = {
   onChange: (rooms?: string[]) => void;
 };
 function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButtonProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const sortSource = useRoomSortSource();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [localSelected, setLocalSelected] = useState(selectedRooms);
 
   const getRoomNameStr: SearchItemStrGetter<string> = useCallback(
-    (rId) => mx.getRoom(rId)?.name ?? rId,
-    [mx]
+    (rId) => sortSource.getRoom(rId)?.name ?? rId,
+    [sortSource]
   );
 
   const [searchResult, _searchRoom, resetSearch] = useAsyncSearch(
@@ -141,7 +143,7 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
     getRoomNameStr,
     SEARCH_OPTS
   );
-  const rooms = Array.from(searchResult?.items ?? roomList).sort(factoryRoomIdByAtoZ(mx));
+  const rooms = Array.from(searchResult?.items ?? roomList).sort(factoryRoomIdByAtoZ(sortSource));
 
   const virtualizer = useVirtualizer({
     count: rooms.length,
@@ -252,7 +254,7 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
                   >
                     {vItems.map((vItem) => {
                       const roomId = rooms[vItem.index];
-                      const room = mx.getRoom(roomId);
+                      const room = core.rooms.room(roomId).getSnapshot().value;
                       if (!room) return null;
                       const selected = localSelected?.includes(roomId);
 
@@ -273,7 +275,7 @@ function SelectRoomButton({ roomList, selectedRooms, onChange }: SelectRoomButto
                             before={
                               <Icon
                                 size="50"
-                                src={getRoomIconSrc(Icons, room.getType(), room.getJoinRule())}
+                                src={getRoomIconSrc(Icons, room.roomType, room.joinRule)}
                               />
                             }
                           >
@@ -346,7 +348,7 @@ export function SearchFilters({
   onGlobalChange,
   onOrderChange,
 }: SearchFiltersProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
   return (
     <Box direction="Column" gap="100">
@@ -379,7 +381,7 @@ export function SearchFilters({
           size="300"
         />
         {selectedRooms?.map((roomId) => {
-          const room = mx.getRoom(roomId);
+          const room = core.rooms.room(roomId).getSnapshot().value;
           if (!room) return null;
 
           return (
@@ -388,9 +390,7 @@ export function SearchFilters({
               variant="Success"
               onClick={() => onSelectedRoomsChange(selectedRooms.filter((rId) => rId !== roomId))}
               radii="Pill"
-              before={
-                <Icon size="50" src={getRoomIconSrc(Icons, room.getType(), room.getJoinRule())} />
-              }
+              before={<Icon size="50" src={getRoomIconSrc(Icons, room.roomType, room.joinRule)} />}
               after={<Icon size="50" src={Icons.Cross} />}
             >
               <Text size="T200">{room.name}</Text>

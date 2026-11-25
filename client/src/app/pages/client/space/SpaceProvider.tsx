@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { useSpaces } from '../../../state/hooks/roomList';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { useSelectedSpace } from '../../../hooks/router/useSelectedSpace';
@@ -12,14 +12,13 @@ type RouteSpaceProviderProps = {
   children: ReactNode;
 };
 export function RouteSpaceProvider({ children }: RouteSpaceProviderProps) {
-  const mx = useMatrixClient();
   const joinedSpaces = useSpaces(allRoomsAtom);
 
   const { spaceIdOrAlias } = useParams();
   const viaServers = useSearchParamsViaServers();
 
   const selectedSpaceId = useSelectedSpace();
-  const space = mx.getRoom(selectedSpaceId);
+  const space = useCoreRoom(selectedSpaceId ?? '');
 
   if (!space || !joinedSpaces.includes(space.roomId)) {
     return <JoinBeforeNavigate roomIdOrAlias={spaceIdOrAlias ?? ''} viaServers={viaServers} />;

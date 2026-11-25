@@ -29,7 +29,6 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import FocusTrap from 'focus-trap-react';
 import { JoinRule } from '../../../../types/matrix/legacyStructural';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { mDirectAtom } from '../../../state/mDirectList';
 import {
@@ -40,7 +39,8 @@ import {
   NavLink,
 } from '../../../components/nav';
 import { getSpaceLobbyPath, getSpaceRoomPath, getSpaceSearchPath } from '../../pathUtils';
-import { getCanonicalAliasOrRoomId, isRoomAlias } from '../../../utils/matrix';
+import { getCanonicalAliasOrRoomId } from '../../../utils/coreRoomNavigation';
+import { isRoomAlias } from '../../../utils/matrix';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import {
   useSpaceLobbySelected,
@@ -58,9 +58,10 @@ import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { useGetCoreRoom } from '../../../hooks/useGetCoreRoom';
 import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useSpaceJoinedHierarchy, sortRoomsByOrder } from '../../../hooks/useSpaceHierarchy';
-import { factoryRoomIdByActivity } from '../../../utils/sortLegacy';
+import { factoryRoomIdByActivity } from '../../../utils/sort';
 import {
   useRoomSortComparator,
+  useRoomSortSource,
   useSetSpaceRoomSort,
   useSpaceRoomSort,
 } from '../../../hooks/useRoomSort';
@@ -106,7 +107,6 @@ type SpaceMenuProps = {
   requestClose: () => void;
 };
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClose }, ref) => {
-  const mx = useMatrixClient();
   const core = useCore();
   const session = useCoreSession();
   const [hideActivity] = useSetting(settingsAtom, 'hideActivity');
@@ -135,7 +135,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
   };
 
   const handleCopyLink = () => {
-    const roomIdOrAlias = getCanonicalAliasOrRoomId(mx, room.roomId);
+    const roomIdOrAlias = getCanonicalAliasOrRoomId(core, room.roomId);
     const viaServers = isRoomAlias(roomIdOrAlias) ? undefined : getViaServers(core, room.roomId);
     copyToClipboard(getMatrixToRoom(roomIdOrAlias, viaServers));
     requestClose();
@@ -426,10 +426,11 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
 }
 
 export function Space() {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const sortSource = useRoomSortSource();
   const space = useRequiredCoreSpace();
   useNavToActivePathMapper(space.roomId);
-  const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
+  const spaceIdOrAlias = getCanonicalAliasOrRoomId(core, space.roomId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const mDirects = useAtomValue(mDirectAtom);
   const roomToUnread = useAtomValue(roomToUnreadAtom);
@@ -470,7 +471,7 @@ export function Space() {
       (parentId, items) => {
         const closed = closedCategories.has(makeNavCategoryId(space.roomId, parentId));
         if (closed) {
-          items.sort((a, b) => factoryRoomIdByActivity(mx)(a.roomId, b.roomId));
+          items.sort((a, b) => factoryRoomIdByActivity(sortSource)(a.roomId, b.roomId));
           return items;
         }
         const comparator = sortComparator(parentId);
@@ -480,7 +481,7 @@ export function Space() {
         items.sort((a, b) => comparator(a.roomId, b.roomId));
         return items;
       },
-      [mx, space.roomId, closedCategories, sortComparator]
+      [sortSource, space.roomId, closedCategories, sortComparator]
     )
   );
 
@@ -496,7 +497,7 @@ export function Space() {
   );
 
   const getToLink = (roomId: string) =>
-    getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(mx, roomId));
+    getSpaceRoomPath(spaceIdOrAlias, getCanonicalAliasOrRoomId(core, roomId));
 
   return (
     <PageNav>
@@ -511,7 +512,7 @@ export function Space() {
           )}
           <NavCategory>
             <NavItem variant="Background" radii="400" aria-selected={lobbySelected}>
-              <NavLink to={getSpaceLobbyPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+              <NavLink to={getSpaceLobbyPath(spaceIdOrAlias)}>
                 <NavItemContent>
                   <Box as="span" grow="Yes" alignItems="Center" gap="200">
                     <Avatar size="200" radii="400">
@@ -527,7 +528,7 @@ export function Space() {
               </NavLink>
             </NavItem>
             <NavItem variant="Background" radii="400" aria-selected={searchSelected}>
-              <NavLink to={getSpaceSearchPath(getCanonicalAliasOrRoomId(mx, space.roomId))}>
+              <NavLink to={getSpaceSearchPath(spaceIdOrAlias)}>
                 <NavItemContent>
                   <Box as="span" grow="Yes" alignItems="Center" gap="200">
                     <Avatar size="200" radii="400">
@@ -551,10 +552,10 @@ export function Space() {
           >
             {virtualizer.getVirtualItems().map((vItem) => {
               const { roomId } = hierarchy[vItem.index] ?? {};
-              const room = mx.getRoom(roomId);
+              const room = getRoom(roomId);
               if (!room) return null;
 
-              if (room.isSpaceRoom()) {
+              if (room.isSpace) {
                 const categoryId = makeNavCategoryId(space.roomId, roomId);
 
                 return (
@@ -581,7 +582,7 @@ export function Space() {
               return (
                 <VirtualTile virtualItem={vItem} key={vItem.index} ref={virtualizer.measureElement}>
                   <RoomNavItem
-                    room={room}
+                    roomId={roomId}
                     selected={selectedRoomId === roomId}
                     showAvatar={mDirects.has(roomId)}
                     direct={mDirects.has(roomId)}

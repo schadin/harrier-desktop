@@ -2,8 +2,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { AccountDataEvent, RoomSortType, SpacesSortContent } from '../../types/matrix/accountData';
 import type { RoomSortSource, SortFunc } from '../utils/sort';
-import { factoryRoomIdSort } from '../utils/sortLegacy';
-import { useMatrixClient } from './useMatrixClient';
+import { factoryRoomIdSort } from '../utils/sort';
 import { useCore } from './useCore';
 import { settingsAtom } from '../state/settings';
 import { spaceSortAtom } from '../state/spaceSort';
@@ -67,12 +66,12 @@ export const useRoomSortSource = (): RoomSortSource => {
 };
 
 export const useRoomSortComparator = (): ((spaceId: string) => SortFunc<string> | undefined) => {
-  const mx = useMatrixClient();
+  const source = useRoomSortSource();
   const spacesSort = useAtomValue(spaceSortAtom);
   const [defaultSort] = useSetting(settingsAtom, 'roomSortDefault');
 
   return useCallback(
-    (spaceId: string) => factoryRoomIdSort(mx, spacesSort[spaceId] ?? defaultSort),
-    [mx, spacesSort, defaultSort]
+    (spaceId: string) => factoryRoomIdSort(source, spacesSort[spaceId] ?? defaultSort),
+    [source, spacesSort, defaultSort]
   );
 };
