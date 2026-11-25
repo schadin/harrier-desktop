@@ -85,15 +85,9 @@ const getFirstUnreadEvent = (
   roomId: string,
   myUserId: string
 ): UnreadTimelineItem | undefined => {
-  const timeline = core.timeline.timeline(roomId).getSnapshot().value;
-  const readUpToId = timeline.readUpTo;
-
-  let startIndex = 0;
-  if (readUpToId) {
-    const readIndex = timeline.items.findIndex((item) => item.eventId === readUpToId);
-    // read receipt вне загруженного timeline — показываем с начала timeline
-    startIndex = readIndex === -1 ? 0 : readIndex + 1;
-  }
+  const timeline = core.timeline.liveTimeline(roomId).getSnapshot().value;
+  // unreadStartIndex отсутствует, когда receipt вне загруженного диапазона.
+  const startIndex = timeline.unreadStartIndex ?? 0;
 
   return timeline.items
     .slice(startIndex)

@@ -158,6 +158,8 @@ export type TimelineView = {
   readonly items: readonly TimelineItem[];
   readonly hasBackwardHistory: boolean;
   readonly readUpTo?: EventId;
+  /** Index of the first displayed item after the own read receipt, when its target is loaded. */
+  readonly unreadStartIndex?: number;
   readonly focusedEventId?: EventId;
 };
 

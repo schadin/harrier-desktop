@@ -216,6 +216,7 @@ export type RoomsModule = {
 
 export type TimelineModule = {
   timeline(roomId: RoomId): SnapshotStore<TimelineView>;
+  liveTimeline(roomId: RoomId): SnapshotStore<TimelineView>;
   markRead(roomId: RoomId, eventId: EventId, privateReceipt?: boolean): Promise<CoreResult<void>>;
   paginateBackward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;
   paginateForward(roomId: RoomId, limit: number): Promise<CoreResult<void>>;

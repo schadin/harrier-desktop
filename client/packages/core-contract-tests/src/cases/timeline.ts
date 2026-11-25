@@ -411,6 +411,66 @@ export const timelineCases = [
     }
   }),
 
+  contractTest(
+    'unreadStartIndex counts displayed items before a filtered edit receipt target',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              messages: [
+                { eventId: '$old', sender: '@alice:example.org', body: 'old' },
+                {
+                  eventId: '$edit',
+                  sender: '@alice:example.org',
+                  body: 'edited',
+                  replaces: '$old',
+                },
+                { eventId: '$new', sender: '@alice:example.org', body: 'new' },
+              ],
+              receipts: [{ eventId: '$edit', userId: '@tester:example.org' }],
+            },
+          ],
+        });
+        const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        expect(timeline.items.map((item) => item.eventId)).toEqual(['$old', '$new']);
+        expect(timeline.readUpTo).toBe('$edit');
+        expect(timeline.unreadStartIndex).toBe(1);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'unreadStartIndex is absent when the SDK cannot resolve the receipt target',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'first' }],
+              receipts: [{ eventId: '$outside', userId: '@tester:example.org' }],
+            },
+          ],
+        });
+        const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        expect(timeline.readUpTo).toBeUndefined();
+        expect(timeline.unreadStartIndex).toBeUndefined();
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('sending and failed messages keep their send status', async (harness) => {
     const core = await harness.create();
     try {
@@ -604,6 +664,40 @@ export const timelineCases = [
         if (result.ok) expect(result.value).toBe(0);
         const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
         expect(timeline.focusedEventId).toBe('$older');
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'liveTimeline keeps the live chain while display timeline is focused',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!room:example.org',
+              membership: 'join',
+              name: 'Room',
+              backwardToken: 't1',
+              messages: [{ eventId: '$live', sender: '@alice:example.org', body: 'live' }],
+              history: {
+                messages: [{ eventId: '$older', sender: '@alice:example.org', body: 'older' }],
+              },
+            },
+          ],
+        });
+        const result = await core.timeline.focusEvent('!room:example.org', '$older');
+        expect(result.ok).toBe(true);
+
+        const display = core.timeline.timeline('!room:example.org').getSnapshot().value;
+        const live = core.timeline.liveTimeline('!room:example.org').getSnapshot().value;
+        expect(display.focusedEventId).toBe('$older');
+        expect(display.items.map((item) => item.eventId)).toEqual(['$older']);
+        expect(live.focusedEventId).toBeUndefined();
+        expect(live.items.map((item) => item.eventId)).toEqual(['$live']);
       } finally {
         await harness.dispose(core);
       }

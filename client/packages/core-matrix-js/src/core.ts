@@ -381,8 +381,10 @@ const toItem = (
   };
 };
 
+const isRenderableEvent = (event: MatrixEvent): boolean => !isEdit(event) && !isReaction(event);
+
 const renderableEvents = (events: readonly MatrixEvent[]): MatrixEvent[] =>
-  events.filter((event) => !isEdit(event) && !isReaction(event));
+  events.filter(isRenderableEvent);
 
 const toTimelineView = (
   roomId: string,
@@ -444,11 +446,19 @@ const toTimelineView = (
   });
 
   const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
+  const receiptIndex = ownReadUpTo
+    ? events.findIndex((event) => event.getId() === ownReadUpTo)
+    : -1;
+  const unreadStartIndex =
+    receiptIndex >= 0
+      ? events.slice(0, receiptIndex + 1).filter(isRenderableEvent).length
+      : undefined;
   return {
     roomId,
     items,
     hasBackwardHistory,
     ...(ownReadUpTo !== null && ownReadUpTo !== undefined ? { readUpTo: ownReadUpTo } : {}),
+    ...(unreadStartIndex !== undefined ? { unreadStartIndex } : {}),
     ...(focusedEventId !== undefined ? { focusedEventId } : {}),
   };
 };
@@ -1136,6 +1146,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(ClientEvent.AccountData, refreshIfActive);
 
   const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
+  const liveTimelines = new Map<string, WritableSnapshotStore<TimelineView>>();
   const focusedTimelines = new Map<string, { timeline: EventTimeline; eventId: string }>();
   const sendStores = new Map<string, WritableSnapshotStore<SendStatusView | null>>();
   const sendRooms = new Map<string, string>();
@@ -1202,6 +1213,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     publishSendStatus(localId);
     return { ok: true, value: localId };
   };
+  const buildLiveTimeline = (roomId: string) => {
+    const room = client.getRoom(roomId) ?? undefined;
+    const anchor = room?.getLiveTimeline();
+    const events = anchor ? collectLinkedEvents(anchor) : [];
+    const hasBackwardHistory = anchor
+      ? firstLinkedTimeline(anchor).getPaginationToken(EventTimeline.BACKWARDS) != null
+      : false;
+    return toTimelineView(roomId, events, room, hasBackwardHistory);
+  };
   const buildTimeline = (roomId: string) => {
     const room = client.getRoom(roomId) ?? undefined;
     const focus = focusedTimelines.get(roomId);
@@ -1215,6 +1235,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const publishTimeline = (roomId: string) => {
     if (!stateLifecycleActive || stateRefreshSuppressionDepth > 0) return;
     timelines.get(roomId)?.publish(buildTimeline(roomId));
+    liveTimelines.get(roomId)?.publish(buildLiveTimeline(roomId));
   };
   function flushDeferredTimelines() {
     if (!stateLifecycleActive) {
@@ -2376,6 +2397,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         timelines.set(roomId, store);
         return store;
       },
+      liveTimeline(roomId) {
+        const existing = liveTimelines.get(roomId);
+        if (existing) return existing;
+        const store = createSnapshotStore(buildLiveTimeline(roomId));
+        liveTimelines.set(roomId, store);
+        return store;
+      },
       async paginateBackward(roomId, limit): Promise<CoreResult<void>> {
         const room = client.getRoom(roomId);
         if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
@@ -2385,7 +2413,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             backwards: true,
             limit,
           });
-          timelines.get(roomId)?.publish(buildTimeline(roomId));
+          publishTimeline(roomId);
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: toCoreError(error) };
@@ -2399,7 +2427,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           const last = lastLinkedTimeline(anchor);
           if (last.getPaginationToken(EventTimeline.FORWARDS) != null) {
             await client.paginateEventTimeline(last, { backwards: false, limit });
-            timelines.get(roomId)?.publish(buildTimeline(roomId));
+            publishTimeline(roomId);
           }
           return { ok: true, value: undefined };
         } catch (error) {

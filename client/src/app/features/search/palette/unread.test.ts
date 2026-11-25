@@ -53,13 +53,20 @@ const message = (
 const makeTimeline = (
   items: readonly TimelineItem[],
   readUpTo?: string,
-  roomId = '!a:example.org'
-): TimelineView => ({
-  roomId,
-  items,
-  hasBackwardHistory: false,
-  ...(readUpTo ? { readUpTo } : {}),
-});
+  roomId?: string,
+  unreadStartIndex?: number
+): TimelineView => {
+  const readIndex = readUpTo ? items.findIndex((item) => item.eventId === readUpTo) : -1;
+  let startIndex = unreadStartIndex;
+  if (startIndex === undefined && readIndex >= 0) startIndex = readIndex + 1;
+  return {
+    roomId: roomId ?? '!a:example.org',
+    items,
+    hasBackwardHistory: false,
+    ...(readUpTo ? { readUpTo } : {}),
+    ...(startIndex !== undefined ? { unreadStartIndex: startIndex } : {}),
+  };
+};
 
 const makeMember = (userId: string, displayName: string): MemberView => ({
   userId,
@@ -72,13 +79,20 @@ const makeCore = (
   rooms: Record<string, RoomView>,
   timelines: Record<string, TimelineView> = {},
   members: Record<string, readonly MemberView[]> = {},
-  profiles: Record<string, UserProfileView> = {}
+  profiles: Record<string, UserProfileView> = {},
+  liveTimelines: Record<string, TimelineView> = {}
 ): HarrierCore => {
   const roomStores = new Map(
     Object.entries(rooms).map(([roomId, room]) => [roomId, createSnapshotStore(room)])
   );
   const timelineStores = new Map(
     Object.entries(timelines).map(([roomId, timeline]) => [roomId, createSnapshotStore(timeline)])
+  );
+  const liveTimelineStores = new Map(
+    Object.entries(liveTimelines).map(([roomId, timeline]) => [
+      roomId,
+      createSnapshotStore(timeline),
+    ])
   );
   const emptyTimeline = (roomId: string) =>
     timelineStores.get(roomId) ??
@@ -87,6 +101,8 @@ const makeCore = (
       items: [],
       hasBackwardHistory: false,
     });
+  const emptyLiveTimeline = (roomId: string) =>
+    liveTimelineStores.get(roomId) ?? emptyTimeline(roomId);
   const emptyMembers = createSnapshotStore<readonly MemberView[]>([]);
   return {
     auth: {
@@ -103,6 +119,7 @@ const makeCore = (
     },
     timeline: {
       timeline: emptyTimeline,
+      liveTimeline: emptyLiveTimeline,
     },
     presence: {
       profile(userId: string) {
@@ -142,6 +159,65 @@ describe('getUnreadPreview через buildUnreadPaletteItems', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].item.preview).toBe('Al: Yo');
+  });
+
+  it('использует receipt-границу после отфильтрованного edit/reaction события', () => {
+    const room = makeRoom('!a:example.org');
+    const core = makeCore(
+      { [room.roomId]: room },
+      {
+        [room.roomId]: makeTimeline(
+          [
+            message('old', '@bob:example.org', 'Already read'),
+            message('new', '@al:example.org', 'Yo'),
+          ],
+          '$reaction',
+          room.roomId,
+          1
+        ),
+      },
+      { [room.roomId]: [makeMember('@al:example.org', 'Al')] }
+    );
+
+    const [entry] = buildUnreadPaletteItems([makeRoomItem(room.roomId)], core, unread(), labels);
+    expect(entry.item.preview).toBe('Al: Yo');
+  });
+
+  it('возвращается к началу только когда receipt вне загруженного диапазона', () => {
+    const room = makeRoom('!a:example.org');
+    const core = makeCore(
+      { [room.roomId]: room },
+      {
+        [room.roomId]: makeTimeline(
+          [message('old', '@bob:example.org', 'Loaded message')],
+          '$outside'
+        ),
+      }
+    );
+
+    const [entry] = buildUnreadPaletteItems([makeRoomItem(room.roomId)], core, unread(), labels);
+    expect(entry.item.preview).toBe('bob: Loaded message');
+  });
+
+  it('читает live timeline, а не focused historical display timeline', () => {
+    const room = makeRoom('!a:example.org');
+    const core = makeCore(
+      { [room.roomId]: room },
+      {
+        [room.roomId]: {
+          ...makeTimeline([message('focused', '@bob:example.org', 'Historical')]),
+          focusedEventId: 'focused',
+        },
+      },
+      { [room.roomId]: [makeMember('@al:example.org', 'Al')] },
+      {},
+      {
+        [room.roomId]: makeTimeline([message('live', '@al:example.org', 'Live unread')]),
+      }
+    );
+
+    const [entry] = buildUnreadPaletteItems([makeRoomItem(room.roomId)], core, unread(), labels);
+    expect(entry.item.preview).toBe('Al: Live unread');
   });
 
   it('медиа показывает плейсхолдер вместо тела', () => {
