@@ -751,20 +751,28 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
 
   type StateListenerEntry = RoomStateEntry & { roomId: string; eventType: string };
-  type PendingStateEntry = { readonly event: MatrixEvent; readonly entry: StateListenerEntry };
-  const stateListeners = new Set<(entry: StateListenerEntry) => void>();
-  let pendingStateEntries: PendingStateEntry[] = [];
-  const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
-    entries.forEach((entry) => stateListeners.forEach((listener) => listener(entry)));
+  type PendingStateEntry = {
+    readonly event: MatrixEvent;
+    readonly entry: StateListenerEntry;
+    readonly generation: number;
   };
-  const takePendingStateEntries = (roomIds?: ReadonlySet<string>): StateListenerEntry[] => {
-    const ready = pendingStateEntries
-      .filter(({ entry }) => roomIds === undefined || roomIds.has(entry.roomId))
-      .map(({ entry }) => entry);
-    pendingStateEntries = pendingStateEntries.filter(
-      ({ entry }) => roomIds !== undefined && !roomIds.has(entry.roomId)
-    );
-    return ready;
+  const stateListeners = new Set<(entry: StateListenerEntry) => void>();
+  const pendingStateByRoom = new Map<string, PendingStateEntry[]>();
+  let stateGeneration = 0;
+  let acceptPendingState = true;
+  const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
+    entries.forEach((entry) => {
+      if (!acceptPendingState) return;
+      stateListeners.forEach((listener) => listener(entry));
+    });
+  };
+  const activatePendingState = () => {
+    acceptPendingState = true;
+  };
+  const invalidatePendingState = () => {
+    stateGeneration += 1;
+    acceptPendingState = false;
+    pendingStateByRoom.clear();
   };
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
@@ -994,11 +1002,38 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
+  const flushRoomState = (roomId: string, generation: number) => {
+    if (!acceptPendingState || generation !== stateGeneration) return;
+    const pending = pendingStateByRoom.get(roomId);
+    if (!pending || pending.length === 0) return;
+    pendingStateByRoom.delete(roomId);
+    const room = client.getRoom(roomId);
+    if (!room) return;
+    room.recalculate();
+    if (!acceptPendingState || generation !== stateGeneration) return;
+    refresh();
+    if (!acceptPendingState || generation !== stateGeneration) return;
+    notifyStateListeners(pending.map(({ entry }) => entry));
+  };
+  const flushRoomsState = (roomIds: ReadonlySet<string>, generation: number) => {
+    roomIds.forEach((roomId) => flushRoomState(roomId, generation));
+  };
+  const flushAllRoomState = (generation: number) => {
+    Array.from(pendingStateByRoom.keys()).forEach((roomId) => flushRoomState(roomId, generation));
+  };
+  const refreshIfActive = () => {
+    if (acceptPendingState) refresh();
+  };
+
   client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
-    pendingStateEntries.push({
+    if (!acceptPendingState) return;
+    const roomId = event.getRoomId() ?? '';
+    const pending = pendingStateByRoom.get(roomId) ?? [];
+    pending.push({
       event,
+      generation: stateGeneration,
       entry: {
-        roomId: event.getRoomId() ?? '',
+        roomId,
         eventType: event.getType(),
         stateKey: event.getStateKey() ?? '',
         content: event.getContent() as JsonObject,
@@ -1007,33 +1042,30 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         timestamp: event.getTs() ?? undefined,
       },
     });
+    pendingStateByRoom.set(roomId, pending);
   });
-  // Both sync v2 and sliding sync emit ClientEvent.Event only after room.recalculate().
-  // RoomState.update is earlier: member state is ready, but a derived room name may not be.
   client.on(ClientEvent.Event, (event: MatrixEvent) => {
-    const eventId = event.getId();
+    if (!acceptPendingState) return;
+    const generation = stateGeneration;
     const readyRooms = new Set<string>();
-    pendingStateEntries.forEach(({ event: pendingEvent, entry }) => {
-      const pendingEventId = pendingEvent.getId();
-      if (pendingEvent === event || (eventId && pendingEventId === eventId)) {
-        readyRooms.add(entry.roomId);
-      }
+    pendingStateByRoom.forEach((entries, roomId) => {
+      if (entries.some(({ event: pendingEvent }) => pendingEvent === event)) readyRooms.add(roomId);
     });
-    const ready = takePendingStateEntries(readyRooms);
-    if (ready.length > 0) {
-      refresh();
-      notifyStateListeners(ready);
+    flushRoomsState(readyRooms, generation);
+  });
+  client.on(ClientEvent.Sync, (state: SyncState) => {
+    if (state === SyncState.Error || state === SyncState.Stopped) {
+      invalidatePendingState();
+      return;
     }
+    if (state !== SyncState.Prepared && state !== SyncState.Syncing) return;
+    if (!acceptPendingState) return;
+    flushAllRoomState(stateGeneration);
   });
-  // A sync-boundary fallback also covers SDK paths that do not emit ClientEvent.Event.
-  client.on(ClientEvent.Sync, () => {
-    refresh();
-    notifyStateListeners(takePendingStateEntries());
-  });
-  client.on(RoomEvent.Name, refresh);
-  client.on(ClientEvent.Room, refresh);
-  client.on(RoomEvent.MyMembership, refresh);
-  client.on(ClientEvent.AccountData, refresh);
+  client.on(RoomEvent.Name, refreshIfActive);
+  client.on(ClientEvent.Room, refreshIfActive);
+  client.on(RoomEvent.MyMembership, refreshIfActive);
+  client.on(ClientEvent.AccountData, refreshIfActive);
 
   const timelines = new Map<string, WritableSnapshotStore<TimelineView>>();
   const focusedTimelines = new Map<string, { timeline: EventTimeline; eventId: string }>();
@@ -1611,6 +1643,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
   const loggedOutListeners = new Set<() => void>();
   client.on(HttpApiEvent.SessionLoggedOut, () => {
+    invalidatePendingState();
     client.stopClient();
     clearSecretStorageKeys();
     client.clearStores().catch(() => undefined);
@@ -1667,22 +1700,26 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       sync: syncStore,
       async start(): Promise<CoreResult<void>> {
         try {
+          activatePendingState();
           syncStore.publish({ phase: 'syncing' });
           client.setSyncPresence(SetPresence.Online);
           await client.startClient({ lazyLoadMembers: true });
           return { ok: true, value: undefined };
         } catch (error) {
+          invalidatePendingState();
           syncStore.publish({ phase: 'error', error: toCoreError(error).message });
           return { ok: false, error: toCoreError(error) };
         }
       },
       async retrySync() {
         try {
+          activatePendingState();
           if (client.clientRunning) client.retryImmediately();
           else await client.startClient({ lazyLoadMembers: true });
           syncStore.publish({ phase: 'syncing' });
           return { ok: true, value: undefined };
         } catch (error) {
+          invalidatePendingState();
           syncStore.publish({ phase: 'error', error: toCoreError(error).message });
           return { ok: false, error: toCoreError(error) };
         }
@@ -1692,10 +1729,12 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         return () => loggedOutListeners.delete(listener);
       },
       async stop() {
+        invalidatePendingState();
         client.stopClient();
         syncStore.publish({ phase: 'stopped' });
       },
       async logout(): Promise<CoreResult<void>> {
+        invalidatePendingState();
         client.stopClient();
         try {
           await client.logout();
@@ -1703,17 +1742,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           // Local cleanup continues even if the server logout fails.
         }
         await client.clearStores();
+        invalidatePendingState();
         clearSecretStorageKeys();
         sessionStore.publish(null);
         syncStore.publish({ phase: 'stopped' });
         return { ok: true, value: undefined };
       },
       async clearCache() {
+        invalidatePendingState();
         client.stopClient();
         try {
           await client.store.deleteAllData();
+          invalidatePendingState();
           return { ok: true, value: undefined };
         } catch (error) {
+          invalidatePendingState();
           return { ok: false, error: toCoreError(error) };
         }
       },
