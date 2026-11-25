@@ -66,6 +66,22 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
+type TransitionProbeProps = {
+  onError: (error: Error) => void;
+};
+
+function TransitionProbe({ onError }: TransitionProbeProps) {
+  let value: RoomView | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- intentional hook-order transition probe
+    value = useRequiredCoreSpace();
+  } catch (error) {
+    onError(error as Error);
+  }
+  const label = useMemo(() => value?.name ?? 'missing', [value]);
+  return <span>{label}</span>;
+}
+
 const createContainer = (): Element => {
   const noop = () => undefined;
   return {
@@ -139,25 +155,16 @@ describe('space context contract', () => {
     const root = createRoot(createContainer());
     observedError = undefined;
     let caughtError: Error | undefined;
+    const handleCaughtError = (error: Error) => {
+      caughtError = error;
+    };
 
     const render = (spaceId: string | null) => {
-      function Probe() {
-        let value: RoomView | null = null;
-        try {
-          // eslint-disable-next-line react-hooks/rules-of-hooks -- intentional hook-order transition probe
-          value = useRequiredCoreSpace();
-        } catch (error) {
-          caughtError = error as Error;
-        }
-        const label = useMemo(() => value?.name ?? 'missing', [value]);
-        return <span>{label}</span>;
-      }
-
       root.render(
         <CoreProvider value={core}>
           <SpaceProvider value={spaceId}>
             <ErrorBoundary>
-              <Probe />
+              <TransitionProbe onError={handleCaughtError} />
             </ErrorBoundary>
           </SpaceProvider>
         </CoreProvider>
