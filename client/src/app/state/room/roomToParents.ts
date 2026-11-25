@@ -1,9 +1,21 @@
 import produce from 'immer';
-import { atom, useSetAtom } from 'jotai';
+import { atom, useSetAtom, useStore } from 'jotai';
 import { useEffect } from 'react';
-import { RoomToParents } from '../../../types/matrix/room';
+import { Membership, RoomToParents, StateEvent } from '../../../types/matrix/room';
 import { mapParentWithChildren } from '../../utils/room';
 import { useCore } from '../../hooks/useCore';
+
+export const roomToParentsEqual = (current: RoomToParents, next: RoomToParents): boolean => {
+  if (current.size !== next.size) return false;
+  return Array.from(next).every(([roomId, parents]) => {
+    const currentParents = current.get(roomId);
+    return (
+      !!currentParents &&
+      currentParents.size === parents.size &&
+      Array.from(parents).every((parentId) => currentParents.has(parentId))
+    );
+  });
+};
 
 export type RoomToParentsAction =
   | {
@@ -25,7 +37,10 @@ export const roomToParentsAtom = atom<RoomToParents, [RoomToParentsAction], unde
   (get) => get(baseRoomToParents),
   (get, set, action) => {
     if (action.type === 'INITIALIZE') {
-      set(baseRoomToParents, action.roomToParents);
+      const current = get(baseRoomToParents);
+      if (!roomToParentsEqual(current, action.roomToParents)) {
+        set(baseRoomToParents, action.roomToParents);
+      }
       return;
     }
     if (action.type === 'PUT') {
@@ -56,20 +71,51 @@ export const roomToParentsAtom = atom<RoomToParents, [RoomToParentsAction], unde
 
 export const useBindRoomToParentsAtom = (roomToParents: typeof roomToParentsAtom) => {
   const core = useCore();
+  const jotaiStore = useStore();
   const setRoomToParents = useSetAtom(roomToParents);
 
   useEffect(() => {
-    const store = core.rooms.all;
+    const roomsStore = core.rooms.all;
+    let active = true;
+    let updateScheduled = false;
     const update = () => {
       const next: RoomToParents = new Map();
-      store.getSnapshot().value.forEach((room) => {
-        const parents = core.rooms.parents(room.roomId).getSnapshot().value;
-        if (parents.length > 0) next.set(room.roomId, new Set(parents));
+      const joinedRoomIds = new Set(
+        roomsStore
+          .getSnapshot()
+          .value.filter((room) => room.membership === Membership.Join)
+          .map((room) => room.roomId)
+      );
+      joinedRoomIds.forEach((roomId) => {
+        const parents = core.rooms
+          .parents(roomId)
+          .getSnapshot()
+          .value.filter((parentId) => joinedRoomIds.has(parentId));
+        if (parents.length > 0) next.set(roomId, new Set(parents));
       });
-      setRoomToParents({ type: 'INITIALIZE', roomToParents: next });
+      if (!roomToParentsEqual(jotaiStore.get(roomToParents), next)) {
+        setRoomToParents({ type: 'INITIALIZE', roomToParents: next });
+      }
     };
 
+    const scheduleUpdate = () => {
+      if (updateScheduled) return;
+      updateScheduled = true;
+      queueMicrotask(() => {
+        updateScheduled = false;
+        if (active) update();
+      });
+    };
+    const unsubscribeRooms = roomsStore.subscribe(scheduleUpdate);
+    const unsubscribeState = core.rooms.onState((entry) => {
+      if (entry.eventType === StateEvent.SpaceChild) update();
+    });
+
     update();
-    return store.subscribe(update);
-  }, [core, setRoomToParents]);
+    return () => {
+      active = false;
+      unsubscribeRooms();
+      unsubscribeState();
+    };
+  }, [core, roomToParents, setRoomToParents, jotaiStore]);
 };

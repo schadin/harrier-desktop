@@ -38,6 +38,7 @@ export type SyncFixtureRoom = {
   readonly name?: string;
   readonly direct?: boolean;
   readonly space?: boolean;
+  readonly roomType?: string;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];

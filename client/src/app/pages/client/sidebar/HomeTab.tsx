@@ -4,7 +4,6 @@ import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRe
 import { useAtomValue } from 'jotai';
 import FocusTrap from 'focus-trap-react';
 import { useOrphanRooms } from '../../../state/hooks/roomList';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
@@ -64,13 +63,12 @@ const HomeMenu = forwardRef<HTMLDivElement, HomeMenuProps>(({ requestClose }, re
 
 export function HomeTab() {
   const navigate = useNavigate();
-  const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
   const mDirects = useAtomValue(mDirectAtom);
   const roomToParents = useAtomValue(roomToParentsAtom);
-  const orphanRooms = useOrphanRooms(mx, allRoomsAtom, mDirects, roomToParents);
+  const orphanRooms = useOrphanRooms(allRoomsAtom, mDirects, roomToParents);
   const homeUnread = useRoomsUnread(orphanRooms, roomToUnreadAtom);
   const homeSelected = useHomeSelected();
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();

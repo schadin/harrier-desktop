@@ -5,7 +5,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { PageHero, PageHeroEmpty, PageHeroSection } from '../../components/page';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { _SearchPathSearchParams } from '../../pages/paths';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
@@ -49,9 +48,8 @@ export function MessageSearch({
   senders,
   scrollRef,
 }: MessageSearchProps) {
-  const mx = useMatrixClient();
   const mDirects = useAtomValue(mDirectAtom);
-  const allRooms = useRooms(mx, allRoomsAtom, mDirects);
+  const allRooms = useRooms(allRoomsAtom, mDirects);
   const [mediaAutoLoad] = useSetting(settingsAtom, 'mediaAutoLoad');
   const [urlPreview] = useSetting(settingsAtom, 'urlPreview');
   const [legacyUsernameColor] = useSetting(settingsAtom, 'legacyUsernameColor');

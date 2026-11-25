@@ -4,7 +4,6 @@ import { Box, Icon, Icons, Menu, MenuItem, PopOut, RectCords, Text, config, toRe
 import FocusTrap from 'focus-trap-react';
 import { useAtomValue } from 'jotai';
 import { useDirects } from '../../../state/hooks/roomList';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
@@ -63,12 +62,11 @@ const DirectMenu = forwardRef<HTMLDivElement, DirectMenuProps>(({ requestClose }
 
 export function DirectTab() {
   const navigate = useNavigate();
-  const mx = useMatrixClient();
   const screenSize = useScreenSizeContext();
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
 
   const mDirects = useAtomValue(mDirectAtom);
-  const directs = useDirects(mx, allRoomsAtom, mDirects);
+  const directs = useDirects(allRoomsAtom, mDirects);
   const directUnread = useRoomsUnread(directs, roomToUnreadAtom);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 

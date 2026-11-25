@@ -62,6 +62,7 @@ export type SyncFixtureRoom = {
   readonly name?: string;
   readonly direct?: boolean;
   readonly space?: boolean;
+  readonly roomType?: string;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
   readonly reactions?: readonly SyncFixtureReaction[];
@@ -468,10 +469,16 @@ export function createSyncDriver(): SyncDriver {
     if (item.name !== undefined) {
       states.push(stateEvent(item.roomId, 'm.room.name', '', { name: item.name }));
     }
-    if (item.space || item.roomVersion !== undefined || item.additionalCreators !== undefined) {
+    if (
+      item.space ||
+      item.roomType !== undefined ||
+      item.roomVersion !== undefined ||
+      item.additionalCreators !== undefined
+    ) {
       states.push(
         stateEvent(item.roomId, 'm.room.create', '', {
           ...(item.space ? { type: 'm.space' } : {}),
+          ...(item.roomType !== undefined ? { type: item.roomType } : {}),
           ...(item.roomVersion !== undefined ? { room_version: item.roomVersion } : {}),
           ...(item.additionalCreators !== undefined
             ? { additional_creators: [...item.additionalCreators] }

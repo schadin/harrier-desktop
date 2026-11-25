@@ -45,6 +45,7 @@ export type RoomSummaryView = {
   readonly membership: Membership;
   readonly isDirect: boolean;
   readonly isSpace: boolean;
+  readonly roomType?: string;
   readonly unread?: UnreadCountView;
   readonly notificationMode?: NotificationMode;
 };
@@ -149,7 +150,7 @@ export type TimelineItem =
       readonly kind: 'encrypted';
       readonly failure?: DecryptionFailureReason;
     })
-  | (TimelineBase & { readonly kind: 'redacted' })
+  | (TimelineBase & { readonly kind: 'redacted'; readonly eventType: string })
   | (TimelineBase & { readonly kind: 'unsupported'; readonly eventType: string });
 
 export type TimelineView = {

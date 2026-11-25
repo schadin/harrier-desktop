@@ -124,7 +124,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(
     const allChild = useSpaceChildren(
       allRoomsAtom,
       room.roomId,
-      useRecursiveChildScopeFactory(mx, roomToParents)
+      useRecursiveChildScopeFactory(roomToParents)
     );
     const unread = useRoomsUnread(allChild, roomToUnreadAtom);
 
@@ -408,7 +408,6 @@ function SpaceTab({
   disabled,
   onUnpin,
 }: SpaceTabProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const targetRef = useRef<HTMLDivElement>(null);
@@ -418,7 +417,7 @@ function SpaceTab({
   const allChild = useSpaceChildren(
     allRoomsAtom,
     space.roomId,
-    useRecursiveChildScopeFactory(mx, roomToParents)
+    useRecursiveChildScopeFactory(roomToParents)
   );
 
   const spaceDraggable: SidebarDraggable = useMemo(
@@ -620,7 +619,7 @@ export function SpaceTabs({ scrollRef }: SpaceTabsProps) {
   const core = useCore();
   const screenSize = useScreenSizeContext();
   const roomToParents = useAtomValue(roomToParentsAtom);
-  const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
+  const orphanSpaces = useOrphanSpaces(allRoomsAtom, roomToParents);
   const [sidebarItems, localEchoSidebarItem] = useSidebarItems(orphanSpaces);
   const navToActivePath = useAtomValue(useNavToActivePathAtom());
   const [openedFolder, setOpenedFolder] = useAtom(useOpenedSidebarFolderAtom());

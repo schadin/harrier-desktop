@@ -83,6 +83,68 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('room type is exposed by every room projection', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!call:example.org',
+            membership: 'join',
+            name: 'Call',
+            roomType: 'org.matrix.msc3417.call',
+          },
+        ],
+      });
+      const [allRoom] = core.rooms.all.getSnapshot().value;
+      const [listedRoom] = core.rooms.list.getSnapshot().value;
+      const room = core.rooms.room('!call:example.org').getSnapshot().value;
+
+      expect(allRoom?.roomType).toBe('org.matrix.msc3417.call');
+      expect(listedRoom?.roomType).toBe('org.matrix.msc3417.call');
+      expect(room?.roomType).toBe('org.matrix.msc3417.call');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('m.room.create updates every room classification projection', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!classified:example.org';
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Classified' }],
+      });
+      const initialAll = core.rooms.all.getSnapshot();
+      expect(initialAll.value[0]?.isSpace).toBe(false);
+      expect(initialAll.value[0]?.roomType).toBeUndefined();
+
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            name: 'Classified',
+            stateEvents: [{ type: 'm.room.create', stateKey: '', content: { type: 'm.space' } }],
+          },
+        ],
+      });
+
+      const [allRoom] = core.rooms.all.getSnapshot().value;
+      const [listedRoom] = core.rooms.list.getSnapshot().value;
+      const room = core.rooms.room(roomId).getSnapshot().value;
+      expect(core.rooms.all.getSnapshot()).not.toBe(initialAll);
+      expect([allRoom?.isSpace, listedRoom?.isSpace, room?.isSpace]).toEqual([true, true, true]);
+      expect([allRoom?.roomType, listedRoom?.roomType, room?.roomType]).toEqual([
+        'm.space',
+        'm.space',
+        'm.space',
+      ]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('room state is readable through rooms.getState', async (harness) => {
     const core = await harness.create();
     try {

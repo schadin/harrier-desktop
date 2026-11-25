@@ -130,6 +130,7 @@ const toSummary = (
   if (!membership) return null;
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
   const highlight = room.getUnreadNotificationCount(NotificationCountType.Highlight);
+  const roomType = room.getType();
   return {
     roomId: room.roomId,
     name: room.name,
@@ -137,6 +138,7 @@ const toSummary = (
     membership,
     isDirect: direct.has(room.roomId),
     isSpace: room.isSpaceRoom(),
+    ...(roomType ? { roomType } : {}),
     ...(total > 0 || highlight > 0 ? { unread: { total, highlight } } : {}),
     notificationMode: notificationModeOf(client, room.roomId),
   };
@@ -298,7 +300,9 @@ const toItem = (
     sender: event.getSender() ?? '',
     timestamp: event.getTs(),
   };
-  if (event.isRedacted()) return { ...base, kind: 'redacted', preview: 'Message deleted' };
+  if (event.isRedacted()) {
+    return { ...base, kind: 'redacted', eventType: event.getType(), preview: 'Message deleted' };
+  }
 
   const eventType = event.getType();
   if (eventType === 'm.room.encrypted') {

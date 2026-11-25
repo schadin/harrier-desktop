@@ -37,13 +37,12 @@ import { markAsRead } from '../../../utils/notifications';
 import { PaletteCategory, PaletteItem } from './types';
 
 const useRoomItems = (): PaletteItem[] => {
-  const mx = useMatrixClient();
   const { navigateRoom } = useRoomNavigate();
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetCoreRoom(allRoomsSet);
   const mDirects = useAtomValue(mDirectAtom);
-  const rooms = useRooms(mx, allRoomsAtom, mDirects);
-  const directs = useDirects(mx, allRoomsAtom, mDirects);
+  const rooms = useRooms(allRoomsAtom, mDirects);
+  const directs = useDirects(allRoomsAtom, mDirects);
 
   return useMemo(() => {
     const makeItem = (roomId: string, dm: boolean): PaletteItem => {
@@ -79,9 +78,8 @@ const useRoomItems = (): PaletteItem[] => {
 };
 
 const useSpaceItems = (): PaletteItem[] => {
-  const mx = useMatrixClient();
   const { navigateSpace } = useRoomNavigate();
-  const spaces = useSpaces(mx, allRoomsAtom);
+  const spaces = useSpaces(allRoomsAtom);
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetCoreRoom(allRoomsSet);
 
@@ -112,10 +110,10 @@ const usePeopleItems = (): PaletteItem[] => {
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetCoreRoom(allRoomsSet);
   const mDirects = useAtomValue(mDirectAtom);
-  const directs = useDirects(mx, allRoomsAtom, mDirects);
+  const directs = useDirects(allRoomsAtom, mDirects);
   // mx.getUsers() меняется по мере синка; пересчитываем при смене списка комнат
   // как дешёвый индикатор обновления известных пользователей
-  const rooms = useRooms(mx, allRoomsAtom, mDirects);
+  const rooms = useRooms(allRoomsAtom, mDirects);
 
   return useMemo(() => {
     const myUserId = mx.getSafeUserId();

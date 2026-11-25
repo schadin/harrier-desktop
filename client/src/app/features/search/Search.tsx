@@ -27,7 +27,6 @@ import React, {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAtom, useAtomValue } from 'jotai';
-import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { useCore } from '../../hooks/useCore';
 import { useAllJoinedRoomsSet } from '../../hooks/useGetRoom';
 import { useGetCoreRoom } from '../../hooks/useGetCoreRoom';
@@ -155,7 +154,6 @@ type SearchProps = {
   requestClose: () => void;
 };
 export function Search({ requestClose }: SearchProps) {
-  const mx = useMatrixClient();
   const core = useCore();
   const { t } = useTranslation();
   const useAuthentication = useMediaAuthentication();
@@ -203,12 +201,12 @@ export function Search({ requestClose }: SearchProps) {
 
   const results = useMemo(() => {
     if (unreadMode) {
-      const unreadItems = buildUnreadPaletteItems(items, mx, roomToUnread, unreadPreviewLabels);
+      const unreadItems = buildUnreadPaletteItems(items, core, roomToUnread, unreadPreviewLabels);
       if (parsedQuery.query === '') return unreadItems;
       return unreadItems.filter((scored) => matchUnreadItem(scored.item, parsedQuery.query));
     }
     return parsedQuery.query === '' ? defaultResults.entries : searchItems(items, parsedQuery);
-  }, [items, mx, roomToUnread, unreadPreviewLabels, unreadMode, parsedQuery, defaultResults]);
+  }, [items, core, roomToUnread, unreadPreviewLabels, unreadMode, parsedQuery, defaultResults]);
 
   const listFocus = useListFocusIndex(results.length, 0);
 

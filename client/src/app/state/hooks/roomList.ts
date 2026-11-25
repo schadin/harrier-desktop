@@ -1,134 +1,125 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import { Atom, useAtomValue } from 'jotai';
-import { selectAtom } from 'jotai/utils';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
+import type { RoomSummaryView } from '@harrier/core';
 import { getAllParents } from '../../utils/room';
 import { useCore } from '../../hooks/useCore';
 import { compareRoomsEqual } from '../room-list/utils';
 import { RoomToParents } from '../../../types/matrix/room';
 
 export type RoomsAtom = Atom<string[]>;
-export type RoomSelector = (roomId: string) => boolean | undefined;
+export type RoomClassification = Pick<RoomSummaryView, 'roomId' | 'isSpace' | 'roomType'>;
+export type RoomSelector = (roomId: string, room: RoomClassification | null) => boolean | undefined;
 
-const isRoomView = (room: { isSpace: boolean } | null): boolean => !!room && !room.isSpace;
-const isSpaceView = (room: { isSpace: boolean } | null): boolean => !!room?.isSpace;
-const isUnsupportedView = (room: { roomType?: string } | null): boolean => !!room && !room.roomType;
-
-export const selectedRoomsAtom = (
-  roomsAtom: RoomsAtom,
-  selector: (roomId: string) => boolean | undefined
-) => selectAtom(roomsAtom, (rooms) => rooms.filter(selector), compareRoomsEqual);
+const isRoomView = (room: RoomClassification | null): boolean => !!room && !room.isSpace;
+const isSpaceView = (room: RoomClassification | null): boolean => !!room?.isSpace;
+const isUnsupportedView = (room: RoomClassification | null): boolean => !!room && !room.roomType;
 
 export const useSelectedRooms = (roomsAtom: RoomsAtom, selector: RoomSelector) => {
-  const anAtom = useMemo(() => selectedRoomsAtom(roomsAtom, selector), [roomsAtom, selector]);
+  const core = useCore();
+  const roomIds = useAtomValue(roomsAtom);
+  const summaries = useSyncExternalStore(
+    core.rooms.all.subscribe,
+    core.rooms.all.getSnapshot,
+    core.rooms.all.getSnapshot
+  ).value;
+  const classifications = useMemo<ReadonlyMap<string, RoomClassification>>(
+    () =>
+      new Map(
+        summaries.map((room) => [
+          room.roomId,
+          { roomId: room.roomId, isSpace: room.isSpace, roomType: room.roomType },
+        ])
+      ),
+    [summaries]
+  );
+  const selected = useMemo(
+    () => roomIds.filter((roomId) => selector(roomId, classifications.get(roomId) ?? null)),
+    [roomIds, classifications, selector]
+  );
+  const cache = useRef(selected);
 
-  return useAtomValue(anAtom);
+  if (!compareRoomsEqual(cache.current, selected)) cache.current = selected;
+  return cache.current;
 };
 
 export type SpaceChildSelectorFactory = (parentId: string) => RoomSelector;
 
 export const useRecursiveChildScopeFactory = (
-  mx: unknown,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isRoomView(room) &&
       roomToParents.has(roomId) &&
       getAllParents(roomToParents, roomId).has(parentId),
-    [mx, core, roomToParents]
+    [roomToParents]
   );
-};
 
 export const useChildSpaceScopeFactory = (
-  mx: unknown,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isSpaceView(core.rooms.room(roomId).getSnapshot().value) &&
-      roomToParents.get(roomId)?.has(parentId),
-    [mx, core, roomToParents]
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isSpaceView(room) && roomToParents.get(roomId)?.has(parentId),
+    [roomToParents]
   );
-};
 
 export const useRecursiveChildSpaceScopeFactory = (
-  mx: unknown,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isSpaceView(core.rooms.room(roomId).getSnapshot().value) &&
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isSpaceView(room) &&
       roomToParents.has(roomId) &&
       getAllParents(roomToParents, roomId).has(parentId),
-    [mx, core, roomToParents]
+    [roomToParents]
   );
-};
 
 export const useChildRoomScopeFactory = (
-  mx: unknown,
   mDirects: Set<string>,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
-      !mDirects.has(roomId) &&
-      roomToParents.get(roomId)?.has(parentId),
-    [mx, core, mDirects, roomToParents]
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isRoomView(room) && !mDirects.has(roomId) && roomToParents.get(roomId)?.has(parentId),
+    [mDirects, roomToParents]
   );
-};
 
 export const useRecursiveChildRoomScopeFactory = (
-  mx: unknown,
   mDirects: Set<string>,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isRoomView(room) &&
       !mDirects.has(roomId) &&
       roomToParents.has(roomId) &&
       getAllParents(roomToParents, roomId).has(parentId),
-    [mx, core, mDirects, roomToParents]
+    [mDirects, roomToParents]
   );
-};
 
 export const useChildDirectScopeFactory = (
-  mx: unknown,
   mDirects: Set<string>,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
-      mDirects.has(roomId) &&
-      roomToParents.get(roomId)?.has(parentId),
-    [mx, core, mDirects, roomToParents]
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isRoomView(room) && mDirects.has(roomId) && roomToParents.get(roomId)?.has(parentId),
+    [mDirects, roomToParents]
   );
-};
 
 export const useRecursiveChildDirectScopeFactory = (
-  mx: unknown,
   mDirects: Set<string>,
   roomToParents: RoomToParents
-): SpaceChildSelectorFactory => {
-  const core = useCore();
-  return useCallback(
-    (parentId: string) => (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
+): SpaceChildSelectorFactory =>
+  useCallback(
+    (parentId: string) => (roomId, room) =>
+      isRoomView(room) &&
       mDirects.has(roomId) &&
       roomToParents.has(roomId) &&
       getAllParents(roomToParents, roomId).has(parentId),
-    [mx, core, mDirects, roomToParents]
+    [mDirects, roomToParents]
   );
-};
 
 export const useSpaceChildren = (
   roomsAtom: RoomsAtom,
@@ -142,70 +133,48 @@ export const useSpaceChildren = (
   return useSelectedRooms(roomsAtom, recursiveChildRoomSelector);
 };
 
-export const useSpaces = (mx: unknown, roomsAtom: RoomsAtom) => {
-  const core = useCore();
+export const useSpaces = (roomsAtom: RoomsAtom) => {
+  const selector: RoomSelector = useCallback((_roomId, room) => isSpaceView(room), []);
+  return useSelectedRooms(roomsAtom, selector);
+};
+
+export const useOrphanSpaces = (roomsAtom: RoomsAtom, roomToParents: RoomToParents) => {
   const selector: RoomSelector = useCallback(
-    (roomId) => isSpaceView(core.rooms.room(roomId).getSnapshot().value),
-    [mx, core]
+    (roomId, room) => isSpaceView(room) && !roomToParents.has(roomId),
+    [roomToParents]
   );
   return useSelectedRooms(roomsAtom, selector);
 };
 
-export const useOrphanSpaces = (
-  mx: unknown,
-  roomsAtom: RoomsAtom,
-  roomToParents: RoomToParents
-) => {
-  const core = useCore();
+export const useRooms = (roomsAtom: RoomsAtom, mDirects: Set<string>) => {
   const selector: RoomSelector = useCallback(
-    (roomId) =>
-      isSpaceView(core.rooms.room(roomId).getSnapshot().value) && !roomToParents.has(roomId),
-    [mx, core, roomToParents]
-  );
-  return useSelectedRooms(roomsAtom, selector);
-};
-
-export const useRooms = (mx: unknown, roomsAtom: RoomsAtom, mDirects: Set<string>) => {
-  const core = useCore();
-  const selector: RoomSelector = useCallback(
-    (roomId: string) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) && !mDirects.has(roomId),
-    [mx, core, mDirects]
+    (roomId, room) => isRoomView(room) && !mDirects.has(roomId),
+    [mDirects]
   );
   return useSelectedRooms(roomsAtom, selector);
 };
 
 export const useOrphanRooms = (
-  mx: unknown,
   roomsAtom: RoomsAtom,
   mDirects: Set<string>,
   roomToParents: RoomToParents
 ) => {
-  const core = useCore();
   const selector: RoomSelector = useCallback(
-    (roomId) =>
-      isRoomView(core.rooms.room(roomId).getSnapshot().value) &&
-      !mDirects.has(roomId) &&
-      !roomToParents.has(roomId),
-    [mx, core, mDirects, roomToParents]
+    (roomId, room) => isRoomView(room) && !mDirects.has(roomId) && !roomToParents.has(roomId),
+    [mDirects, roomToParents]
   );
   return useSelectedRooms(roomsAtom, selector);
 };
 
-export const useDirects = (mx: unknown, roomsAtom: RoomsAtom, mDirects: Set<string>) => {
-  const core = useCore();
+export const useDirects = (roomsAtom: RoomsAtom, mDirects: Set<string>) => {
   const selector: RoomSelector = useCallback(
-    (roomId) => isRoomView(core.rooms.room(roomId).getSnapshot().value) && mDirects.has(roomId),
-    [mx, core, mDirects]
+    (roomId, room) => isRoomView(room) && mDirects.has(roomId),
+    [mDirects]
   );
   return useSelectedRooms(roomsAtom, selector);
 };
 
-export const useUnsupportedRooms = (mx: unknown, roomsAtom: RoomsAtom) => {
-  const core = useCore();
-  const selector: RoomSelector = useCallback(
-    (roomId) => isUnsupportedView(core.rooms.room(roomId).getSnapshot().value),
-    [mx, core]
-  );
+export const useUnsupportedRooms = (roomsAtom: RoomsAtom) => {
+  const selector: RoomSelector = useCallback((_roomId, room) => isUnsupportedView(room), []);
   return useSelectedRooms(roomsAtom, selector);
 };

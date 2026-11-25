@@ -50,7 +50,7 @@ import {
 import { AccountDataEvent } from '../../../types/matrix/accountData';
 import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { SpaceHierarchy } from './SpaceHierarchy';
-import { useGetRoom } from '../../hooks/useGetRoom';
+import { useGetCoreRoom, type GetCoreRoomCallback } from '../../hooks/useGetCoreRoom';
 import { useRoomSortComparator, useSpaceRoomSort } from '../../hooks/useRoomSort';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { getRoomPermissionsAPI } from '../../hooks/useRoomPermissions';
@@ -83,7 +83,7 @@ const getCanonicalAliasOrRoomId = (
 const useCanDropLobbyItem = (
   space: { roomId: string },
   roomsPowerLevels: Map<string, IPowerLevels>,
-  getRoom: (roomId: string) => unknown
+  getRoom: GetCoreRoomCallback
 ): CanDropCallback => {
   const core = useCore();
   const userId = core.auth.session.getSnapshot().value?.userId ?? '';
@@ -103,7 +103,7 @@ const useCanDropLobbyItem = (
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
 
       if (
-        getRoom(containerSpaceId) === undefined ||
+        getRoom(containerSpaceId) === null ||
         !permissions.stateEvent(StateEvent.SpaceChild, userId)
       ) {
         return false;
@@ -140,7 +140,7 @@ const useCanDropLobbyItem = (
       const creators = getRoomCreatorsForRoomId(core, containerSpaceId);
       const permissions = getRoomPermissionsAPI(creators, powerLevels);
       if (
-        getRoom(containerSpaceId) === undefined ||
+        getRoom(containerSpaceId) === null ||
         !permissions.stateEvent(StateEvent.SpaceChild, userId)
       ) {
         return false;
@@ -215,7 +215,7 @@ export function Lobby() {
     useCallback((w, height) => setHeroSectionHeight(height), [])
   );
 
-  const getRoom = useGetRoom(allJoinedRooms);
+  const getRoom = useGetCoreRoom(allJoinedRooms);
 
   const sortComparator = useRoomSortComparator();
   const sortType = useSpaceRoomSort(space.roomId);

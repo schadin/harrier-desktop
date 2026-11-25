@@ -55,6 +55,7 @@ import { useCategoryHandler } from '../../../hooks/useCategoryHandler';
 import { useNavToActivePathMapper } from '../../../hooks/useNavToActivePathMapper';
 import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
 import { useCoreRoom } from '../../../hooks/useCoreRoom';
+import { useGetCoreRoom } from '../../../hooks/useGetCoreRoom';
 import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useSpaceJoinedHierarchy, sortRoomsByOrder } from '../../../hooks/useSpaceHierarchy';
 import { factoryRoomIdByActivity } from '../../../utils/sortLegacy';
@@ -98,8 +99,6 @@ import { InviteUserPrompt } from '../../../components/invite-user-prompt';
 import { useCallEmbed } from '../../../hooks/useCallEmbed';
 import { joinRoom } from '../../../utils/coreRoomActions';
 
-type MatrixClient = ReturnType<typeof useMatrixClient>;
-type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
 type RoomJoinRulesContent = { join_rule?: string };
 
 type SpaceMenuProps = {
@@ -126,7 +125,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
   const allChild = useSpaceChildren(
     allRoomsAtom,
     room.roomId,
-    useRecursiveChildScopeFactory(mx, roomToParents)
+    useRecursiveChildScopeFactory(roomToParents)
   );
   const unread = useRoomsUnread(allChild, roomToUnreadAtom);
 
@@ -449,15 +448,7 @@ export function Space() {
 
   const [closedCategories, setClosedCategories] = useAtom(useClosedNavCategoriesAtom());
 
-  const getRoom = useCallback(
-    (rId: string): Room | undefined => {
-      if (allJoinedRooms.has(rId)) {
-        return mx.getRoom(rId) ?? undefined;
-      }
-      return undefined;
-    },
-    [mx, allJoinedRooms]
-  );
+  const getRoom = useGetCoreRoom(allJoinedRooms);
 
   const sortComparator = useRoomSortComparator();
 

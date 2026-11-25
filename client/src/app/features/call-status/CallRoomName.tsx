@@ -20,7 +20,7 @@ export function CallRoomName({ roomId }: CallRoomNameProps) {
   const mx = useMatrixClient();
   const room = useCoreRoom(roomId);
   const roomToParents = useAtomValue(roomToParentsAtom);
-  const orphanSpaces = useOrphanSpaces(mx, allRoomsAtom, roomToParents);
+  const orphanSpaces = useOrphanSpaces(allRoomsAtom, roomToParents);
   const mDirects = useAtomValue(mDirectAtom);
   const dm = mDirects.has(roomId);
 

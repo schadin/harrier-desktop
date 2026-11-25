@@ -13,7 +13,7 @@ type RouteSpaceProviderProps = {
 };
 export function RouteSpaceProvider({ children }: RouteSpaceProviderProps) {
   const mx = useMatrixClient();
-  const joinedSpaces = useSpaces(mx, allRoomsAtom);
+  const joinedSpaces = useSpaces(allRoomsAtom);
 
   const { spaceIdOrAlias } = useParams();
   const viaServers = useSearchParamsViaServers();
