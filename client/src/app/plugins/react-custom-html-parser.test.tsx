@@ -20,11 +20,16 @@ const CURRENT_USER_ID = '@me:example.org';
 const GENERAL_ROOM_ID = '!general:example.org';
 const GENERAL_ALIAS = '#general:example.org';
 
-const makeRoom = (roomId: string, name: string, canonicalAlias?: string): RoomView => ({
+const makeRoom = (
+  roomId: string,
+  name: string,
+  canonicalAlias?: string,
+  membership: RoomView['membership'] = 'join'
+): RoomView => ({
   roomId,
   name,
   canonicalAlias,
-  membership: 'join',
+  membership,
   isDirect: false,
   isSpace: false,
   encrypted: false,
@@ -63,7 +68,8 @@ const makeCore = ({
       }),
     },
     rooms: {
-      list: createSnapshotStore(rooms),
+      all: createSnapshotStore(rooms),
+      list: createSnapshotStore(rooms.filter((room) => room.membership === 'join')),
       room: (roomId: string) => createSnapshotStore(roomById.get(roomId) ?? null),
       members: () => createSnapshotStore(members),
       stateEntry: (roomId: string, eventType: string) =>
@@ -140,6 +146,27 @@ describe('renderMatrixMention', () => {
     });
   });
 
+  it('resolves aliases for known invited rooms outside the joined room list', () => {
+    const invitedRoomId = '!invited:example.org';
+    const core = makeCore({
+      rooms: [makeRoom(invitedRoomId, 'Invited General', GENERAL_ALIAS, 'invite')],
+    });
+
+    const mention = renderMatrixMention(
+      core,
+      invitedRoomId,
+      `https://matrix.to/#/${GENERAL_ALIAS}?via=via.example.org`,
+      {}
+    );
+
+    expect(mention?.props).toMatchObject({
+      className: css.Mention({ highlight: true }),
+      'data-mention-id': invitedRoomId,
+      'data-mention-via': 'via.example.org',
+      children: '#Invited General',
+    });
+  });
+
   it('keeps an unknown room alias and its via servers as fallback mention data', () => {
     const core = makeCore();
 
@@ -202,6 +229,24 @@ describe('getReactCustomHtmlParser images', () => {
     expect(markup).toContain('alt="Picture"');
   });
 
+  it('defaults omitted image authentication options to unauthenticated media URLs', () => {
+    const mediaUrl = vi.fn(() => 'https://media.example.org/image.png');
+    const core = makeCore({ mediaUrl });
+    const options = getReactCustomHtmlParser(core, GENERAL_ROOM_ID, {
+      linkifyOpts: LINKIFY_OPTS,
+    });
+
+    const markup = renderToStaticMarkup(
+      <>{parse('<img src="mxc://example.org/image" alt="Picture" />', options)}</>
+    );
+
+    expect(mediaUrl).toHaveBeenCalledWith(
+      { mxcUrl: 'mxc://example.org/image' },
+      { useAuthentication: false }
+    );
+    expect(markup).toContain('src="https://media.example.org/image.png"');
+  });
+
   it('keeps non-MXC image sources unchanged without calling core media', () => {
     const mediaUrl = vi.fn(() => null);
     const core = makeCore({ mediaUrl });
@@ -215,8 +260,6 @@ describe('getReactCustomHtmlParser images', () => {
     );
 
     expect(mediaUrl).not.toHaveBeenCalled();
-    expect(markup).toBe(
-      '<a href="https://example.org/image.png" target="_blank" rel="noreferrer noopener">Picture</a>'
-    );
+    expect(markup).toBe('<img src="https://example.org/image.png" alt="Picture"/>');
   });
 });

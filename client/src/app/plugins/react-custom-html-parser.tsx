@@ -71,7 +71,7 @@ const getMentionRoom = (core: HarrierCore, roomIdOrAlias: string): RoomView | nu
     return core.rooms.room(roomIdOrAlias).getSnapshot().value;
   }
 
-  const aliasedRoom = core.rooms.list
+  const aliasedRoom = core.rooms.all
     .getSnapshot()
     .value.map((summary) => core.rooms.room(summary.roomId).getSnapshot().value)
     .find(
@@ -489,18 +489,11 @@ export const getReactCustomHtmlParser = (
           );
         }
 
-        if (name === 'img') {
-          const isMxcSource = props.src?.startsWith('mxc://') ?? false;
-          const htmlSrc = isMxcSource
-            ? core.media.url({ mxcUrl: props.src }, { useAuthentication: params.useAuthentication })
-            : props.src;
-          if (htmlSrc && isMxcSource === false) {
-            return (
-              <a href={htmlSrc} target="_blank" rel="noreferrer noopener">
-                {props.alt || props.title || htmlSrc}
-              </a>
-            );
-          }
+        if (name === 'img' && props.src?.startsWith('mxc://')) {
+          const htmlSrc = core.media.url(
+            { mxcUrl: props.src },
+            { useAuthentication: params.useAuthentication ?? false }
+          );
           if (htmlSrc && 'data-mx-emoticon' in props) {
             return (
               <span className={css.EmoticonBase}>
