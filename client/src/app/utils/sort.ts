@@ -14,20 +14,24 @@ import { RoomSortType } from '../../types/matrix/accountData';
 
 export type { SortFunc } from '@harrier/core';
 
-// RoomView does not expose the live timeline timestamp yet. Keep this bridge
-// structural so activity sorting stays identical to the SDK implementation.
-type RoomSortSource = {
-  getRoom(roomId: string): {
-    name: string;
-    getLastActiveTimestamp(): number;
-  } | null;
+type LegacyRoomSortMeta = {
+  name: string;
+  getLastActiveTimestamp(): number;
 };
+
+export type RoomSortSource = {
+  getRoom(roomId: string): RoomSortMeta | LegacyRoomSortMeta | null;
+};
+
+const isPlainRoomSortMeta = (room: RoomSortMeta | LegacyRoomSortMeta): room is RoomSortMeta =>
+  'lastActiveTimestamp' in room;
 
 const factoryGetMeta =
   (source: RoomSortSource) =>
   (roomId: string): RoomSortMeta | undefined => {
     const room = source.getRoom(roomId);
     if (!room) return undefined;
+    if (isPlainRoomSortMeta(room)) return room;
     return { name: room.name, lastActiveTimestamp: room.getLastActiveTimestamp() };
   };
 

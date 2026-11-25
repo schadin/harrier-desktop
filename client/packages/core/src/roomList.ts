@@ -1,13 +1,10 @@
-import type { UnreadCountView } from './views';
+import type { RoomSummaryView, UnreadCountView } from './views';
 
 export type SortFunc<T> = (a: T, b: T) => number;
 
 export type RoomSortType = 'manual' | 'atoz' | 'ztoa' | 'activity_desc' | 'activity_asc';
 
-export type RoomSortMeta = {
-  readonly name: string;
-  readonly lastActiveTimestamp: number;
-};
+export type RoomSortMeta = Pick<RoomSummaryView, 'name' | 'lastActiveTimestamp'>;
 
 export type AggregatedUnread = UnreadCountView & {
   readonly from: ReadonlySet<string> | null;

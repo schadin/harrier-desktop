@@ -1,7 +1,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { AccountDataEvent, RoomSortType, SpacesSortContent } from '../../types/matrix/accountData';
-import { SortFunc, factoryRoomIdSort } from '../utils/sort';
+import { SortFunc, factoryRoomIdSort, type RoomSortSource } from '../utils/sort';
 import { useMatrixClient } from './useMatrixClient';
 import { useCore } from './useCore';
 import { settingsAtom } from '../state/settings';
@@ -47,6 +47,22 @@ export const useSetSpaceRoomSort = () => {
     },
     [core, setSpaceSort]
   );
+};
+
+export const useRoomSortSource = (): RoomSortSource => {
+  const core = useCore();
+  const snapshot = useSyncExternalStore(
+    core.rooms.all.subscribe,
+    core.rooms.all.getSnapshot,
+    core.rooms.all.getSnapshot
+  );
+
+  return useMemo(() => {
+    const roomsById = new Map(snapshot.value.map((room) => [room.roomId, room]));
+    return {
+      getRoom: (roomId: string) => roomsById.get(roomId) ?? null,
+    };
+  }, [snapshot]);
 };
 
 export const useRoomSortComparator = (): ((spaceId: string) => SortFunc<string> | undefined) => {

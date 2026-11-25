@@ -11,6 +11,7 @@ import { classifyInvites, makeInviteData, type InviteData } from './inviteUtils'
 const room: RoomView = {
   roomId: '!invite:example.org',
   name: 'Project room',
+  lastActiveTimestamp: Number.MIN_SAFE_INTEGER,
   membership: 'invite',
   isDirect: true,
   isSpace: false,

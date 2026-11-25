@@ -133,6 +133,7 @@ const toSummary = (
   return {
     roomId: room.roomId,
     name: room.name,
+    lastActiveTimestamp: room.getLastActiveTimestamp(),
     membership,
     isDirect: direct.has(room.roomId),
     isSpace: room.isSpaceRoom(),
@@ -517,6 +518,7 @@ const roomViewEqual = (a: RoomView | null, b: RoomView | null): boolean => {
   return (
     a.roomId === b.roomId &&
     a.name === b.name &&
+    a.lastActiveTimestamp === b.lastActiveTimestamp &&
     a.membership === b.membership &&
     a.isDirect === b.isDirect &&
     a.isSpace === b.isSpace &&
@@ -525,6 +527,10 @@ const roomViewEqual = (a: RoomView | null, b: RoomView | null): boolean => {
     a.notificationMode === b.notificationMode &&
     a.topic === b.topic &&
     a.encrypted === b.encrypted &&
+    a.roomVersion === b.roomVersion &&
+    a.guestCanJoin === b.guestCanJoin &&
+    a.memberCount === b.memberCount &&
+    a.historyVisibility === b.historyVisibility &&
     a.joinRule === b.joinRule &&
     JSON.stringify(a.joinRuleContent) === JSON.stringify(b.joinRuleContent) &&
     a.roomType === b.roomType &&
@@ -676,6 +682,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         | JsonObject
         | undefined,
       roomType: room.getType(),
+      roomVersion: room.currentState
+        .getStateEvents('m.room.create', '')
+        ?.getContent<{ room_version?: string }>().room_version,
       canonicalAlias: room.getCanonicalAlias() ?? undefined,
       dmUserId: dmUserIdOf(room),
       avatarMxc,
@@ -744,18 +753,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const stateListeners = new Set<
     (entry: RoomStateEntry & { roomId: string; eventType: string }) => void
   >();
-  client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
-    const entry = {
-      roomId: event.getRoomId() ?? '',
-      eventType: event.getType(),
-      stateKey: event.getStateKey() ?? '',
-      content: event.getContent() as JsonObject,
-      eventId: event.getId() ?? undefined,
-      sender: event.getSender() ?? undefined,
-      timestamp: event.getTs() ?? undefined,
-    };
-    stateListeners.forEach((listener) => listener(entry));
-  });
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
   const stateKeyOf = (roomId: string, eventType: string, key: string) =>
@@ -830,6 +827,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       stateKey: event.getStateKey() ?? '',
       content: event.getContent() as JsonObject,
       eventId: event.getId() ?? undefined,
+      sender: event.getSender() ?? undefined,
+      timestamp: event.getTs() ?? undefined,
     }));
   };
   const publishStateList = (roomId: string, eventType: string) => {
@@ -982,6 +981,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
+  client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
+    refresh();
+    const entry = {
+      roomId: event.getRoomId() ?? '',
+      eventType: event.getType(),
+      stateKey: event.getStateKey() ?? '',
+      content: event.getContent() as JsonObject,
+      eventId: event.getId() ?? undefined,
+      sender: event.getSender() ?? undefined,
+      timestamp: event.getTs() ?? undefined,
+    };
+    stateListeners.forEach((listener) => listener(entry));
+  });
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
   client.on(ClientEvent.AccountData, refresh);

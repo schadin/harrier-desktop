@@ -12,6 +12,7 @@ import {
   NotificationCountType,
   RoomEvent,
   RoomMemberEvent,
+  RoomStateEvent,
   User,
   UserEvent,
 } from 'matrix-js-sdk';
@@ -51,6 +52,7 @@ export type SyncFixtureMessage = {
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
   readonly threadRoot?: string;
+  readonly timestamp?: number;
 };
 
 export type SyncFixtureRoom = {
@@ -90,6 +92,7 @@ export type SyncFixtureRoom = {
     readonly stateKey: string;
     readonly content: Record<string, unknown>;
     readonly prevContent?: Record<string, unknown>;
+    readonly timestamp?: number;
   }[];
   readonly members?: readonly {
     readonly userId: string;
@@ -198,7 +201,7 @@ function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent 
     sender: message.sender,
     room_id: roomId,
     event_id: message.eventId,
-    origin_server_ts: 1_700_000_000_000 + eventCounter,
+    origin_server_ts: message.timestamp ?? 1_700_000_000_000 + eventCounter,
     content,
     unsigned: message.redacted ? { redacted_because: redactionEvent(roomId, message.sender) } : {},
   });
@@ -455,8 +458,10 @@ export function createSyncDriver(): SyncDriver {
   };
 
   const applyRoom = async (item: SyncFixtureRoom) => {
-    const room = new Room(item.roomId, client, TEST_USER_ID, { timelineSupport: true });
-    client.store.storeRoom(room);
+    const existingRoom = client.getRoom(item.roomId);
+    const room =
+      existingRoom ?? new Room(item.roomId, client, TEST_USER_ID, { timelineSupport: true });
+    if (!existingRoom) client.store.storeRoom(room);
     room.updateMyMembership(item.membership);
     const states: MatrixEvent[] = [];
     if (item.name !== undefined) {
@@ -514,7 +519,12 @@ export function createSyncDriver(): SyncDriver {
         })
       );
     });
-    if (states.length > 0) room.currentState.setStateEvents(states);
+    if (states.length > 0) {
+      room.currentState.setStateEvents(states);
+      states.forEach((event) => {
+        client.emit(RoomStateEvent.Events, event, room.currentState, null);
+      });
+    }
     if (item.accountData) {
       Object.entries(item.accountData).forEach(([type, content]) => {
         eventCounter += 1;
@@ -545,7 +555,7 @@ export function createSyncDriver(): SyncDriver {
           sender: stateItem.sender,
           room_id: item.roomId,
           event_id: stateItem.eventId,
-          origin_server_ts: 1_700_000_000_000 + eventCounter,
+          origin_server_ts: stateItem.timestamp ?? 1_700_000_000_000 + eventCounter,
           content: stateItem.content,
           unsigned: stateItem.prevContent ? { prev_content: stateItem.prevContent } : {},
         });

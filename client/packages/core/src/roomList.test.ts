@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   byOrderKey,
   byTsOldToNew,
@@ -6,14 +6,26 @@ import {
   compareRoomNameAtoZ,
   deleteUnreadInfo,
   factoryRoomIdByActivity,
+  factoryRoomIdByActivityAsc,
+  factoryRoomIdByAtoZ,
   factoryRoomIdByUnreadCount,
   factoryRoomIdSort,
+  factoryRoomIdByZtoA,
   putUnreadInfo,
   unreadEqual,
   unreadInfoToUnread,
   type AggregatedUnread,
   type RoomSortMeta,
 } from './roomList';
+import type { RoomSummaryView } from './views';
+
+describe('RoomSortMeta', () => {
+  it('is the name and activity projection of a core room summary', () => {
+    expectTypeOf<RoomSortMeta>().toEqualTypeOf<
+      Pick<RoomSummaryView, 'name' | 'lastActiveTimestamp'>
+    >();
+  });
+});
 
 describe('compareRoomNameAtoZ', () => {
   it('compares case-insensitively', () => {
@@ -58,6 +70,39 @@ describe('factoryRoomIdSort', () => {
   it('treats missing rooms as lowest activity', () => {
     const byActivity = factoryRoomIdByActivity(() => undefined);
     expect(byActivity('!a:example.org', '!b:example.org')).toBe(0);
+  });
+
+  it('uses the empty-room sentinel for unknown metadata in both activity directions', () => {
+    const sentinelMeta = new Map<string, RoomSortMeta>([
+      ['!active:example.org', { name: 'Active', lastActiveTimestamp: 100 }],
+      ['!empty:example.org', { name: 'Empty', lastActiveTimestamp: Number.MIN_SAFE_INTEGER }],
+    ]);
+    const getSentinelMeta = (roomId: string) => sentinelMeta.get(roomId);
+
+    expect(
+      factoryRoomIdByActivity(getSentinelMeta)('!unknown:example.org', '!empty:example.org')
+    ).toBe(0);
+    expect(
+      factoryRoomIdByActivity(getSentinelMeta)('!unknown:example.org', '!active:example.org')
+    ).toBeGreaterThan(0);
+    expect(
+      factoryRoomIdByActivityAsc(getSentinelMeta)('!unknown:example.org', '!active:example.org')
+    ).toBeLessThan(0);
+  });
+
+  it('preserves ties and sorts plain name/activity metadata in every mode', () => {
+    const plainMeta = new Map<string, RoomSortMeta>([
+      ['!a:example.org', { name: '#Alpha', lastActiveTimestamp: 100 }],
+      ['!b:example.org', { name: 'Beta', lastActiveTimestamp: 100 }],
+      ['!c:example.org', { name: 'Gamma', lastActiveTimestamp: 200 }],
+    ]);
+    const getPlainMeta = (roomId: string) => plainMeta.get(roomId);
+
+    expect(factoryRoomIdByActivity(getPlainMeta)('!a:example.org', '!b:example.org')).toBe(0);
+    expect(factoryRoomIdByActivity(getPlainMeta)('!a:example.org', '!c:example.org')).toBe(100);
+    expect(factoryRoomIdByAtoZ(getPlainMeta)('!b:example.org', '!a:example.org')).toBe(1);
+    expect(factoryRoomIdByZtoA(getPlainMeta)('!b:example.org', '!a:example.org')).toBe(-1);
+    expect(factoryRoomIdSort(getPlainMeta, 'manual')).toBeUndefined();
   });
 });
 

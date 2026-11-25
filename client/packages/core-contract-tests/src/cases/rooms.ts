@@ -24,6 +24,24 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('empty rooms expose the minimum safe activity timestamp', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId: '!empty:example.org', membership: 'join', name: 'Empty' }],
+      });
+      const [allRoom] = core.rooms.all.getSnapshot().value;
+      const [listedRoom] = core.rooms.list.getSnapshot().value;
+      const room = core.rooms.room('!empty:example.org').getSnapshot().value;
+
+      expect(allRoom?.lastActiveTimestamp).toBe(Number.MIN_SAFE_INTEGER);
+      expect(listedRoom?.lastActiveTimestamp).toBe(Number.MIN_SAFE_INTEGER);
+      expect(room?.lastActiveTimestamp).toBe(Number.MIN_SAFE_INTEGER);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('left rooms disappear from the joined list', async (harness) => {
     const core = await harness.create();
     try {
@@ -167,6 +185,147 @@ export const roomsCases = [
         rooms: [{ roomId: '!a:example.org', membership: 'join', name: 'New' }],
       });
       expect(core.rooms.room('!a:example.org').getSnapshot().value?.name).toBe('New');
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'room activity follows the last live timeline event across syncs',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!activity:example.org',
+              membership: 'join',
+              name: 'Activity',
+              messages: [
+                {
+                  eventId: '$newer-timestamp',
+                  sender: '@alice:example.org',
+                  body: 'Earlier in the live timeline',
+                  timestamp: 200,
+                },
+                {
+                  eventId: '$last-live-event',
+                  sender: '@bob:example.org',
+                  body: 'Last in the live timeline',
+                  timestamp: 100,
+                },
+              ],
+              history: {
+                messages: [
+                  {
+                    eventId: '$history-only',
+                    sender: '@alice:example.org',
+                    body: 'Back-pagination only',
+                    timestamp: 500,
+                  },
+                ],
+              },
+            },
+          ],
+        });
+
+        expect(core.rooms.all.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
+        expect(core.rooms.list.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
+        expect(
+          core.rooms.room('!activity:example.org').getSnapshot().value?.lastActiveTimestamp
+        ).toBe(100);
+
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!activity:example.org',
+              membership: 'join',
+              messages: [
+                {
+                  eventId: '$incremental-live-event',
+                  sender: '@alice:example.org',
+                  body: 'Incremental live event',
+                  timestamp: 150,
+                },
+              ],
+            },
+          ],
+        });
+
+        expect(core.rooms.all.getSnapshot().value[0]?.lastActiveTimestamp).toBe(150);
+        expect(core.rooms.list.getSnapshot().value[0]?.lastActiveTimestamp).toBe(150);
+        expect(
+          core.rooms.room('!activity:example.org').getSnapshot().value?.lastActiveTimestamp
+        ).toBe(150);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'receipt-only refreshes preserve room snapshots and activity revisions',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        const roomId = '!receipts:example.org';
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              name: 'Receipts',
+              messages: [
+                {
+                  eventId: '$message',
+                  sender: '@alice:example.org',
+                  body: 'Hello',
+                  timestamp: 321,
+                },
+              ],
+            },
+          ],
+        });
+        const roomStore = core.rooms.room(roomId);
+        const allBefore = core.rooms.all.getSnapshot();
+        const listBefore = core.rooms.list.getSnapshot();
+        const roomBefore = roomStore.getSnapshot();
+
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              name: 'Receipts',
+              receipts: [{ eventId: '$message', userId: '@bob:example.org' }],
+            },
+          ],
+        });
+
+        expect(core.rooms.all.getSnapshot()).toBe(allBefore);
+        expect(core.rooms.list.getSnapshot()).toBe(listBefore);
+        expect(roomStore.getSnapshot()).toBe(roomBefore);
+        expect(roomStore.getSnapshot().value?.lastActiveTimestamp).toBe(321);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('room view exposes the version from m.room.create', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId: '!versioned:example.org',
+            membership: 'join',
+            name: 'Versioned',
+            roomVersion: '12',
+          },
+        ],
+      });
+      expect(core.rooms.room('!versioned:example.org').getSnapshot().value?.roomVersion).toBe('12');
     } finally {
       await harness.dispose(core);
     }
@@ -618,11 +777,15 @@ export const roomsCases = [
             stateKey: 'pack1',
             content: { pack: { display_name: 'Pack One' } },
             eventId: expect.any(String),
+            sender: '@tester:example.org',
+            timestamp: expect.any(Number),
           },
           {
             stateKey: 'pack2',
             content: { pack: { display_name: 'Pack Two' } },
             eventId: expect.any(String),
+            sender: '@tester:example.org',
+            timestamp: expect.any(Number),
           },
         ]);
         await harness.applySyncFixture({
@@ -644,8 +807,77 @@ export const roomsCases = [
         const entries = core.rooms
           .stateList('!a:example.org', 'im.ponies.room_emotes')
           .getSnapshot().value;
-        expect(entries).toHaveLength(1);
+        expect(entries).toHaveLength(2);
         expect(entries[0]?.content).toEqual({ pack: { display_name: 'Pack One v2' } });
+        expect(entries[1]?.content).toEqual({ pack: { display_name: 'Pack Two' } });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'onState listeners observe refreshed hierarchy and unread snapshots',
+    async (harness) => {
+      const core = await harness.create();
+      const spaceId = '!space:example.org';
+      const childId = '!child:example.org';
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            { roomId: spaceId, membership: 'join', name: 'Space', space: true },
+            {
+              roomId: childId,
+              membership: 'join',
+              name: 'Child',
+              unread: { total: 2, highlight: 1 },
+            },
+          ],
+        });
+        const stateList = core.rooms.stateList(spaceId, 'm.space.child');
+        const parents = core.rooms.parents(childId);
+        const roomStore = core.rooms.room(spaceId);
+        const { unreads } = core.rooms;
+        let observedChild = false;
+        const unsubscribe = core.rooms.onState((entry) => {
+          if (
+            entry.roomId !== spaceId ||
+            entry.eventType !== 'm.space.child' ||
+            entry.stateKey !== childId
+          ) {
+            return;
+          }
+          observedChild = true;
+          expect(stateList.getSnapshot().value).toEqual([
+            expect.objectContaining({
+              stateKey: childId,
+              content: { via: ['example.org'] },
+            }),
+          ]);
+          expect(parents.getSnapshot().value).toEqual([spaceId]);
+          expect(roomStore.getSnapshot().value?.spaceChildren).toEqual([childId]);
+          expect(unreads.getSnapshot().value).toContainEqual({
+            roomId: spaceId,
+            unread: { total: 2, highlight: 1 },
+          });
+        });
+
+        try {
+          await harness.applySyncFixture({
+            rooms: [
+              {
+                roomId: spaceId,
+                membership: 'join',
+                name: 'Space',
+                space: true,
+                children: [childId],
+              },
+            ],
+          });
+          expect(observedChild).toBe(true);
+        } finally {
+          unsubscribe();
+        }
       } finally {
         await harness.dispose(core);
       }

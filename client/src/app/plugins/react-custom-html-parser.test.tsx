@@ -28,6 +28,7 @@ const makeRoom = (
 ): RoomView => ({
   roomId,
   name,
+  lastActiveTimestamp: Number.MIN_SAFE_INTEGER,
   canonicalAlias,
   membership,
   isDirect: false,

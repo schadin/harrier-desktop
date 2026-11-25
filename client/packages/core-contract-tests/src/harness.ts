@@ -16,6 +16,7 @@ export type SyncFixtureMessage = {
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
   readonly threadRoot?: string;
+  readonly timestamp?: number;
 };
 
 export type SyncFixtureReaction = {
@@ -68,6 +69,7 @@ export type SyncFixtureRoom = {
     readonly stateKey: string;
     readonly content: Record<string, unknown>;
     readonly prevContent?: Record<string, unknown>;
+    readonly timestamp?: number;
   }[];
   readonly members?: readonly {
     readonly userId: string;

@@ -41,6 +41,7 @@ export type NotificationMode = 'all' | 'mentions' | 'mute';
 export type RoomSummaryView = {
   readonly roomId: RoomId;
   readonly name: string;
+  readonly lastActiveTimestamp: Timestamp;
   readonly membership: Membership;
   readonly isDirect: boolean;
   readonly isSpace: boolean;
@@ -63,6 +64,7 @@ export type RoomView = RoomSummaryView & {
   readonly joinRule?: string;
   readonly joinRuleContent?: JsonObject;
   readonly roomType?: string;
+  readonly roomVersion?: string;
   readonly canonicalAlias?: string;
   readonly dmUserId?: string;
   readonly avatarMxc?: string;
