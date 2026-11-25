@@ -36,8 +36,8 @@ export function useCoreSpace(): RoomView | null {
 
 export function useRequiredCoreSpace(): RoomView {
   const spaceId = useSpaceId();
-  if (!spaceId) throw new Error('Space not provided!');
   const space = useCoreSpace();
+  if (!spaceId) throw new Error('Space not provided!');
   if (!space) throw new Error(`Space ${spaceId} not found!`);
   return space;
 }

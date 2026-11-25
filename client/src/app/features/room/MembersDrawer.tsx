@@ -56,7 +56,7 @@ import { useGetMemberPowerLevel, usePowerLevelsContext } from '../../hooks/usePo
 import { MembershipFilterMenu } from '../../components/MembershipFilterMenu';
 import { MemberSortMenu } from '../../components/MemberSortMenu';
 import { useOpenUserRoomProfile, useUserRoomProfileState } from '../../state/hooks/userRoomProfile';
-import { useSpaceOptionally } from '../../hooks/useSpace';
+import { useCoreSpace } from '../../hooks/useSpace';
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { useFlattenPowerTagMembers, useGetMemberPowerTag } from '../../hooks/useMemberPowerTag';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
@@ -205,7 +205,7 @@ export function MembersDrawer({ room, members }: MembersDrawerProps) {
   const coreRoom = useCoreRoom(room.roomId);
   const fetchingMembers = members.length < (coreRoom?.memberCount ?? members.length);
   const openUserRoomProfile = useOpenUserRoomProfile();
-  const space = useSpaceOptionally();
+  const space = useCoreSpace();
   const openProfileUserId = useUserRoomProfileState()?.userId;
 
   const membershipFilterMenu = useMembershipFilterMenu();

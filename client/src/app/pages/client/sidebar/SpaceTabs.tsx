@@ -46,6 +46,7 @@ import {
 } from '../../../state/hooks/roomList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
+import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { roomToParentsAtom } from '../../../state/room/roomToParents';
 import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { getSpaceLobbyPath, getSpacePath, joinPathComponent } from '../../pathUtils';
@@ -87,6 +88,7 @@ import { stopPropagation } from '../../../utils/keyboard';
 import { getMatrixToRoom } from '../../../plugins/matrix-to';
 import { getViaServers } from '../../../plugins/via-servers';
 import { getRoomAvatarUrl } from '../../../utils/room';
+import { ClosedSpaceAvatar } from './ClosedSpaceAvatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
@@ -410,7 +412,7 @@ function SpaceTab({
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const targetRef = useRef<HTMLDivElement>(null);
-  const coreSpace = core.rooms.room(space.roomId).getSnapshot().value;
+  const coreSpace = useCoreRoom(space.roomId);
 
   const roomToParents = useAtomValue(roomToParentsAtom);
   const allChild = useSpaceChildren(
@@ -566,8 +568,6 @@ function ClosedSpaceFolder({
   disabled,
 }: ClosedSpaceFolderProps) {
   const mx = useMatrixClient();
-  const core = useCore();
-  const useAuthentication = useMediaAuthentication();
   const handlerRef = useRef<HTMLDivElement>(null);
 
   const spaceDraggable: FolderDraggable = useMemo(() => ({ folder }), [folder]);
@@ -595,26 +595,7 @@ function ClosedSpaceFolder({
                 {folder.content.map((sId) => {
                   const space = mx.getRoom(sId);
                   if (!space) return null;
-                  const coreSpace = core.rooms.room(sId).getSnapshot().value;
-
-                  return (
-                    <SidebarAvatar key={sId} size="200" radii="300">
-                      <RoomAvatar
-                        roomId={space.roomId}
-                        src={
-                          coreSpace
-                            ? getRoomAvatarUrl(core, coreSpace, 96, useAuthentication) ?? undefined
-                            : undefined
-                        }
-                        alt={space.name}
-                        renderFallback={() => (
-                          <Text size="Inherit">
-                            <b>{nameInitials(space.name, 2)}</b>
-                          </Text>
-                        )}
-                      />
-                    </SidebarAvatar>
-                  );
+                  return <ClosedSpaceAvatar key={sId} roomId={space.roomId} name={space.name} />;
                 })}
               </SidebarFolder>
             )}

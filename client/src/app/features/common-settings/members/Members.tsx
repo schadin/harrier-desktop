@@ -54,6 +54,7 @@ import { useCoreSpace } from '../../../hooks/useSpace';
 import { useFlattenPowerTagMembers, useGetMemberPowerTag } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { getMouseEventCords } from '../../../utils/dom';
+import { getLoadedJoinedMemberCount } from './memberCount';
 
 const SEARCH_OPTIONS: UseAsyncSearchOptions = {
   limit: 1000,
@@ -75,8 +76,9 @@ type MembersProps = {
 export function Members({ requestClose }: MembersProps) {
   const room = useRequiredCoreRoomFromContext();
   const members = useRoomMembers(room.roomId);
-  const memberCount = room.memberCount ?? members.length;
-  const fetchingMembers = members.length < memberCount;
+  const loadedJoinedCount = getLoadedJoinedMemberCount(members);
+  const memberCount = room.memberCount ?? loadedJoinedCount;
+  const fetchingMembers = loadedJoinedCount < memberCount;
   const openProfile = useOpenUserRoomProfile();
   const profileUser = useUserRoomProfileState();
   const space = useCoreSpace();
