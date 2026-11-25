@@ -762,9 +762,12 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   let stateLifecycleActive = true;
   let acceptPendingState = true;
   let stateRefreshSuppressionDepth = 0;
+  const deferredTimelineRooms = new Set<string>();
+  const canPublishRoomState = () =>
+    stateLifecycleActive && acceptPendingState && stateRefreshSuppressionDepth === 0;
   const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
     entries.forEach((entry) => {
-      if (!acceptPendingState) return;
+      if (!canPublishRoomState()) return;
       stateListeners.forEach((listener) => listener(entry));
     });
   };
@@ -779,6 +782,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const deactivatePendingState = () => {
     stateLifecycleActive = false;
     acceptPendingState = false;
+    deferredTimelineRooms.clear();
     invalidatePendingState();
   };
 
@@ -790,6 +794,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return event ? (event.getContent() as JsonObject) : null;
   };
   const publishState = (roomId: string, eventType: string, key: string) => {
+    if (!canPublishRoomState()) return;
     const store = stateStores.get(stateKeyOf(roomId, eventType, key));
     if (!store) return;
     const next = buildState(roomId, eventType, key);
@@ -814,6 +819,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     };
   };
   const publishStateEntry = (roomId: string, eventType: string, key: string) => {
+    if (!canPublishRoomState()) return;
     const store = stateEntryStores.get(stateKeyOf(roomId, eventType, key));
     if (!store) return;
     const next = buildStateEntry(roomId, eventType, key);
@@ -840,6 +846,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return entries;
   };
   const publishStateEntries = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = stateEntriesStores.get(roomId);
     if (!store) return;
     const next = buildStateEntries(roomId);
@@ -860,6 +867,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }));
   };
   const publishStateList = (roomId: string, eventType: string) => {
+    if (!canPublishRoomState()) return;
     const store = stateListStores.get(stateListKeyOf(roomId, eventType));
     if (!store) return;
     const next = buildStateList(roomId, eventType);
@@ -917,6 +925,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   >();
   const parentsStores = new Map<string, WritableSnapshotStore<readonly string[]>>();
   const publishParents = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = parentsStores.get(roomId);
     if (!store) return;
     const next = buildParents(roomId);
@@ -924,6 +933,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
   const publishAccountData = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = accountDataStores.get(roomId);
     if (!store) return;
     const next = buildAccountData(roomId);
@@ -946,6 +956,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     accountDataListeners.set(roomId, { room, listener });
   };
   const publishRoomView = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = roomStores.get(roomId);
     if (!store) return;
     const next = buildRoomView(roomId);
@@ -953,6 +964,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
   const publishMembers = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = memberStores.get(roomId);
     if (!store) return;
     const next = buildMembers(roomId);
@@ -960,6 +972,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
   const publishPowerLevels = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = powerLevelsStores.get(roomId);
     if (!store) return;
     const next = buildPowerLevels(roomId);
@@ -967,6 +980,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
   const publishCreators = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     const store = creatorStores.get(roomId);
     if (!store) return;
     const next = buildCreators(roomId);
@@ -974,21 +988,27 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     store.publish(next);
   };
   const publishRoomProjections = (roomId: string) => {
+    if (!canPublishRoomState()) return;
     publishRoomView(roomId);
     publishMembers(roomId);
     publishPowerLevels(roomId);
     publishCreators(roomId);
   };
   const refresh = () => {
+    if (!canPublishRoomState()) return;
     roomToParentsCache = undefined;
     allRoomsStore.publish(allRooms());
+    if (!canPublishRoomState()) return;
     roomsStore.publish(joined());
+    if (!canPublishRoomState()) return;
     unreadsStore.publish(buildUnreads());
+    if (!canPublishRoomState()) return;
     roomStores.forEach((_store, roomId) => publishRoomView(roomId));
     memberStores.forEach((_store, roomId) => publishMembers(roomId));
     powerLevelsStores.forEach((_store, roomId) => publishPowerLevels(roomId));
     creatorStores.forEach((_store, roomId) => publishCreators(roomId));
     accountDataStores.forEach((_store, roomId) => {
+      if (!canPublishRoomState()) return;
       ensureAccountDataListener(roomId);
       publishAccountData(roomId);
     });
@@ -1021,38 +1041,38 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     return true;
   };
   const flushRoomState = (roomId: string, generation: number) => {
-    if (!acceptPendingState || generation !== stateGeneration) return;
+    if (!canPublishRoomState() || generation !== stateGeneration) return;
     const pending = pendingStateByRoom.get(roomId);
     if (!pending || pending.length === 0) return;
     pendingStateByRoom.delete(roomId);
     if (!recalculateRoom(roomId)) return;
-    if (!acceptPendingState || generation !== stateGeneration) return;
+    if (!canPublishRoomState() || generation !== stateGeneration) return;
     refresh();
-    if (!acceptPendingState || generation !== stateGeneration) return;
+    if (!canPublishRoomState() || generation !== stateGeneration) return;
+    flushDeferredTimelines();
     notifyStateListeners(pending.map(({ entry }) => entry));
   };
   const flushRoomsState = (roomIds: ReadonlySet<string>, generation: number) => {
     roomIds.forEach((roomId) => flushRoomState(roomId, generation));
   };
   const flushAllRoomState = (generation: number) => {
-    if (!acceptPendingState || generation !== stateGeneration || pendingStateByRoom.size === 0) {
-      return;
-    }
+    if (!canPublishRoomState() || generation !== stateGeneration) return;
     const pendingByRoom = new Map(pendingStateByRoom);
     pendingStateByRoom.clear();
     const recalculatedByRoom = new Map<string, PendingStateEntry[]>();
     let lifecycleInvalidated = false;
     pendingByRoom.forEach((pending, roomId) => {
       if (lifecycleInvalidated || !recalculateRoom(roomId)) return;
-      if (!acceptPendingState || generation !== stateGeneration) {
+      if (!canPublishRoomState() || generation !== stateGeneration) {
         lifecycleInvalidated = true;
         return;
       }
       recalculatedByRoom.set(roomId, pending);
     });
-    if (lifecycleInvalidated || recalculatedByRoom.size === 0) return;
+    if (lifecycleInvalidated) return;
     refresh();
-    if (!acceptPendingState || generation !== stateGeneration) return;
+    if (!canPublishRoomState() || generation !== stateGeneration) return;
+    flushDeferredTimelines();
     const entries: StateListenerEntry[] = [];
     recalculatedByRoom.forEach((pending) => {
       pending.forEach(({ entry }) => entries.push(entry));
@@ -1060,7 +1080,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     notifyStateListeners(entries);
   };
   const refreshIfActive = () => {
-    if (acceptPendingState && stateRefreshSuppressionDepth === 0) refresh();
+    if (canPublishRoomState()) refresh();
   };
 
   client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
@@ -1102,7 +1122,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       return;
     }
     if (state !== SyncState.Prepared && state !== SyncState.Syncing) return;
-    if (!stateLifecycleActive) return;
+    if (!stateLifecycleActive || stateRefreshSuppressionDepth > 0) return;
     acceptPendingState = true;
     flushAllRoomState(stateGeneration);
   });
@@ -1188,11 +1208,32 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       : false;
     return toTimelineView(roomId, events, room, hasBackwardHistory, focus?.eventId);
   };
+  const publishTimeline = (roomId: string) => {
+    if (!stateLifecycleActive || stateRefreshSuppressionDepth > 0) return;
+    timelines.get(roomId)?.publish(buildTimeline(roomId));
+  };
+  function flushDeferredTimelines() {
+    if (!stateLifecycleActive) {
+      deferredTimelineRooms.clear();
+      return;
+    }
+    if (stateRefreshSuppressionDepth > 0) return;
+    const roomIds = [...deferredTimelineRooms];
+    deferredTimelineRooms.clear();
+    roomIds.forEach((roomId) => publishTimeline(roomId));
+  }
   const republish = (_event: MatrixEvent, room: Room | undefined) => {
-    refresh();
+    if (!stateLifecycleActive) return;
+    if (canPublishRoomState()) {
+      refresh();
+      if (room) publishRoomProjections(room.roomId);
+    }
     if (!room) return;
-    publishRoomProjections(room.roomId);
-    timelines.get(room.roomId)?.publish(buildTimeline(room.roomId));
+    if (stateRefreshSuppressionDepth > 0) {
+      deferredTimelineRooms.add(room.roomId);
+      return;
+    }
+    publishTimeline(room.roomId);
   };
   client.on(RoomEvent.Timeline, republish);
   client.on(RoomEvent.Receipt, republish);

@@ -1,14 +1,16 @@
 import {
   ClientEvent,
+  EventStatus,
   HttpApiEvent,
   MatrixError,
   MatrixEvent,
+  RoomEvent,
   RoomStateEvent,
   SyncState,
   type MatrixClient,
   type Room,
 } from 'matrix-js-sdk';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMatrixJsCore } from './core';
 import { createSyncDriver } from './testing/driver';
 
@@ -31,6 +33,30 @@ const stateEvent = (
 const queueStateEvent = (client: MatrixClient, room: Room, event: MatrixEvent) => {
   room.currentState.setStateEvents([event]);
   client.emit(RoomStateEvent.Events, event, room.currentState, null);
+};
+
+const messageEvent = (roomId: string, eventId: string, body: string, timestamp: number) => {
+  const event = new MatrixEvent({
+    type: 'm.room.message',
+    sender: '@alice:example.org',
+    room_id: roomId,
+    event_id: eventId,
+    origin_server_ts: timestamp,
+    content: { msgtype: 'm.text', body },
+  });
+  event.setStatus(EventStatus.SENT);
+  return event;
+};
+
+const addTimelineEvent = (room: Room, event: MatrixEvent) => {
+  room.getLiveTimeline().addEvent(event, { toStartOfTimeline: false, addToState: false });
+};
+
+const emitTimeline = (client: MatrixClient, event: MatrixEvent, room: Room) => {
+  client.emit(RoomEvent.Timeline, event, room, false, false, {
+    timeline: room.getLiveTimeline(),
+    liveEvent: true,
+  });
 };
 
 describe('matrix-js core state listener flushing', () => {
@@ -235,6 +261,401 @@ describe('matrix-js core state listener flushing', () => {
 
         expect(observedTypes).toEqual(['m.room.topic']);
       } finally {
+        unsubscribe();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('defers room and state projections after a timeline event during transient sync error', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!error-timeline:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Old name' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const allStore = core.rooms.all;
+      const listStore = core.rooms.list;
+      const roomStore = core.rooms.room(roomId);
+      const stateStore = core.rooms.state(roomId, 'm.room.name');
+      const allBefore = allStore.getSnapshot();
+      const listBefore = listStore.getSnapshot();
+      const roomBefore = roomStore.getSnapshot();
+      const stateBefore = stateStore.getSnapshot();
+      const observedNames: Array<string | undefined> = [];
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId === roomId && entry.eventType === 'm.room.name') {
+          observedNames.push(roomStore.getSnapshot().value?.name);
+        }
+      });
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Error, SyncState.Syncing);
+        const event = stateEvent(roomId, '$error-name', { name: 'New name' }, 'm.room.name');
+        queueStateEvent(driver.client, room, event);
+        emitTimeline(driver.client, event, room);
+
+        expect(allStore.getSnapshot()).toBe(allBefore);
+        expect(listStore.getSnapshot()).toBe(listBefore);
+        expect(roomStore.getSnapshot()).toBe(roomBefore);
+        expect(stateStore.getSnapshot()).toBe(stateBefore);
+        expect(observedNames).toEqual([]);
+
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Error);
+
+        expect(allStore.getSnapshot().value[0]?.name).toBe('New name');
+        expect(listStore.getSnapshot().value[0]?.name).toBe('New name');
+        expect(roomStore.getSnapshot().value?.name).toBe('New name');
+        expect(stateStore.getSnapshot().value).toEqual({ name: 'New name' });
+        expect(observedNames).toEqual(['New name']);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it.each(['stop', 'logout'] as const)(
+    'does not publish room, state or timeline snapshots after %s',
+    async (lifecycle) => {
+      const driver = createSyncDriver();
+      const core = createMatrixJsCore(driver.client);
+      const roomId = `!timeline-${lifecycle}:example.org`;
+      try {
+        await driver.applyFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              name: 'Old name',
+              messages: [
+                {
+                  eventId: '$initial',
+                  sender: '@alice:example.org',
+                  body: 'Initial',
+                  timestamp: 100,
+                },
+              ],
+            },
+          ],
+        });
+        const room = driver.client.getRoom(roomId)!;
+        const allStore = core.rooms.all;
+        const listStore = core.rooms.list;
+        const roomStore = core.rooms.room(roomId);
+        const stateStore = core.rooms.state(roomId, 'm.room.name');
+        const timelineStore = core.timeline.timeline(roomId);
+        queueStateEvent(
+          driver.client,
+          room,
+          stateEvent(roomId, '$late-name', { name: 'New name' }, 'm.room.name')
+        );
+        const lateEvent = messageEvent(roomId, '$late-message', 'Late message', 200);
+        addTimelineEvent(room, lateEvent);
+        const allBefore = allStore.getSnapshot();
+        const listBefore = listStore.getSnapshot();
+        const roomBefore = roomStore.getSnapshot();
+        const stateBefore = stateStore.getSnapshot();
+        const timelineBefore = timelineStore.getSnapshot();
+        const observedTypes: string[] = [];
+        const unsubscribe = core.rooms.onState((entry) => observedTypes.push(entry.eventType));
+
+        try {
+          if (lifecycle === 'stop') await core.auth.stop();
+          if (lifecycle === 'logout') await core.auth.logout();
+          emitTimeline(driver.client, lateEvent, room);
+
+          expect(allStore.getSnapshot()).toBe(allBefore);
+          expect(listStore.getSnapshot()).toBe(listBefore);
+          expect(roomStore.getSnapshot()).toBe(roomBefore);
+          expect(stateStore.getSnapshot()).toBe(stateBefore);
+          expect(timelineStore.getSnapshot()).toBe(timelineBefore);
+          expect(observedTypes).toEqual([]);
+        } finally {
+          unsubscribe();
+        }
+      } finally {
+        await core.auth.stop();
+      }
+    }
+  );
+
+  it('publishes one complete multi-room batch after suppressed timeline and name events', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomAId = '!suppressed-a:example.org';
+    const roomBId = '!suppressed-b:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          { roomId: roomAId, membership: 'join', name: 'Old A' },
+          { roomId: roomBId, membership: 'join', name: 'Old B' },
+        ],
+      });
+      const roomA = driver.client.getRoom(roomAId)!;
+      const roomB = driver.client.getRoom(roomBId)!;
+      const allStore = core.rooms.all;
+      const stateAStore = core.rooms.state(roomAId, 'm.room.name');
+      const timelineStore = core.timeline.timeline(roomAId);
+      const duringBatch = messageEvent(roomAId, '$during-batch', 'During batch', 300);
+      addTimelineEvent(roomA, duringBatch);
+      queueStateEvent(
+        driver.client,
+        roomA,
+        stateEvent(roomAId, '$suppressed-name-a', { name: 'New A' }, 'm.room.name')
+      );
+      queueStateEvent(
+        driver.client,
+        roomB,
+        stateEvent(roomBId, '$suppressed-name-b', { name: 'New B' }, 'm.room.name')
+      );
+      const initialRevision = allStore.getSnapshot().revision;
+      const initialTimelineRevision = timelineStore.getSnapshot().revision;
+      const roomNames = () => allStore.getSnapshot().value.map((room) => room.name);
+      const observedRoomNames: string[][] = [];
+      const observedStateRoomNames: string[][] = [];
+      const observedTimelineEventIds: string[][] = [];
+      const unsubscribeAll = allStore.subscribe(() => observedRoomNames.push(roomNames()));
+      const unsubscribeState = stateAStore.subscribe(() =>
+        observedStateRoomNames.push(roomNames())
+      );
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId === roomAId) {
+          observedTimelineEventIds.push(
+            timelineStore.getSnapshot().value.items.map((item) => item.eventId)
+          );
+        }
+      });
+      const recalculate = roomA.recalculate.bind(roomA);
+      let emitted = false;
+      const recalculateSpy = vi.spyOn(roomA, 'recalculate').mockImplementation(() => {
+        recalculate();
+        if (emitted) return;
+        emitted = true;
+        driver.client.emit(RoomEvent.Name, roomA);
+        emitTimeline(driver.client, duringBatch, roomA);
+      });
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Prepared);
+
+        expect(observedRoomNames).toEqual([['New A', 'New B']]);
+        expect(observedStateRoomNames).toEqual([['New A', 'New B']]);
+        expect(observedTimelineEventIds).toEqual([['$during-batch']]);
+        expect(allStore.getSnapshot().revision).toBe(initialRevision + 1);
+        expect(timelineStore.getSnapshot().revision).toBe(initialTimelineRevision + 1);
+        expect(timelineStore.getSnapshot().value.items.map((item) => item.eventId)).toEqual([
+          '$during-batch',
+        ]);
+      } finally {
+        unsubscribe();
+        unsubscribeState();
+        unsubscribeAll();
+        recalculateSpy.mockRestore();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('publishes timeline progress without room projections during transient sync error', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!error-progress:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$initial',
+                sender: '@alice:example.org',
+                body: 'Initial',
+                timestamp: 100,
+              },
+            ],
+          },
+        ],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const allStore = core.rooms.all;
+      const roomStore = core.rooms.room(roomId);
+      const timelineStore = core.timeline.timeline(roomId);
+      const allBefore = allStore.getSnapshot();
+      const roomBefore = roomStore.getSnapshot();
+      const timelineBefore = timelineStore.getSnapshot();
+
+      driver.client.emit(ClientEvent.Sync, SyncState.Error, SyncState.Syncing);
+      const event = messageEvent(roomId, '$during-error', 'During error', 200);
+      addTimelineEvent(room, event);
+      emitTimeline(driver.client, event, room);
+
+      expect(timelineStore.getSnapshot().revision).toBe(timelineBefore.revision + 1);
+      expect(timelineStore.getSnapshot().value.items.map((item) => item.eventId)).toEqual([
+        '$initial',
+        '$during-error',
+      ]);
+      expect(allStore.getSnapshot()).toBe(allBefore);
+      expect(roomStore.getSnapshot()).toBe(roomBefore);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('refreshes room projections on successful sync without pending state', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!empty-sync-refresh:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            name: 'Room',
+            messages: [
+              {
+                eventId: '$initial',
+                sender: '@alice:example.org',
+                body: 'Initial',
+                timestamp: 100,
+              },
+            ],
+          },
+        ],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const allStore = core.rooms.all;
+      const listStore = core.rooms.list;
+      const roomStore = core.rooms.room(roomId);
+      const allBefore = allStore.getSnapshot();
+      const listBefore = listStore.getSnapshot();
+      const roomBefore = roomStore.getSnapshot();
+
+      driver.client.emit(ClientEvent.Sync, SyncState.Error, SyncState.Syncing);
+      addTimelineEvent(room, messageEvent(roomId, '$unpublished', 'Unpublished', 200));
+      driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Error);
+
+      expect(allStore.getSnapshot().revision).toBe(allBefore.revision + 1);
+      expect(listStore.getSnapshot().revision).toBe(listBefore.revision + 1);
+      expect(roomStore.getSnapshot().revision).toBe(roomBefore.revision + 1);
+      expect(allStore.getSnapshot().value[0]?.lastActiveTimestamp).toBe(200);
+      expect(listStore.getSnapshot().value[0]?.lastActiveTimestamp).toBe(200);
+      expect(roomStore.getSnapshot().value?.lastActiveTimestamp).toBe(200);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('defers reentrant generic state flushes while a multi-room batch is suppressed', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomAId = '!reentrant-a:example.org';
+    const roomBId = '!reentrant-b:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          { roomId: roomAId, membership: 'join', name: 'Old A' },
+          { roomId: roomBId, membership: 'join', name: 'Old B' },
+        ],
+      });
+      const roomA = driver.client.getRoom(roomAId)!;
+      const roomB = driver.client.getRoom(roomBId)!;
+      const allStore = core.rooms.all;
+      const topicStore = core.rooms.state(roomAId, 'm.room.topic');
+      queueStateEvent(
+        driver.client,
+        roomA,
+        stateEvent(roomAId, '$reentrant-name-a', { name: 'New A' }, 'm.room.name')
+      );
+      queueStateEvent(
+        driver.client,
+        roomB,
+        stateEvent(roomBId, '$reentrant-name-b', { name: 'New B' }, 'm.room.name')
+      );
+      const reentrantTopic = stateEvent(roomAId, '$reentrant-topic', { topic: 'Reentrant topic' });
+      const observedTypes: string[] = [];
+      const unsubscribe = core.rooms.onState((entry) => observedTypes.push(entry.eventType));
+      const recalculate = roomA.recalculate.bind(roomA);
+      let injected = false;
+      const recalculateSpy = vi.spyOn(roomA, 'recalculate').mockImplementation(() => {
+        recalculate();
+        if (injected) return;
+        injected = true;
+        queueStateEvent(driver.client, roomA, reentrantTopic);
+        driver.client.emit(ClientEvent.Event, reentrantTopic);
+      });
+      const initialRevision = allStore.getSnapshot().revision;
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Prepared);
+
+        expect(observedTypes).toEqual(['m.room.name', 'm.room.name']);
+        expect(allStore.getSnapshot().value.map((room) => room.name)).toEqual(['New A', 'New B']);
+        expect(allStore.getSnapshot().revision).toBe(initialRevision + 1);
+        expect(topicStore.getSnapshot().value).toEqual({ topic: 'Reentrant topic' });
+
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Prepared);
+
+        expect(observedTypes).toEqual(['m.room.name', 'm.room.name', 'm.room.topic']);
+      } finally {
+        unsubscribe();
+        recalculateSpy.mockRestore();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('stops remaining projections when a snapshot listener shuts down the lifecycle', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!reentrant-stop:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Old name' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const allStore = core.rooms.all;
+      const listStore = core.rooms.list;
+      const roomStore = core.rooms.room(roomId);
+      const stateStore = core.rooms.state(roomId, 'm.room.name');
+      queueStateEvent(
+        driver.client,
+        room,
+        stateEvent(roomId, '$reentrant-stop-name', { name: 'New name' }, 'm.room.name')
+      );
+      const allBefore = allStore.getSnapshot();
+      const listBefore = listStore.getSnapshot();
+      const roomBefore = roomStore.getSnapshot();
+      const stateBefore = stateStore.getSnapshot();
+      const observedTypes: string[] = [];
+      const unsubscribe = core.rooms.onState((entry) => observedTypes.push(entry.eventType));
+      let stopped = false;
+      const unsubscribeAll = allStore.subscribe(() => {
+        if (stopped) return;
+        stopped = true;
+        core.auth.stop().catch(() => undefined);
+      });
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Prepared);
+
+        expect(stopped).toBe(true);
+        expect(allStore.getSnapshot().revision).toBe(allBefore.revision + 1);
+        expect(listStore.getSnapshot()).toBe(listBefore);
+        expect(roomStore.getSnapshot()).toBe(roomBefore);
+        expect(stateStore.getSnapshot()).toBe(stateBefore);
+        expect(observedTypes).toEqual([]);
+      } finally {
+        unsubscribeAll();
         unsubscribe();
       }
     } finally {
