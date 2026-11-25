@@ -759,7 +759,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const stateListeners = new Set<(entry: StateListenerEntry) => void>();
   const pendingStateByRoom = new Map<string, PendingStateEntry[]>();
   let stateGeneration = 0;
+  let stateLifecycleActive = true;
   let acceptPendingState = true;
+  let stateRefreshSuppressionDepth = 0;
   const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
     entries.forEach((entry) => {
       if (!acceptPendingState) return;
@@ -767,12 +769,17 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     });
   };
   const activatePendingState = () => {
+    stateLifecycleActive = true;
     acceptPendingState = true;
   };
   const invalidatePendingState = () => {
     stateGeneration += 1;
-    acceptPendingState = false;
     pendingStateByRoom.clear();
+  };
+  const deactivatePendingState = () => {
+    stateLifecycleActive = false;
+    acceptPendingState = false;
+    invalidatePendingState();
   };
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
@@ -1002,14 +1009,23 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
+  const recalculateRoom = (roomId: string): boolean => {
+    const room = client.getRoom(roomId);
+    if (!room) return false;
+    stateRefreshSuppressionDepth += 1;
+    try {
+      room.recalculate();
+    } finally {
+      stateRefreshSuppressionDepth -= 1;
+    }
+    return true;
+  };
   const flushRoomState = (roomId: string, generation: number) => {
     if (!acceptPendingState || generation !== stateGeneration) return;
     const pending = pendingStateByRoom.get(roomId);
     if (!pending || pending.length === 0) return;
     pendingStateByRoom.delete(roomId);
-    const room = client.getRoom(roomId);
-    if (!room) return;
-    room.recalculate();
+    if (!recalculateRoom(roomId)) return;
     if (!acceptPendingState || generation !== stateGeneration) return;
     refresh();
     if (!acceptPendingState || generation !== stateGeneration) return;
@@ -1019,14 +1035,36 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     roomIds.forEach((roomId) => flushRoomState(roomId, generation));
   };
   const flushAllRoomState = (generation: number) => {
-    Array.from(pendingStateByRoom.keys()).forEach((roomId) => flushRoomState(roomId, generation));
+    if (!acceptPendingState || generation !== stateGeneration || pendingStateByRoom.size === 0) {
+      return;
+    }
+    const pendingByRoom = new Map(pendingStateByRoom);
+    pendingStateByRoom.clear();
+    const recalculatedByRoom = new Map<string, PendingStateEntry[]>();
+    let lifecycleInvalidated = false;
+    pendingByRoom.forEach((pending, roomId) => {
+      if (lifecycleInvalidated || !recalculateRoom(roomId)) return;
+      if (!acceptPendingState || generation !== stateGeneration) {
+        lifecycleInvalidated = true;
+        return;
+      }
+      recalculatedByRoom.set(roomId, pending);
+    });
+    if (lifecycleInvalidated || recalculatedByRoom.size === 0) return;
+    refresh();
+    if (!acceptPendingState || generation !== stateGeneration) return;
+    const entries: StateListenerEntry[] = [];
+    recalculatedByRoom.forEach((pending) => {
+      pending.forEach(({ entry }) => entries.push(entry));
+    });
+    notifyStateListeners(entries);
   };
   const refreshIfActive = () => {
-    if (acceptPendingState) refresh();
+    if (acceptPendingState && stateRefreshSuppressionDepth === 0) refresh();
   };
 
   client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
-    if (!acceptPendingState) return;
+    if (!stateLifecycleActive) return;
     const roomId = event.getRoomId() ?? '';
     const pending = pendingStateByRoom.get(roomId) ?? [];
     pending.push({
@@ -1045,7 +1083,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     pendingStateByRoom.set(roomId, pending);
   });
   client.on(ClientEvent.Event, (event: MatrixEvent) => {
-    if (!acceptPendingState) return;
+    if (!stateLifecycleActive) return;
     const generation = stateGeneration;
     const readyRooms = new Set<string>();
     pendingStateByRoom.forEach((entries, roomId) => {
@@ -1054,12 +1092,18 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     flushRoomsState(readyRooms, generation);
   });
   client.on(ClientEvent.Sync, (state: SyncState) => {
-    if (state === SyncState.Error || state === SyncState.Stopped) {
+    if (state === SyncState.Error) {
       invalidatePendingState();
+      acceptPendingState = false;
+      return;
+    }
+    if (state === SyncState.Stopped) {
+      deactivatePendingState();
       return;
     }
     if (state !== SyncState.Prepared && state !== SyncState.Syncing) return;
-    if (!acceptPendingState) return;
+    if (!stateLifecycleActive) return;
+    acceptPendingState = true;
     flushAllRoomState(stateGeneration);
   });
   client.on(RoomEvent.Name, refreshIfActive);
@@ -1643,7 +1687,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const syncStore = createSnapshotStore<SyncView>({ phase: 'idle' });
   const loggedOutListeners = new Set<() => void>();
   client.on(HttpApiEvent.SessionLoggedOut, () => {
-    invalidatePendingState();
+    deactivatePendingState();
     client.stopClient();
     clearSecretStorageKeys();
     client.clearStores().catch(() => undefined);
@@ -1706,7 +1750,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.startClient({ lazyLoadMembers: true });
           return { ok: true, value: undefined };
         } catch (error) {
-          invalidatePendingState();
+          deactivatePendingState();
           syncStore.publish({ phase: 'error', error: toCoreError(error).message });
           return { ok: false, error: toCoreError(error) };
         }
@@ -1719,7 +1763,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           syncStore.publish({ phase: 'syncing' });
           return { ok: true, value: undefined };
         } catch (error) {
-          invalidatePendingState();
+          deactivatePendingState();
           syncStore.publish({ phase: 'error', error: toCoreError(error).message });
           return { ok: false, error: toCoreError(error) };
         }
@@ -1729,12 +1773,12 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         return () => loggedOutListeners.delete(listener);
       },
       async stop() {
-        invalidatePendingState();
+        deactivatePendingState();
         client.stopClient();
         syncStore.publish({ phase: 'stopped' });
       },
       async logout(): Promise<CoreResult<void>> {
-        invalidatePendingState();
+        deactivatePendingState();
         client.stopClient();
         try {
           await client.logout();
@@ -1742,21 +1786,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           // Local cleanup continues even if the server logout fails.
         }
         await client.clearStores();
-        invalidatePendingState();
+        deactivatePendingState();
         clearSecretStorageKeys();
         sessionStore.publish(null);
         syncStore.publish({ phase: 'stopped' });
         return { ok: true, value: undefined };
       },
       async clearCache() {
-        invalidatePendingState();
+        deactivatePendingState();
         client.stopClient();
         try {
           await client.store.deleteAllData();
-          invalidatePendingState();
+          deactivatePendingState();
           return { ok: true, value: undefined };
         } catch (error) {
-          invalidatePendingState();
+          deactivatePendingState();
           return { ok: false, error: toCoreError(error) };
         }
       },

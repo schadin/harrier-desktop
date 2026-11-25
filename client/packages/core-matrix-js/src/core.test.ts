@@ -96,6 +96,56 @@ describe('matrix-js core state listener flushing', () => {
     }
   });
 
+  it('publishes every recalculated room before sync fallback listeners run', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomAId = '!batch-a:example.org';
+    const roomBId = '!batch-b:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          { roomId: roomAId, membership: 'join', name: 'Old A', roomVersion: '10' },
+          { roomId: roomBId, membership: 'join', name: 'Old B', roomVersion: '10' },
+        ],
+      });
+      const roomA = driver.client.getRoom(roomAId)!;
+      const roomB = driver.client.getRoom(roomBId)!;
+      queueStateEvent(
+        driver.client,
+        roomA,
+        stateEvent(roomAId, '$batch-name-a', { name: 'New A' }, 'm.room.name')
+      );
+      queueStateEvent(
+        driver.client,
+        roomB,
+        stateEvent(roomBId, '$batch-name-b', { name: 'New B' }, 'm.room.name')
+      );
+      const initialRevision = core.rooms.all.getSnapshot().revision;
+      const observedRoomIds: string[] = [];
+      const observedNames: Array<[string | undefined, string | undefined]> = [];
+      const unsubscribe = core.rooms.onState((entry) => {
+        observedRoomIds.push(entry.roomId);
+        if (entry.roomId !== roomAId) return;
+        observedNames.push([
+          core.rooms.room(roomAId).getSnapshot().value?.name,
+          core.rooms.room(roomBId).getSnapshot().value?.name,
+        ]);
+      });
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Prepared);
+
+        expect(observedRoomIds).toEqual([roomAId, roomBId]);
+        expect(observedNames).toEqual([['New A', 'New B']]);
+        expect(core.rooms.all.getSnapshot().revision).toBe(initialRevision + 1);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
   it('does not publish pending state on sync error or stopped', async () => {
     const driver = createSyncDriver();
     const core = createMatrixJsCore(driver.client);
@@ -117,6 +167,73 @@ describe('matrix-js core state listener flushing', () => {
         driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Stopped);
 
         expect(observedTypes).toEqual([]);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('flushes new state events after a transient sync error without retrySync', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!sync-recovery:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Old name', roomVersion: '10' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const staleEvent = stateEvent(roomId, '$stale-name', { name: 'Stale name' }, 'm.room.name');
+      queueStateEvent(driver.client, room, staleEvent);
+      const observedTypes: string[] = [];
+      const unsubscribe = core.rooms.onState((entry) => observedTypes.push(entry.eventType));
+
+      try {
+        driver.client.emit(ClientEvent.Sync, SyncState.Error, SyncState.Syncing);
+        const freshEvent = stateEvent(roomId, '$fresh-topic', { topic: 'Fresh topic' });
+        queueStateEvent(driver.client, room, freshEvent);
+        driver.client.emit(ClientEvent.Event, freshEvent);
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Error);
+
+        expect(observedTypes).toEqual(['m.room.topic']);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('does not reactivate stopped state listeners until explicit start', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!sync-stopped:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Old name', roomVersion: '10' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const observedTypes: string[] = [];
+      const unsubscribe = core.rooms.onState((entry) => observedTypes.push(entry.eventType));
+
+      try {
+        await core.auth.stop();
+        const stoppedEvent = stateEvent(roomId, '$while-stopped', { topic: 'While stopped' });
+        queueStateEvent(driver.client, room, stoppedEvent);
+        driver.client.emit(ClientEvent.Event, stoppedEvent);
+        driver.client.emit(ClientEvent.Sync, SyncState.Syncing, SyncState.Stopped);
+
+        expect(observedTypes).toEqual([]);
+
+        driver.client.startClient = async () => undefined;
+        const startResult = await core.auth.start();
+        expect(startResult.ok).toBe(true);
+        const startedEvent = stateEvent(roomId, '$after-start', { topic: 'After start' });
+        queueStateEvent(driver.client, room, startedEvent);
+        driver.client.emit(ClientEvent.Event, startedEvent);
+
+        expect(observedTypes).toEqual(['m.room.topic']);
       } finally {
         unsubscribe();
       }
