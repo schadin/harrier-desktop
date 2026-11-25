@@ -19,7 +19,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { getPowers, usePowerLevelTags } from '../../../hooks/usePowerLevelTags';
 import { SettingTile } from '../../../components/setting-tile';
 import { getPermissionPower, IPowerLevels } from '../../../hooks/usePowerLevels';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { PowerColorBadge, PowerIcon } from '../../../components/power';
 import { useCore } from '../../../hooks/useCore';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
@@ -110,9 +110,9 @@ type PowersProps = {
 export function Powers({ powerLevels, permissionGroups, onEdit }: PowersProps) {
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
-  const room = useRoom();
-  const powerLevelTags = usePowerLevelTags(room, powerLevels);
-  const creators = useRoomCreators(room);
+  const roomId = useRoomId();
+  const powerLevelTags = usePowerLevelTags({ roomId }, powerLevels);
+  const creators = useRoomCreators({ roomId });
   const creatorsTag = useRoomCreatorsTag();
   const creatorTagIconSrc =
     creatorsTag.icon && getPowerTagIconSrc(core, useAuthentication, creatorsTag.icon);

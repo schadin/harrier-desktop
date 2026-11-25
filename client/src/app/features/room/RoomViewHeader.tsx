@@ -1,4 +1,5 @@
 import React, { MouseEventHandler, forwardRef, useMemo, useState } from 'react';
+import { getMatrixClient } from '@harrier/core-matrix-js';
 import FocusTrap from 'focus-trap-react';
 import {
   Box,
@@ -33,7 +34,12 @@ import { RoomType, StateEvent } from '../../../types/matrix/room';
 import { useCore } from '../../hooks/useCore';
 import { useCoreRoom } from '../../hooks/useCoreRoom';
 import { useCoreSession } from '../../hooks/useCoreSession';
-import { useCoreRoomFromContext, useIsDirectRoom, useRoom, useRoomId } from '../../hooks/useRoom';
+import {
+  useCoreRoomFromContext,
+  useIsDirectRoom,
+  useRequiredCoreRoomFromContext,
+  useRoomId,
+} from '../../hooks/useRoom';
 import { useSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { useSpaceOptionally } from '../../hooks/useSpace';
@@ -315,12 +321,19 @@ const CallMenu = forwardRef<HTMLDivElement, CallMenuProps>(
 );
 
 function CallButton() {
-  const room = useRoom();
+  const core = useCore();
+  const roomId = useRoomId();
+  useRequiredCoreRoomFromContext();
   const direct = useIsDirectRoom();
 
   const callEmbed = useCallEmbed();
   const startCall = useCallStart(direct);
-  const callStarted = callEmbed && callEmbed.roomId === room.roomId;
+  const startRoomCall = (preferences: Parameters<typeof startCall>[1]) => {
+    const room = getMatrixClient(core).getRoom(roomId);
+    if (!room) throw new Error(`Room ${roomId} not found!`);
+    startCall(room, preferences);
+  };
+  const callStarted = callEmbed && callEmbed.roomId === roomId;
   const inAnotherCall = callEmbed && !callStarted;
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
@@ -351,7 +364,7 @@ function CallButton() {
             onClick={handleOpenMenu}
             onContextMenu={(evt: React.MouseEvent<HTMLElement>) => {
               evt.preventDefault();
-              startCall(room, {
+              startRoomCall({
                 microphone: true,
                 video: true,
                 sound: true,
@@ -381,8 +394,8 @@ function CallButton() {
             }}
           >
             <CallMenu
-              onVideoCall={() => startCall(room, { microphone: true, video: true, sound: true })}
-              onVoiceCall={() => startCall(room, { microphone: true, video: false, sound: true })}
+              onVideoCall={() => startRoomCall({ microphone: true, video: true, sound: true })}
+              onVoiceCall={() => startRoomCall({ microphone: true, video: false, sound: true })}
               requestClose={() => setMenuAnchor(undefined)}
             />
           </FocusTrap>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import { getMatrixClient } from '@harrier/core-matrix-js';
 import { Box, Text, config } from 'folds';
 import { ReactEditor } from 'slate-react';
 import { isKeyHotkey } from 'is-hotkey';
@@ -21,7 +22,8 @@ import { settingsAtom } from '../../state/settings';
 import { useSetting } from '../../state/hooks/settings';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
-import { useRoom, useIsDirectRoom } from '../../hooks/useRoom';
+import { useIsDirectRoom, useRequiredCoreRoomFromContext, useRoomId } from '../../hooks/useRoom';
+import { useCore } from '../../hooks/useCore';
 import { messageInputFocusAtom } from '../../state/messageInputFocus';
 import { searchModalAtom } from '../../state/searchModal';
 
@@ -78,18 +80,21 @@ export function RoomView({ eventId }: { eventId?: string }) {
   const direct = useIsDirectRoom();
   const showFollowing = (direct ? directReadReceipts : roomReadReceipts) === 'status';
 
-  const room = useRoom();
-  const { roomId } = room;
+  const core = useCore();
+  const roomId = useRoomId();
+  useRequiredCoreRoomFromContext();
+  const room = getMatrixClient(core).getRoom(roomId);
+  if (!room) throw new Error(`Room ${roomId} not found!`);
   const editor = useEditor();
 
   const session = useCoreSession();
 
   const tombstoneContent = useCoreRoomState<{ body?: string; replacement_room?: string }>(
-    room,
+    { roomId },
     StateEvent.RoomTombstone
   );
   const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
+  const creators = useRoomCreators({ roomId });
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canMessage = permissions.event(MessageEvent.RoomMessage, session?.userId ?? '');

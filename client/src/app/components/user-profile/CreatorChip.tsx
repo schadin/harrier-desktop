@@ -8,8 +8,8 @@ import { getPowerTagIconSrc } from '../../hooks/useMemberPowerTag';
 import { useCore } from '../../hooks/useCore';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { stopPropagation } from '../../utils/keyboard';
-import { useRoom } from '../../hooks/useRoom';
-import { useSpaceOptionally } from '../../hooks/useSpace';
+import { useRequiredCoreRoomFromContext } from '../../hooks/useRoom';
+import { useCoreSpace } from '../../hooks/useSpace';
 import { useOpenRoomSettings } from '../../state/hooks/roomSettings';
 import { useOpenSpaceSettings } from '../../state/hooks/spaceSettings';
 import { SpaceSettingsPage } from '../../state/spaceSettings';
@@ -18,8 +18,8 @@ import { RoomSettingsPage } from '../../state/roomSettings';
 export function CreatorChip() {
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
-  const room = useRoom();
-  const space = useSpaceOptionally();
+  const room = useRequiredCoreRoomFromContext();
+  const space = useCoreSpace();
   const openRoomSettings = useOpenRoomSettings();
   const openSpaceSettings = useOpenSpaceSettings();
 
@@ -58,7 +58,7 @@ export function CreatorChip() {
                 size="300"
                 radii="300"
                 onClick={() => {
-                  if (room.isSpaceRoom()) {
+                  if (room.isSpace) {
                     openSpaceSettings(
                       room.roomId,
                       space?.roomId,

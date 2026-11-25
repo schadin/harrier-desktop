@@ -14,13 +14,12 @@ import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
-import { sendRoomState } from '../../../hooks/useCoreRoomState';
-import { useRoom } from '../../../hooks/useRoom';
+import { sendRoomState, useCoreRoomStateList } from '../../../hooks/useCoreRoomState';
+import { useRequiredCoreRoomFromContext } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useStateEvent } from '../../../hooks/useStateEvent';
 import { useSpaceOptionally } from '../../../hooks/useSpace';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { getStateEvents } from '../../../utils/room';
 import {
   useRecursiveChildSpaceScopeFactory,
   useSpaceChildren,
@@ -54,10 +53,11 @@ type RoomJoinRulesProps = {
 export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
   const mx = useMatrixClient();
   const core = useCore();
-  const room = useRoom();
-  const allowKnockRestricted = knockRestrictedSupported(room.getVersion());
-  const allowRestricted = restrictedSupported(room.getVersion());
-  const allowKnock = knockSupported(room.getVersion());
+  const room = useRequiredCoreRoomFromContext();
+  const roomVersion = room.roomVersion ?? '1';
+  const allowKnockRestricted = knockRestrictedSupported(roomVersion);
+  const allowRestricted = restrictedSupported(roomVersion);
+  const allowKnock = knockSupported(roomVersion);
 
   const roomIdToParents = useAtomValue(roomToParentsAtom);
   const space = useSpaceOptionally();
@@ -66,6 +66,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
 
   const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, mx.getSafeUserId());
 
+  const parentEvents = useCoreRoomStateList(room, StateEvent.SpaceParent);
   const joinRuleEvent = useStateEvent(room, StateEvent.RoomJoinRules);
   const content = joinRuleEvent?.content as RoomJoinRulesEventContent | undefined;
   const rule: JoinRule = content?.join_rule ?? JoinRule.Invite;
@@ -86,7 +87,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
     return r;
   }, [allowKnockRestricted, allowRestricted, allowKnock, space]);
 
-  const icons = useJoinRuleIcons(room.getType());
+  const icons = useJoinRuleIcons(room.roomType);
   const labels = useRoomJoinRuleLabel();
 
   const [submitState, submit] = useAsyncCallback(
@@ -96,9 +97,8 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
         if (joinRule === JoinRule.Restricted || joinRule === 'knock_restricted') {
           const roomParents = roomIdToParents.get(room.roomId);
 
-          const parents = getStateEvents(room, StateEvent.SpaceParent)
-            .map((event) => event.getStateKey())
-            .filter((parentId): parentId is string => typeof parentId === 'string')
+          const parents = parentEvents
+            .map((event) => event.stateKey)
             .filter((parentId) => roomParents?.has(parentId));
 
           if (parents.length === 0 && space && roomParents) {
@@ -125,7 +125,7 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
         if (allow.length > 0) c.allow = allow;
         await sendRoomState(core, room.roomId, StateEvent.RoomJoinRules, c);
       },
-      [core, room, space, subspaces, roomIdToParents]
+      [core, room, space, subspaces, roomIdToParents, parentEvents]
     )
   );
 
@@ -139,9 +139,9 @@ export function RoomJoinRules({ permissions }: RoomJoinRulesProps) {
       gap="400"
     >
       <SettingTile
-        title={room.isSpaceRoom() ? 'Space Access' : 'Room Access'}
+        title={room.isSpace ? 'Space Access' : 'Room Access'}
         description={
-          room.isSpaceRoom()
+          room.isSpace
             ? 'Change how people can join the space.'
             : 'Change how people can join the room.'
         }

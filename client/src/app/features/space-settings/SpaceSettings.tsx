@@ -9,7 +9,7 @@ import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../state/mDirectList';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { SpaceSettingsPage } from '../../state/spaceSettings';
-import { useRoom } from '../../hooks/useRoom';
+import { useRoomId } from '../../hooks/useRoom';
 import { EmojisStickers } from '../common-settings/emojis-stickers';
 import { Members } from '../common-settings/members';
 import { DeveloperTools } from '../common-settings/developer-tools';
@@ -59,12 +59,12 @@ type SpaceSettingsProps = {
   requestClose: () => void;
 };
 export function SpaceSettings({ initialPage, requestClose }: SpaceSettingsProps) {
-  const room = useRoom();
+  const roomId = useRoomId();
   const useAuthentication = useMediaAuthentication();
   const mDirects = useAtomValue(mDirectAtom);
 
-  const meta = useCoreRoomMeta(room.roomId);
-  const roomAvatar = mDirects.has(room.roomId) ? meta.dmAvatarMxc : meta.avatarMxc;
+  const meta = useCoreRoomMeta(roomId);
+  const roomAvatar = mDirects.has(roomId) ? meta.dmAvatarMxc : meta.avatarMxc;
   const roomName = meta.name;
 
   const avatarUrl =
@@ -96,7 +96,7 @@ export function SpaceSettings({ initialPage, requestClose }: SpaceSettingsProps)
               <Box grow="Yes" gap="200">
                 <Avatar size="200" radii="300">
                   <RoomAvatar
-                    roomId={room.roomId}
+                    roomId={roomId}
                     src={avatarUrl}
                     alt={roomName}
                     renderFallback={() => (

@@ -19,7 +19,7 @@ import { Page, PageHeader } from '../../../components/page';
 import { SequenceCard } from '../../../components/sequence-card';
 import { TextViewerContent } from '../../../components/text-viewer';
 import { useStateEvent } from '../../../hooks/useStateEvent';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
@@ -45,7 +45,7 @@ type StateEventEditProps = {
 };
 function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEditProps) {
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
 
   const defaultContentStr = useMemo(
@@ -63,10 +63,10 @@ function StateEventEdit({ type, stateKey, content, requestClose }: StateEventEdi
   const [submitState, submit] = useAsyncCallback<object, CoreError, [object]>(
     useCallback(
       async (c) => {
-        await sendRoomState(core, room.roomId, type, c as JsonObject, stateKey);
+        await sendRoomState(core, roomId, type, c as JsonObject, stateKey);
         return c;
       },
-      [core, room, type, stateKey]
+      [core, roomId, type, stateKey]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;
@@ -248,11 +248,11 @@ export type StateEventEditorProps = StateEventInfo & {
 
 export function StateEventEditor({ type, stateKey, requestClose }: StateEventEditorProps) {
   const session = useCoreSession();
-  const room = useRoom();
-  const stateEvent = useStateEvent(room, type as unknown as StateEvent, stateKey);
+  const roomId = useRoomId();
+  const stateEvent = useStateEvent({ roomId }, type as unknown as StateEvent, stateKey);
   const [editContent, setEditContent] = useState<object>();
-  const powerLevels = usePowerLevels(room);
-  const creators = useRoomCreators(room);
+  const powerLevels = usePowerLevels({ roomId });
+  const creators = useRoomCreators({ roomId });
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canEdit = permissions.stateEvent(type, session?.userId ?? '');

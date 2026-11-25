@@ -2,7 +2,7 @@ import React, { MouseEventHandler, useState } from 'react';
 import { Box, Button, Icon, IconButton, Icons, PopOut, RectCords, Scroll, Text } from 'folds';
 import { Page, PageContent, PageHeader } from '../../../components/page';
 import { usePowerLevels } from '../../../hooks/usePowerLevels';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import {
   RoomProfile,
   RoomJoinRules,
@@ -69,9 +69,9 @@ type GeneralProps = {
   requestClose: () => void;
 };
 export function General({ requestClose }: GeneralProps) {
-  const room = useRoom();
-  const powerLevels = usePowerLevels(room);
-  const creators = useRoomCreators(room);
+  const roomId = useRoomId();
+  const powerLevels = usePowerLevels({ roomId });
+  const creators = useRoomCreators({ roomId });
   const permissions = useRoomPermissions(creators, powerLevels);
 
   return (
@@ -110,7 +110,7 @@ export function General({ requestClose }: GeneralProps) {
                   <SettingTile
                     title="Sorting"
                     description="Order of rooms in this space's sidebar and lobby."
-                    after={<SelectRoomSort roomId={room.roomId} />}
+                    after={<SelectRoomSort roomId={roomId} />}
                   />
                 </SequenceCard>
               </Box>

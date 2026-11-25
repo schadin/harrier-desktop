@@ -2,21 +2,18 @@ import React, { createContext, ReactNode, useContext, useSyncExternalStore } fro
 import type { RoomView } from '@harrier/core';
 import { getMatrixClient } from '@harrier/core-matrix-js';
 import { useCore } from './useCore';
+import { useCoreRoom } from './useCoreRoom';
 
 type LegacyRoom = NonNullable<ReturnType<ReturnType<typeof getMatrixClient>['getRoom']>>;
 
 const RoomIdContext = createContext<string | null>(null);
 
 type RoomProviderProps = {
-  value: LegacyRoom | string;
+  value: string;
   children: ReactNode;
 };
 export function RoomProvider({ value, children }: RoomProviderProps) {
-  return (
-    <RoomIdContext.Provider value={typeof value === 'string' ? value : value.roomId}>
-      {children}
-    </RoomIdContext.Provider>
-  );
+  return <RoomIdContext.Provider value={value}>{children}</RoomIdContext.Provider>;
 }
 
 export function useRoomId(): string {
@@ -30,6 +27,13 @@ export function useCoreRoomFromContext(): RoomView | null {
   const roomId = useRoomId();
   const store = core.rooms.room(roomId);
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot).value;
+}
+
+export function useRequiredCoreRoomFromContext(): RoomView {
+  const roomId = useRoomId();
+  const room = useCoreRoom(roomId);
+  if (!room) throw new Error(`Room ${roomId} not found!`);
+  return room;
 }
 
 export function useRoom(): LegacyRoom {

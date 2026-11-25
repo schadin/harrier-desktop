@@ -4,7 +4,7 @@ import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext } from '../../../hooks/useRoom';
 import { useRoomDirectoryVisibility } from '../../../hooks/useRoomDirectoryVisibility';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { StateEvent } from '../../../../types/matrix/room';
@@ -19,7 +19,7 @@ type RoomPublishProps = {
 };
 export function RoomPublish({ permissions }: RoomPublishProps) {
   const session = useCoreSession();
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
@@ -47,7 +47,7 @@ export function RoomPublish({ permissions }: RoomPublishProps) {
       <SettingTile
         title="Publish to Directory"
         description={
-          room.isSpaceRoom()
+          room.isSpace
             ? 'List the space in the public directory to make it discoverable by others.'
             : 'List the room in the public directory to make it discoverable by others.'
         }

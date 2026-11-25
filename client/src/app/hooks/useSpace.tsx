@@ -12,15 +12,11 @@ const subscribeToNothing = () => () => undefined;
 const SpaceIdContext = createContext<string | null>(null);
 
 type SpaceProviderProps = {
-  value: LegacyRoom | string | null;
+  value: string | null;
   children: ReactNode;
 };
 export function SpaceProvider({ value, children }: SpaceProviderProps) {
-  return (
-    <SpaceIdContext.Provider value={typeof value === 'string' ? value : value?.roomId ?? null}>
-      {children}
-    </SpaceIdContext.Provider>
-  );
+  return <SpaceIdContext.Provider value={value}>{children}</SpaceIdContext.Provider>;
 }
 
 export function useSpaceId(): string | null {
@@ -38,13 +34,12 @@ export function useCoreSpace(): RoomView | null {
   ).value;
 }
 
-export function useSpace(): LegacyRoom {
-  const core = useCore();
-  const roomId = useSpaceId();
-  if (!roomId) throw new Error('Space not provided!');
-  const room = getMatrixClient(core).getRoom(roomId);
-  if (!room) throw new Error(`Space ${roomId} not found!`);
-  return room;
+export function useRequiredCoreSpace(): RoomView {
+  const spaceId = useSpaceId();
+  if (!spaceId) throw new Error('Space not provided!');
+  const space = useCoreSpace();
+  if (!space) throw new Error(`Space ${spaceId} not found!`);
+  return space;
 }
 
 export function useSpaceOptionally(): LegacyRoom | null {

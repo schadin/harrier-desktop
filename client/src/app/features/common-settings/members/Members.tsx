@@ -25,7 +25,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MemberView } from '@harrier/core';
 import { getMemberSearchStr } from '@harrier/core';
 import { Page, PageContent, PageHeader } from '../../../components/page';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext } from '../../../hooks/useRoom';
 import { useRoomMembers } from '../../../hooks/useRoomMembers';
 import { useGetMemberPowerLevel, usePowerLevels } from '../../../hooks/usePowerLevels';
 import { VirtualTile } from '../../../components/virtualizer';
@@ -50,7 +50,7 @@ import {
   useOpenUserRoomProfile,
   useUserRoomProfileState,
 } from '../../../state/hooks/userRoomProfile';
-import { useSpaceOptionally } from '../../../hooks/useSpace';
+import { useCoreSpace } from '../../../hooks/useSpace';
 import { useFlattenPowerTagMembers, useGetMemberPowerTag } from '../../../hooks/useMemberPowerTag';
 import { useRoomCreators } from '../../../hooks/useRoomCreators';
 import { getMouseEventCords } from '../../../utils/dom';
@@ -73,12 +73,13 @@ type MembersProps = {
   requestClose: () => void;
 };
 export function Members({ requestClose }: MembersProps) {
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
   const members = useRoomMembers(room.roomId);
-  const fetchingMembers = members.length < room.getJoinedMemberCount();
+  const memberCount = room.memberCount ?? members.length;
+  const fetchingMembers = members.length < memberCount;
   const openProfile = useOpenUserRoomProfile();
   const profileUser = useUserRoomProfileState();
-  const space = useSpaceOptionally();
+  const space = useCoreSpace();
 
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
@@ -153,7 +154,7 @@ export function Members({ requestClose }: MembersProps) {
         <Box grow="Yes" gap="200">
           <Box grow="Yes" alignItems="Center" gap="200">
             <Text size="H3" truncate>
-              {room.getJoinedMemberCount()} Members
+              {memberCount} Members
             </Text>
           </Box>
           <Box shrink="No">

@@ -46,7 +46,7 @@ import {
   useSpaceLobbySelected,
   useSpaceSearchSelected,
 } from '../../../hooks/router/useSelectedSpace';
-import { useSpace } from '../../../hooks/useSpace';
+import { useRequiredCoreSpace } from '../../../hooks/useSpace';
 import { VirtualTile } from '../../../components/virtualizer';
 import { RoomNavCategoryButton, RoomNavItem } from '../../../features/room-nav';
 import { makeNavCategoryId } from '../../../state/closedNavCategories';
@@ -103,7 +103,7 @@ type Room = NonNullable<ReturnType<MatrixClient['getRoom']>>;
 type RoomJoinRulesContent = { join_rule?: string };
 
 type SpaceMenuProps = {
-  room: Room;
+  room: { roomId: string };
   requestClose: () => void;
 };
 const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClose }, ref) => {
@@ -263,7 +263,7 @@ const SpaceMenu = forwardRef<HTMLDivElement, SpaceMenuProps>(({ room, requestClo
 });
 
 function SpaceHeader() {
-  const space = useSpace();
+  const space = useRequiredCoreSpace();
   const { name: spaceName } = useCoreRoomMeta(space.roomId);
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [sortMenuAnchor, setSortMenuAnchor] = useState<RectCords>();
@@ -428,7 +428,7 @@ export function SpaceTombstone({ roomId, replacementRoomId }: SpaceTombstoneProp
 
 export function Space() {
   const mx = useMatrixClient();
-  const space = useSpace();
+  const space = useRequiredCoreSpace();
   useNavToActivePathMapper(space.roomId);
   const spaceIdOrAlias = getCanonicalAliasOrRoomId(mx, space.roomId);
   const scrollRef = useRef<HTMLDivElement>(null);

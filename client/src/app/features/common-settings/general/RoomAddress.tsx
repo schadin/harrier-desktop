@@ -19,7 +19,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
 import { useCoreSession } from '../../../hooks/useCoreSession';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import {
   useLocalAliases,
   usePublishedAliases,
@@ -40,15 +40,15 @@ type RoomPublishedAddressesProps = {
 
 export function RoomPublishedAddresses({ permissions }: RoomPublishedAddressesProps) {
   const session = useCoreSession();
-  const room = useRoom();
+  const roomId = useRoomId();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
     session?.userId ?? ''
   );
 
-  const [canonicalAlias, publishedAliases] = usePublishedAliases(room);
-  const setMainAlias = useSetMainAlias(room);
+  const [canonicalAlias, publishedAliases] = usePublishedAliases({ roomId });
+  const setMainAlias = useSetMainAlias({ roomId });
 
   const [mainState, setMain] = useAsyncCallback<void, CoreError, [string | undefined]>(
     setMainAlias
@@ -209,11 +209,11 @@ function LocalAddressesList({
   removeLocalAlias: (alias: string) => Promise<void>;
   canEditCanonical?: boolean;
 }) {
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
 
-  const [, publishedAliases] = usePublishedAliases(room);
-  const { publishAliases, unpublishAliases } = usePublishUnpublishAliases(room);
+  const [, publishedAliases] = usePublishedAliases({ roomId });
+  const { publishAliases, unpublishAliases } = usePublishUnpublishAliases({ roomId });
 
   const [selectedAliases, setSelectedAliases] = useState<string[]>([]);
   const selectHasPublished = selectedAliases.find((alias) => publishedAliases.includes(alias));
@@ -365,7 +365,7 @@ function LocalAddressesList({
 
 export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissionsAPI }) {
   const session = useCoreSession();
-  const room = useRoom();
+  const roomId = useRoomId();
 
   const canEditCanonical = permissions.stateEvent(
     StateEvent.RoomCanonicalAlias,
@@ -374,7 +374,7 @@ export function RoomLocalAddresses({ permissions }: { permissions: RoomPermissio
 
   const [expand, setExpand] = useState(false);
 
-  const { localAliasesState, addLocalAlias, removeLocalAlias } = useLocalAliases(room.roomId);
+  const { localAliasesState, addLocalAlias, removeLocalAlias } = useLocalAliases(roomId);
 
   return (
     <SequenceCard

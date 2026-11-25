@@ -270,7 +270,13 @@ export function RoomNavItem({
     (receipt) => receipt.userId !== mx.getUserId()
   );
 
-  const { name: roomName } = useCoreRoomMeta(room.roomId);
+  const { room: coreRoom, name: roomName } = useCoreRoomMeta(room.roomId);
+  let avatarUrl: string | undefined;
+  if (coreRoom) {
+    avatarUrl = direct
+      ? getDirectRoomAvatarUrl(core, coreRoom, 96, useAuthentication)
+      : getRoomAvatarUrl(core, coreRoom, 96, useAuthentication);
+  }
   const dmUserId = direct ? guessDmRoomUserId(room, mx.getUserId()!) : undefined;
   const dmStatus = useCustomStatus(dmUserId ?? '');
   const dmPresence = useUserPresence(dmUserId ?? '');
@@ -341,11 +347,7 @@ export function RoomNavItem({
               {showAvatar ? (
                 <RoomAvatar
                   roomId={room.roomId}
-                  src={
-                    direct
-                      ? getDirectRoomAvatarUrl(mx, room, 96, useAuthentication)
-                      : getRoomAvatarUrl(mx, room, 96, useAuthentication)
-                  }
+                  src={avatarUrl}
                   alt={roomName}
                   renderFallback={() => (
                     <Text as="span" size="H6">

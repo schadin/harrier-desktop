@@ -31,7 +31,7 @@ import {
   PowerLevelTags,
   usePowerLevelTags,
 } from '../../../hooks/usePowerLevelTags';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext } from '../../../hooks/useRoom';
 import { HexColorPickerPopOut } from '../../../components/HexColorPickerPopOut';
 import { PowerColorBadge, PowerIcon } from '../../../components/power';
 import { UseStateProvider } from '../../../components/UseStateProvider';
@@ -60,10 +60,10 @@ type EditPowerProps = {
 };
 function EditPower({ maxPower, power, tag, onSave, onClose }: EditPowerProps) {
   const core = useCore();
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
   const roomToParents = useAtomValue(roomToParentsAtom);
   const useAuthentication = useMediaAuthentication();
-  const supportCreators = creatorsSupported(room.getVersion());
+  const supportCreators = creatorsSupported(room.roomVersion ?? '1');
 
   const imagePackRooms = useImagePackRooms(room.roomId, roomToParents);
 
@@ -292,7 +292,7 @@ type PowersEditorProps = {
 export function PowersEditor({ powerLevels, requestClose }: PowersEditorProps) {
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
   const alive = useAlive();
   const [usedPowers, maxPower] = useMemo(() => {
     const up = getUsedPowers(powerLevels);

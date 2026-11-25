@@ -27,7 +27,7 @@ import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { stopPropagation } from '../../../utils/keyboard';
 import { RoomPermissionsAPI } from '../../../hooks/useRoomPermissions';
 
@@ -39,18 +39,18 @@ type RoomEncryptionProps = {
 export function RoomEncryption({ permissions }: RoomEncryptionProps) {
   const session = useCoreSession();
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
 
   const canEnable = permissions.stateEvent(StateEvent.RoomEncryption, session?.userId ?? '');
-  const content = useCoreRoomState(room, StateEvent.RoomEncryption);
+  const content = useCoreRoomState({ roomId }, StateEvent.RoomEncryption);
   const enabled = content?.algorithm === ROOM_ENC_ALGO;
 
   const [enableState, enable] = useAsyncCallback(
     useCallback(async () => {
-      await sendRoomState(core, room.roomId, StateEvent.RoomEncryption, {
+      await sendRoomState(core, roomId, StateEvent.RoomEncryption, {
         algorithm: ROOM_ENC_ALGO,
       });
-    }, [core, room.roomId])
+    }, [core, roomId])
   );
 
   const enabling = enableState.status === AsyncStatus.Loading;

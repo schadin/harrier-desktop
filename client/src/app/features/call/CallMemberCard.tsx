@@ -3,8 +3,8 @@ import React, { useState } from 'react';
 import { Avatar, Box, Icon, Icons, Text } from 'folds';
 import { useOpenUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { SequenceCard } from '../../components/sequence-card';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
-import { useRoom } from '../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext, useRoomId } from '../../hooks/useRoom';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
 import { getMxIdLocalPart } from '../../utils/matrix';
 import { UserAvatar } from '../../components/user-avatar';
 import { getMouseEventCords } from '../../utils/dom';
@@ -15,18 +15,23 @@ type CallMemberCardProps = {
   member: CallParticipantView;
 };
 export function CallMemberCard({ member }: CallMemberCardProps) {
-  const room = useRoom();
+  const roomId = useRoomId();
+  useRequiredCoreRoomFromContext();
+  const members = useRoomMembers(roomId);
 
   const openUserProfile = useOpenUserRoomProfile();
 
   const { userId } = member;
-  const avatarMxc = userId ? getMemberAvatarMxc(room, userId) : undefined;
+  const roomMember = userId ? members.find((candidate) => candidate.userId === userId) : undefined;
+  const avatarMxc = roomMember?.avatarMxc;
   const avatarUrl = useMediaSource(
     avatarMxc ? toMediaRef(avatarMxc, { width: 96, height: 96 }) : undefined
   );
   if (!userId) return null;
 
-  const name = getMemberDisplayName(room, userId) ?? getMxIdLocalPart(userId) ?? userId;
+  const displayName = roomMember?.rawDisplayName;
+  const name =
+    (displayName === userId ? undefined : displayName) ?? getMxIdLocalPart(userId) ?? userId;
 
   const audioOnly = member.callIntent === 'audio';
 
@@ -38,13 +43,7 @@ export function CallMemberCard({ member }: CallMemberCardProps) {
       variant="SurfaceVariant"
       radii="500"
       onClick={(evt: any) =>
-        openUserProfile(
-          room.roomId,
-          undefined,
-          userId,
-          getMouseEventCords(evt.nativeEvent),
-          'Right'
-        )
+        openUserProfile(roomId, undefined, userId, getMouseEventCords(evt.nativeEvent), 'Right')
       }
     >
       <Box grow="Yes" gap="300" alignItems="Center">

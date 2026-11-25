@@ -4,19 +4,19 @@ import { useNavigate } from 'react-router-dom';
 import { UserHero, UserHeroName } from './UserHero';
 import { getMxIdServer } from '../../utils/matrix';
 import { toMediaRef, useMediaUrl } from '../../utils/coreMedia';
-import { getMemberAvatarMxc, getMemberDisplayName } from '../../utils/room';
 import { getSafeSessionUserId, useCoreSession } from '../../hooks/useCoreSession';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 import { usePowerLevels } from '../../hooks/usePowerLevels';
-import { useRoom } from '../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext } from '../../hooks/useRoom';
+import { useRoomMembers } from '../../hooks/useRoomMembers';
+import { useStateEvent } from '../../hooks/useStateEvent';
 import { useUserPresence } from '../../hooks/useUserPresence';
 import { IgnoredUserAlert, MutualRoomsChip, OptionsChip, ServerChip, ShareChip } from './UserChips';
 import { useCloseUserRoomProfile } from '../../state/hooks/userRoomProfile';
 import { PowerChip } from './PowerChip';
 import { UserInviteAlert, UserBanAlert, UserModeration, UserKickAlert } from './UserModeration';
 import { useIgnoredUsers } from '../../hooks/useIgnoredUsers';
-import { useMembership } from '../../hooks/useMembership';
-import { Membership } from '../../../types/matrix/room';
+import { Membership, StateEvent } from '../../../types/matrix/room';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useMemberPowerCompare } from '../../hooks/useMemberPowerCompare';
@@ -35,7 +35,8 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const ignoredUsers = useIgnoredUsers();
   const ignored = ignoredUsers.includes(userId);
 
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
+  const members = useRoomMembers(room.roomId);
   const powerLevels = usePowerLevels(room);
   const creators = useRoomCreators(room);
 
@@ -50,12 +51,16 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
   const canUnban = permissions.action('ban', myUserId);
   const canInvite = permissions.action('invite', myUserId);
 
-  const member = room.getMember(userId);
-  const membership = useMembership(room, userId);
+  const member = members.find((candidate) => candidate.userId === userId);
+  const membership = member?.membership ?? Membership.Leave;
+  const memberEvent = useStateEvent({ roomId: room.roomId }, StateEvent.RoomMember, userId);
+  const memberEventContent = memberEvent?.content as { reason?: unknown } | undefined;
+  const memberReason =
+    typeof memberEventContent?.reason === 'string' ? memberEventContent.reason : undefined;
 
   const server = getMxIdServer(userId);
-  const displayName = getMemberDisplayName(room, userId);
-  const avatarMxc = getMemberAvatarMxc(room, userId);
+  const displayName = member?.rawDisplayName === userId ? undefined : member?.rawDisplayName;
+  const avatarMxc = member?.avatarMxc;
   const resolvedAvatarUrl = useMediaUrl(toMediaRef(avatarMxc ?? ''), { useAuthentication });
   const avatarUrl = (avatarMxc && resolvedAvatarUrl) ?? undefined;
 
@@ -107,29 +112,29 @@ export function UserRoomProfile({ userId }: UserRoomProfileProps) {
         {member && membership === Membership.Ban && (
           <UserBanAlert
             userId={userId}
-            reason={member.events.member?.getContent().reason}
+            reason={memberReason}
             canUnban={canUnban}
-            bannedBy={member.events.member?.getSender()}
-            ts={member.events.member?.getTs()}
+            bannedBy={memberEvent?.sender}
+            ts={memberEvent?.timestamp}
           />
         )}
         {member &&
           membership === Membership.Leave &&
-          member.events.member &&
-          member.events.member.getSender() !== userId && (
+          memberEvent &&
+          memberEvent.sender !== userId && (
             <UserKickAlert
-              reason={member.events.member?.getContent().reason}
-              kickedBy={member.events.member?.getSender()}
-              ts={member.events.member?.getTs()}
+              reason={memberReason}
+              kickedBy={memberEvent.sender}
+              ts={memberEvent.timestamp}
             />
           )}
         {member && membership === Membership.Invite && (
           <UserInviteAlert
             userId={userId}
-            reason={member.events.member?.getContent().reason}
+            reason={memberReason}
             canKick={canKickUser}
-            invitedBy={member.events.member?.getSender()}
-            ts={member.events.member?.getTs()}
+            invitedBy={memberEvent?.sender}
+            ts={memberEvent?.timestamp}
           />
         )}
         <UserModeration

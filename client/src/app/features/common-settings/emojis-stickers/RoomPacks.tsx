@@ -26,7 +26,7 @@ import {
   packAddressEqual,
   PackContent,
 } from '../../../plugins/custom-emoji';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { useRoomImagePacks } from '../../../hooks/useImagePacks';
 import { LineClamp2 } from '../../../styles/Text.css';
 import { SettingTile } from '../../../components/setting-tile';
@@ -148,11 +148,11 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
   const session = useCoreSession();
   const core = useCore();
   const useAuthentication = useMediaAuthentication();
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
 
-  const powerLevels = usePowerLevels(room);
-  const creators = useRoomCreators(room);
+  const powerLevels = usePowerLevels({ roomId });
+  const creators = useRoomCreators({ roomId });
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const canEdit = permissions.stateEvent(
@@ -160,7 +160,7 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
     getSafeSessionUserId(session)
   );
 
-  const unfilteredPacks = useRoomImagePacks(room);
+  const unfilteredPacks = useRoomImagePacks({ roomId });
   const packs = useMemo(() => unfilteredPacks.filter((pack) => !pack.deleted), [unfilteredPacks]);
 
   const [removedPacks, setRemovedPacks] = useState<PackAddress[]>([]);
@@ -171,9 +171,9 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
       for (let i = 0; i < removedPacks.length; i += 1) {
         const addr = removedPacks[i];
         // eslint-disable-next-line no-await-in-loop
-        await sendRoomState(core, room.roomId, StateEvent.PoniesRoomEmotes, {}, addr.stateKey);
+        await sendRoomState(core, roomId, StateEvent.PoniesRoomEmotes, {}, addr.stateKey);
       }
-    }, [core, room, removedPacks])
+    }, [core, roomId, removedPacks])
   );
   const applyingChanges = applyState.status === AsyncStatus.Loading;
 
@@ -277,7 +277,7 @@ export function RoomPacks({ onViewPack }: RoomPacksProps) {
     <>
       <Box direction="Column" gap="100">
         <Text size="L400">Packs</Text>
-        {canEdit && <CreatePackTile roomId={room.roomId} packs={packs} />}
+        {canEdit && <CreatePackTile roomId={roomId} packs={packs} />}
         {packs.map(renderPack)}
         {packs.length === 0 && (
           <SequenceCard

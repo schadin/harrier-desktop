@@ -20,7 +20,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState, useCoreRoomState } from '../../../hooks/useCoreRoomState';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../../utils/keyboard';
@@ -65,12 +65,12 @@ type RoomHistoryVisibilityProps = {
 export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProps) {
   const session = useCoreSession();
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
 
   const canEdit = permissions.stateEvent(StateEvent.RoomHistoryVisibility, session?.userId ?? '');
 
   const visibilityContent = useCoreRoomState<RoomHistoryVisibilityEventContent>(
-    room,
+    { roomId },
     StateEvent.RoomHistoryVisibility
   );
   const historyVisibility: HistoryVisibility =
@@ -90,9 +90,9 @@ export function RoomHistoryVisibility({ permissions }: RoomHistoryVisibilityProp
         const content: RoomHistoryVisibilityEventContent = {
           history_visibility: visibility,
         };
-        await sendRoomState(core, room.roomId, StateEvent.RoomHistoryVisibility, content);
+        await sendRoomState(core, roomId, StateEvent.RoomHistoryVisibility, content);
       },
-      [core, room.roomId]
+      [core, roomId]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

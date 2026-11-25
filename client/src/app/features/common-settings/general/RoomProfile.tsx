@@ -18,7 +18,7 @@ import classNames from 'classnames';
 import type { CoreError } from '@harrier/core';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../../room-settings/styles.css';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRequiredCoreRoomFromContext } from '../../../hooks/useRoom';
 import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
 import { mDirectAtom } from '../../../state/mDirectList';
 import { BreakWord, LineClamp3 } from '../../../styles/Text.css';
@@ -56,7 +56,7 @@ export function RoomProfileEdit({
   topic,
   onClose,
 }: RoomProfileEditProps) {
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
   const core = useCore();
   const alive = useAlive();
   const useAuthentication = useMediaAuthentication();
@@ -194,7 +194,7 @@ export function RoomProfileEdit({
               alt={name}
               renderFallback={() => (
                 <RoomIcon
-                  roomType={room.getType()}
+                  roomType={room.roomType}
                   size="400"
                   joinRule={joinRule ?? 'invite'}
                   filled
@@ -261,7 +261,7 @@ type RoomProfileProps = {
 export function RoomProfile({ permissions }: RoomProfileProps) {
   const session = useCoreSession();
   const useAuthentication = useMediaAuthentication();
-  const room = useRoom();
+  const room = useRequiredCoreRoomFromContext();
   const directs = useAtomValue(mDirectAtom);
 
   const { name, topic, joinRule, avatarMxc, dmAvatarMxc } = useCoreRoomMeta(room.roomId);
@@ -337,7 +337,7 @@ export function RoomProfile({ permissions }: RoomProfileProps) {
                   alt={name}
                   renderFallback={() => (
                     <RoomIcon
-                      roomType={room.getType()}
+                      roomType={room.roomType}
                       size="400"
                       joinRule={joinRule ?? 'invite'}
                       filled

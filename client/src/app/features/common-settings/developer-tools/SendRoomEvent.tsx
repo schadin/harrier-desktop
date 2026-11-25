@@ -17,7 +17,7 @@ import type { CoreError, JsonObject } from '@harrier/core';
 import { Page, PageHeader } from '../../../components/page';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { useAlive } from '../../../hooks/useAlive';
 import { useTextAreaCodeEditor } from '../../../hooks/useTextAreaCodeEditor';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
@@ -33,7 +33,7 @@ export type SendRoomEventProps = {
 };
 export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventProps) {
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
   const composeStateEvent = typeof stateKey === 'string';
 
@@ -52,14 +52,14 @@ export function SendRoomEvent({ type, stateKey, requestClose }: SendRoomEventPro
     useCallback(
       async (evtType, evtStateKey, evtContent) => {
         if (typeof evtStateKey === 'string') {
-          await sendRoomState(core, room.roomId, evtType, evtContent as JsonObject, evtStateKey);
+          await sendRoomState(core, roomId, evtType, evtContent as JsonObject, evtStateKey);
           return evtContent;
         }
-        const result = await core.send.sendEvent(room.roomId, evtType, evtContent as JsonObject);
+        const result = await core.send.sendEvent(roomId, evtType, evtContent as JsonObject);
         if (!result.ok) throw result.error;
         return evtContent;
       },
-      [core, room.roomId]
+      [core, roomId]
     )
   );
   const submitting = submitState.status === AsyncStatus.Loading;

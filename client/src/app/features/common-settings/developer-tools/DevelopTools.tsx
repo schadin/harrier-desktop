@@ -20,7 +20,7 @@ import { SettingTile } from '../../../components/setting-tile';
 import { useSetting } from '../../../state/hooks/settings';
 import { settingsAtom } from '../../../state/settings';
 import { copyToClipboard } from '../../../utils/dom';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { useRoomState } from '../../../hooks/useRoomState';
 import { StateEventEditor, StateEventInfo } from './StateEventEditor';
 import { SendRoomEvent } from './SendRoomEvent';
@@ -38,10 +38,10 @@ type DeveloperToolsProps = {
 export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
   const [developerTools, setDeveloperTools] = useSetting(settingsAtom, 'developerTools');
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
 
-  const roomState = useRoomState(room);
-  const accountData = useRoomAccountData(room);
+  const roomState = useRoomState({ roomId });
+  const accountData = useRoomAccountData({ roomId });
 
   const [expandState, setExpandState] = useState(false);
   const [expandStateType, setExpandStateType] = useState<string>();
@@ -59,10 +59,10 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
 
   const submitAccountData: AccountDataSubmitCallback = useCallback(
     async (type, content) => {
-      const result = await core.rooms.setAccountData(room.roomId, type, content as JsonObject);
+      const result = await core.rooms.setAccountData(roomId, type, content as JsonObject);
       if (!result.ok) throw result.error;
     },
-    [core, room.roomId]
+    [core, roomId]
   );
 
   if (accountDataType !== undefined) {
@@ -132,10 +132,10 @@ export function DeveloperTools({ requestClose }: DeveloperToolsProps) {
                   >
                     <SettingTile
                       title="Room ID"
-                      description={`Copy room ID to clipboard. ("${room.roomId}")`}
+                      description={`Copy room ID to clipboard. ("${roomId}")`}
                       after={
                         <Button
-                          onClick={() => copyToClipboard(room.roomId ?? '<NO_ROOM_ID_FOUND>')}
+                          onClick={() => copyToClipboard(roomId ?? '<NO_ROOM_ID_FOUND>')}
                           variant="Secondary"
                           fill="Soft"
                           size="300"

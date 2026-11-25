@@ -1,6 +1,7 @@
 import { IconName, IconSrc } from 'folds';
 
-import type { TimelineItem } from '@harrier/core';
+import type { HarrierCore, RoomView, TimelineItem } from '@harrier/core';
+import { toMediaRef } from './coreMedia';
 import {
   EventTimelineDirection,
   EventTimelineSetLike,
@@ -144,31 +145,39 @@ export const getRoomIconSrc = (
 };
 
 export const getRoomAvatarUrl = (
-  mx: MatrixClientLike,
-  room: RoomLike,
+  core: HarrierCore,
+  room: RoomView,
   size: 32 | 96 = 32,
   useAuthentication = false
 ): string | undefined => {
-  const mxcUrl = room.getMxcAvatarUrl();
+  const mxcUrl = room.avatarMxc;
   return mxcUrl
-    ? mx.mxcUrlToHttp(mxcUrl, size, size, 'crop', undefined, false, useAuthentication) ?? undefined
+    ? core.media.url(toMediaRef(mxcUrl, { width: size, height: size, resizeMethod: 'crop' }), {
+        useAuthentication,
+        allowDirectLinks: false,
+        allowRedirects: false,
+      }) ?? undefined
     : undefined;
 };
 
 export const getDirectRoomAvatarUrl = (
-  mx: MatrixClientLike,
-  room: RoomLike,
+  core: HarrierCore,
+  room: RoomView,
   size: 32 | 96 = 32,
   useAuthentication = false
 ): string | undefined => {
-  const mxcUrl = room.getAvatarFallbackMember()?.getMxcAvatarUrl();
+  const mxcUrl = room.dmAvatarMxc;
 
   if (!mxcUrl) {
-    return getRoomAvatarUrl(mx, room, size, useAuthentication);
+    return getRoomAvatarUrl(core, room, size, useAuthentication);
   }
 
   return (
-    mx.mxcUrlToHttp(mxcUrl, size, size, 'crop', undefined, false, useAuthentication) ?? undefined
+    core.media.url(toMediaRef(mxcUrl, { width: size, height: size, resizeMethod: 'crop' }), {
+      useAuthentication,
+      allowDirectLinks: false,
+      allowRedirects: false,
+    }) ?? undefined
   );
 };
 

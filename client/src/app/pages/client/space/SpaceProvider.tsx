@@ -26,7 +26,7 @@ export function RouteSpaceProvider({ children }: RouteSpaceProviderProps) {
   }
 
   return (
-    <SpaceProvider key={space.roomId} value={space}>
+    <SpaceProvider key={space.roomId} value={space.roomId}>
       {children}
     </SpaceProvider>
   );

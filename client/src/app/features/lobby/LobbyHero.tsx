@@ -2,7 +2,7 @@ import React from 'react';
 import { Avatar, Overlay, OverlayBackdrop, OverlayCenter, Text } from 'folds';
 import FocusTrap from 'focus-trap-react';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
-import { useSpace } from '../../hooks/useSpace';
+import { useRequiredCoreSpace } from '../../hooks/useSpace';
 import { RoomAvatar } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { UseStateProvider } from '../../components/UseStateProvider';
@@ -15,7 +15,7 @@ import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
 
 export function LobbyHero() {
   const useAuthentication = useMediaAuthentication();
-  const space = useSpace();
+  const space = useRequiredCoreSpace();
 
   const { name, topic, avatarMxc } = useCoreRoomMeta(space.roomId);
   const avatarUrl =

@@ -4,7 +4,7 @@ import { useCallEmbed, useCallJoined, useCallEmbedPlacementSync } from '../../ho
 import { ContainerColor } from '../../styles/ContainerColor.css';
 import { PrescreenControls } from './PrescreenControls';
 import { usePowerLevelsContext } from '../../hooks/usePowerLevels';
-import { useRoom } from '../../hooks/useRoom';
+import { useRoomId } from '../../hooks/useRoom';
 import { useRoomCreators } from '../../hooks/useRoomCreators';
 import { useRoomPermissions } from '../../hooks/useRoomPermissions';
 import { useCoreSession } from '../../hooks/useCoreSession';
@@ -76,12 +76,12 @@ function AlreadyInCallMessage() {
 
 function CallPrescreen() {
   const session = useCoreSession();
-  const room = useRoom();
+  const roomId = useRoomId();
   const livekitSupported = useLivekitSupport();
   const rtcSupported = webRTCSupported();
 
   const powerLevels = usePowerLevelsContext();
-  const creators = useRoomCreators(room);
+  const creators = useRoomCreators({ roomId });
 
   const permissions = useRoomPermissions(creators, powerLevels);
   const hasPermission = permissions.stateEvent(
@@ -89,11 +89,11 @@ function CallPrescreen() {
     session?.userId ?? ''
   );
 
-  const callMembers = useCoreCallMembers(room.roomId);
+  const callMembers = useCoreCallMembers(roomId);
   const hasParticipant = callMembers.length > 0;
 
   const callEmbed = useCallEmbed();
-  const inOtherCall = callEmbed && callEmbed.roomId !== room.roomId;
+  const inOtherCall = callEmbed && callEmbed.roomId !== roomId;
 
   const canJoin = hasPermission && livekitSupported && rtcSupported;
 
@@ -150,14 +150,14 @@ function CallJoined({ joined, containerRef }: CallJoinedProps) {
 }
 
 export function CallView() {
-  const room = useRoom();
+  const roomId = useRoomId();
   const callContainerRef = useRef<HTMLDivElement>(null);
   useCallEmbedPlacementSync(callContainerRef);
 
   const callEmbed = useCallEmbed();
   const callJoined = useCallJoined(callEmbed);
 
-  const currentJoined = callEmbed?.roomId === room.roomId && callJoined;
+  const currentJoined = callEmbed?.roomId === roomId && callJoined;
 
   return (
     <Box

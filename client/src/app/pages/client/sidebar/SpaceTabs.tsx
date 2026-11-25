@@ -407,8 +407,10 @@ function SpaceTab({
   onUnpin,
 }: SpaceTabProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const targetRef = useRef<HTMLDivElement>(null);
+  const coreSpace = core.rooms.room(space.roomId).getSnapshot().value;
 
   const roomToParents = useAtomValue(roomToParentsAtom);
   const allChild = useSpaceChildren(
@@ -467,7 +469,11 @@ function SpaceTab({
               >
                 <RoomAvatar
                   roomId={space.roomId}
-                  src={getRoomAvatarUrl(mx, space, 96, useAuthentication) ?? undefined}
+                  src={
+                    coreSpace
+                      ? getRoomAvatarUrl(core, coreSpace, 96, useAuthentication) ?? undefined
+                      : undefined
+                  }
                   alt={space.name}
                   renderFallback={() => (
                     <Text size={folder ? 'H6' : 'H4'}>{nameInitials(space.name, 2)}</Text>
@@ -560,6 +566,7 @@ function ClosedSpaceFolder({
   disabled,
 }: ClosedSpaceFolderProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const handlerRef = useRef<HTMLDivElement>(null);
 
@@ -588,12 +595,17 @@ function ClosedSpaceFolder({
                 {folder.content.map((sId) => {
                   const space = mx.getRoom(sId);
                   if (!space) return null;
+                  const coreSpace = core.rooms.room(sId).getSnapshot().value;
 
                   return (
                     <SidebarAvatar key={sId} size="200" radii="300">
                       <RoomAvatar
                         roomId={space.roomId}
-                        src={getRoomAvatarUrl(mx, space, 96, useAuthentication) ?? undefined}
+                        src={
+                          coreSpace
+                            ? getRoomAvatarUrl(core, coreSpace, 96, useAuthentication) ?? undefined
+                            : undefined
+                        }
                         alt={space.name}
                         renderFallback={() => (
                           <Text size="Inherit">

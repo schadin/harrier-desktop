@@ -21,7 +21,7 @@ import { PageHeader } from '../../components/page';
 import { useSetSetting } from '../../state/hooks/settings';
 import { settingsAtom } from '../../state/settings';
 import { useCoreRoomMeta } from '../../hooks/useCoreRoomMeta';
-import { useSpace } from '../../hooks/useSpace';
+import { useRequiredCoreSpace } from '../../hooks/useSpace';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { RoomAvatar } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
@@ -49,7 +49,7 @@ type LobbyMenuProps = {
 const LobbyMenu = forwardRef<HTMLDivElement, LobbyMenuProps>(
   ({ powerLevels, requestClose }, ref) => {
     const mx = useMatrixClient();
-    const space = useSpace();
+    const space = useRequiredCoreSpace();
     const creators = useRoomCreators(space);
 
     const permissions = useRoomPermissions(creators, powerLevels);
@@ -144,7 +144,7 @@ type LobbyHeaderProps = {
 };
 export function LobbyHeader({ showProfile, powerLevels }: LobbyHeaderProps) {
   const useAuthentication = useMediaAuthentication();
-  const space = useSpace();
+  const space = useRequiredCoreSpace();
   const setPeopleDrawer = useSetSetting(settingsAtom, 'isPeopleDrawer');
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
   const [sortMenuAnchor, setSortMenuAnchor] = useState<RectCords>();

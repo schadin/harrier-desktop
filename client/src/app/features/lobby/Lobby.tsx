@@ -5,7 +5,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { useNavigate } from 'react-router-dom';
 import type { HarrierCore, JsonObject, PublicRoomView } from '@harrier/core';
 import produce from 'immer';
-import { useSpace } from '../../hooks/useSpace';
+import { useRequiredCoreSpace } from '../../hooks/useSpace';
 import { Page, PageContent, PageContentCenter, PageHeroSection } from '../../components/page';
 import {
   HierarchyItem,
@@ -177,7 +177,7 @@ export function Lobby() {
   const mDirects = useAtomValue(mDirectAtom);
   const allRooms = useAtomValue(allRoomsAtom);
   const allJoinedRooms = useMemo(() => new Set(allRooms), [allRooms]);
-  const space = useSpace();
+  const space = useRequiredCoreSpace();
   const spacePowerLevels = usePowerLevels(space);
   const lex = useMemo(() => new ASCIILexicalTable(' '.charCodeAt(0), '~'.charCodeAt(0), 6), []);
   const members = useRoomMembers(space.roomId);

@@ -13,7 +13,7 @@ import {
 } from '../../../hooks/usePowerLevels';
 import { PermissionGroup } from './types';
 import { getPowerLevelTag, getPowers, usePowerLevelTags } from '../../../hooks/usePowerLevelTags';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { useCore } from '../../../hooks/useCore';
 import { sendRoomState } from '../../../hooks/useCoreRoomState';
 import { StateEvent } from '../../../../types/matrix/room';
@@ -36,10 +36,10 @@ export function PermissionGroups({
   canEdit,
 }: PermissionGroupsProps) {
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
 
-  const powerLevelTags = usePowerLevelTags(room, powerLevels);
+  const powerLevelTags = usePowerLevelTags({ roomId }, powerLevels);
   const maxPower = useMemo(() => Math.max(...getPowers(powerLevelTags)), [powerLevelTags]);
 
   const [permissionUpdate, setPermissionUpdate] = useState<Map<PermissionLocation, number>>(
@@ -86,8 +86,8 @@ export function PermissionGroups({
 
         return draftPowerLevels;
       });
-      await sendRoomState(core, room.roomId, StateEvent.RoomPowerLevels, editedPowerLevels);
-    }, [core, room, powerLevels, permissionUpdate, permissionGroups])
+      await sendRoomState(core, roomId, StateEvent.RoomPowerLevels, editedPowerLevels);
+    }, [core, roomId, powerLevels, permissionUpdate, permissionGroups])
   );
 
   const resetChanges = useCallback(() => {

@@ -25,7 +25,7 @@ import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
 import { stopPropagation } from '../../../utils/keyboard';
 import { useAlive } from '../../../hooks/useAlive';
 import { useStateEvent } from '../../../hooks/useStateEvent';
-import { useRoom } from '../../../hooks/useRoom';
+import { useRoomId } from '../../../hooks/useRoom';
 import { StateEvent } from '../../../../types/matrix/room';
 import { getToday, getYesterday, timeDayMonthYear, timeHourMinute } from '../../../utils/time';
 import { DatePicker, TimePicker } from '../../../components/time-date';
@@ -41,9 +41,9 @@ type JumpToTimeProps = {
 };
 export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
   const core = useCore();
-  const room = useRoom();
+  const roomId = useRoomId();
   const alive = useAlive();
-  const createStateEvent = useStateEvent(room, StateEvent.RoomCreate);
+  const createStateEvent = useStateEvent({ roomId }, StateEvent.RoomCreate);
 
   const todayTs = getToday();
   const yesterdayTs = getYesterday();
@@ -75,28 +75,25 @@ export function JumpToTime({ onCancel, onSubmit }: JumpToTimeProps) {
       async (newTs) => {
         let previousFirstEventId: string | undefined;
         for (;;) {
-          const timeline = core.timeline.timeline(room.roomId).getSnapshot().value;
+          const timeline = core.timeline.timeline(roomId).getSnapshot().value;
           if (timeline.items.length > 0) {
             const event = findCoreTimelineEvent(timeline.items, newTs);
-            if (!event) throw new CoreError('not-found', `No event found in ${room.roomId}`);
+            if (!event) throw new CoreError('not-found', `No event found in ${roomId}`);
             if (event.timestamp >= newTs || !timeline.hasBackwardHistory) return event.eventId;
             if (event.eventId === previousFirstEventId) {
-              throw new CoreError(
-                'not-found',
-                `No event found at or after ${newTs} in ${room.roomId}`
-              );
+              throw new CoreError('not-found', `No event found at or after ${newTs} in ${roomId}`);
             }
             previousFirstEventId = event.eventId;
           } else if (!timeline.hasBackwardHistory) {
-            throw new CoreError('not-found', `No event found in ${room.roomId}`);
+            throw new CoreError('not-found', `No event found in ${roomId}`);
           }
 
           // eslint-disable-next-line no-await-in-loop -- pagination depends on the previous page
-          const result = await core.timeline.paginateBackward(room.roomId, TIMELINE_PAGE_SIZE);
+          const result = await core.timeline.paginateBackward(roomId, TIMELINE_PAGE_SIZE);
           if (!result.ok) throw result.error;
         }
       },
-      [core, room.roomId]
+      [core, roomId]
     )
   );
 

@@ -1,9 +1,11 @@
 import React, { useCallback } from 'react';
+import { getMatrixClient } from '@harrier/core-matrix-js';
 import { Box, Button, Icon, Icons, Spinner, Text } from 'folds';
 import { SequenceCard } from '../../components/sequence-card';
 import * as css from './styles.css';
 import { ChatButton, ControlDivider, MicrophoneButton, SoundButton, VideoButton } from './Controls';
-import { useIsDirectRoom, useRoom } from '../../hooks/useRoom';
+import { useIsDirectRoom, useRequiredCoreRoomFromContext, useRoomId } from '../../hooks/useRoom';
+import { useCore } from '../../hooks/useCore';
 import { useCallEmbed, useCallJoined, useCallStart } from '../../hooks/useCallEmbed';
 import { useCallPreferences } from '../../state/hooks/callPreferences';
 
@@ -11,15 +13,17 @@ type PrescreenControlsProps = {
   canJoin?: boolean;
 };
 export function PrescreenControls({ canJoin }: PrescreenControlsProps) {
-  const room = useRoom();
+  const core = useCore();
+  const roomId = useRoomId();
+  useRequiredCoreRoomFromContext();
   const callEmbed = useCallEmbed();
   const callJoined = useCallJoined(callEmbed);
   const direct = useIsDirectRoom();
 
-  const inOtherCall = callEmbed && callEmbed.roomId !== room.roomId;
+  const inOtherCall = callEmbed && callEmbed.roomId !== roomId;
 
   const startCall = useCallStart(direct);
-  const joining = callEmbed?.roomId === room.roomId && !callJoined;
+  const joining = callEmbed?.roomId === roomId && !callJoined;
 
   const disabled = inOtherCall || !canJoin;
 
@@ -52,7 +56,11 @@ export function PrescreenControls({ canJoin }: PrescreenControlsProps) {
         <Button
           variant={disabled ? 'Secondary' : 'Success'}
           fill={disabled ? 'Soft' : 'Solid'}
-          onClick={() => startCall(room, { microphone, video, sound })}
+          onClick={() => {
+            const room = getMatrixClient(core).getRoom(roomId);
+            if (!room) throw new Error(`Room ${roomId} not found!`);
+            startCall(room, { microphone, video, sound });
+          }}
           disabled={disabled || joining}
           before={
             joining ? (
