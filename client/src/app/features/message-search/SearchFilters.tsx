@@ -29,7 +29,7 @@ import FocusTrap from 'focus-trap-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useMatrixClient } from '../../hooks/useMatrixClient';
 import { getRoomIconSrc } from '../../utils/room';
-import { factoryRoomIdByAtoZ } from '../../utils/sort';
+import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
 import {
   SearchItemStrGetter,
   UseAsyncSearchOptions,

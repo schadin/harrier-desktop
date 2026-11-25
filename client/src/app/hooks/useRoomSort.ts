@@ -1,7 +1,8 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { AccountDataEvent, RoomSortType, SpacesSortContent } from '../../types/matrix/accountData';
-import { SortFunc, factoryRoomIdSort, type RoomSortSource } from '../utils/sort';
+import type { RoomSortSource, SortFunc } from '../utils/sort';
+import { factoryRoomIdSort } from '../utils/sortLegacy';
 import { useMatrixClient } from './useMatrixClient';
 import { useCore } from './useCore';
 import { settingsAtom } from '../state/settings';

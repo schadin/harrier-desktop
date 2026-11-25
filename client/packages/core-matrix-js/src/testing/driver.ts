@@ -6,6 +6,7 @@ import {
   EventTimeline,
   type IEvent,
   MatrixClient,
+  type RoomState,
   MatrixEvent,
   ReceiptType,
   Room,
@@ -520,10 +521,24 @@ export function createSyncDriver(): SyncDriver {
       );
     });
     if (states.length > 0) {
-      room.currentState.setStateEvents(states);
-      states.forEach((event) => {
-        client.emit(RoomStateEvent.Events, event, room.currentState, null);
-      });
+      const forwardStateEvent = (
+        event: MatrixEvent,
+        state: RoomState,
+        previousEvent: MatrixEvent | null
+      ) => {
+        client.emit(RoomStateEvent.Events, event, state, previousEvent);
+      };
+      const forwardStateUpdate = () => {
+        client.emit(RoomStateEvent.Update, room.currentState);
+      };
+      room.currentState.on(RoomStateEvent.Events, forwardStateEvent);
+      room.currentState.on(RoomStateEvent.Update, forwardStateUpdate);
+      try {
+        room.currentState.setStateEvents(states);
+      } finally {
+        room.currentState.removeListener(RoomStateEvent.Events, forwardStateEvent);
+        room.currentState.removeListener(RoomStateEvent.Update, forwardStateUpdate);
+      }
     }
     if (item.accountData) {
       Object.entries(item.accountData).forEach(([type, content]) => {
@@ -541,8 +556,16 @@ export function createSyncDriver(): SyncDriver {
     }
     if (item.direct) directRooms.add(item.roomId);
     if (item.sendFails) sendFailRooms.add(item.roomId);
-    room.recalculate();
-    client.emit(ClientEvent.Room, room);
+    const forwardRoomName = () => {
+      client.emit(RoomEvent.Name, room);
+    };
+    room.on(RoomEvent.Name, forwardRoomName);
+    try {
+      room.recalculate();
+    } finally {
+      room.removeListener(RoomEvent.Name, forwardRoomName);
+    }
+    if (!existingRoom) client.emit(ClientEvent.Room, room);
 
     const events = [
       ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),

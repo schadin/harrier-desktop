@@ -57,7 +57,7 @@ import { useCoreRoomMeta } from '../../../hooks/useCoreRoomMeta';
 import { useCoreRoom } from '../../../hooks/useCoreRoom';
 import { useCoreSession } from '../../../hooks/useCoreSession';
 import { useSpaceJoinedHierarchy, sortRoomsByOrder } from '../../../hooks/useSpaceHierarchy';
-import { factoryRoomIdByActivity } from '../../../utils/sort';
+import { factoryRoomIdByActivity } from '../../../utils/sortLegacy';
 import {
   useRoomSortComparator,
   useSetSpaceRoomSort,

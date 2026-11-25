@@ -46,7 +46,7 @@ import { resolveMediaUrl, toMediaRef } from '../../utils/coreMedia';
 import { RoomAvatar, RoomIcon } from '../../components/room-avatar';
 import { nameInitials } from '../../utils/common';
 import { useMediaAuthentication } from '../../hooks/useMediaAuthentication';
-import { factoryRoomIdByAtoZ } from '../../utils/sort';
+import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
 import {
   SearchItemStrGetter,
   useAsyncSearch,

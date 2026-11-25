@@ -29,7 +29,7 @@ import { stopPropagation } from '../../utils/keyboard';
 import { copyToClipboard } from '../../utils/dom';
 import { getExploreServerPath } from '../../pages/pathUtils';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
-import { factoryRoomIdByAtoZ } from '../../utils/sort';
+import { factoryRoomIdByAtoZ } from '../../utils/sortLegacy';
 import {
   useMutualRooms,
   useMutualRoomsSupport,

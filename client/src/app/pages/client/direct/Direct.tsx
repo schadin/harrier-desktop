@@ -20,7 +20,7 @@ import FocusTrap from 'focus-trap-react';
 import { useNavigate } from 'react-router-dom';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
-import { factoryRoomIdByActivity } from '../../../utils/sort';
+import { factoryRoomIdByActivity } from '../../../utils/sortLegacy';
 import {
   NavButton,
   NavCategory,

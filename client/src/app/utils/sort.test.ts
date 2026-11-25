@@ -1,11 +1,12 @@
 import type { RoomSortMeta } from '@harrier/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   factoryRoomIdByActivity,
   factoryRoomIdByActivityAsc,
   factoryRoomIdByAtoZ,
   factoryRoomIdSort,
   factoryRoomIdByZtoA,
+  type RoomSortSource,
 } from './sort';
 
 const meta = new Map<string, RoomSortMeta>([
@@ -19,6 +20,10 @@ const source = {
 };
 
 describe('room sort adapters with plain core summaries', () => {
+  it('exposes a strictly plain core source contract', () => {
+    expectTypeOf<ReturnType<RoomSortSource['getRoom']>>().toEqualTypeOf<RoomSortMeta | null>();
+  });
+
   it('sorts activity without an SDK timestamp method', () => {
     expect(factoryRoomIdByActivity(source)('!a:example.org', '!b:example.org')).toBe(100);
     expect(factoryRoomIdByActivityAsc(source)('!a:example.org', '!b:example.org')).toBe(-100);

@@ -750,9 +750,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }));
   };
 
-  const stateListeners = new Set<
-    (entry: RoomStateEntry & { roomId: string; eventType: string }) => void
-  >();
+  type StateListenerEntry = RoomStateEntry & { roomId: string; eventType: string };
+  const stateListeners = new Set<(entry: StateListenerEntry) => void>();
+  let pendingStateEntries: StateListenerEntry[] = [];
+  const pendingNameRooms = new Set<string>();
+  const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
+    entries.forEach((entry) => stateListeners.forEach((listener) => listener(entry)));
+  };
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
   const stateKeyOf = (roomId: string, eventType: string, key: string) =>
@@ -981,18 +985,42 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
-  client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
+  client.on(
+    RoomStateEvent.Events,
+    (event: MatrixEvent, _state: unknown, previousEvent: MatrixEvent | null) => {
+      const roomId = event.getRoomId() ?? '';
+      pendingStateEntries.push({
+        roomId,
+        eventType: event.getType(),
+        stateKey: event.getStateKey() ?? '',
+        content: event.getContent() as JsonObject,
+        eventId: event.getId() ?? undefined,
+        sender: event.getSender() ?? undefined,
+        timestamp: event.getTs() ?? undefined,
+      });
+      if (event.getType() === 'm.room.name') {
+        const previousName = previousEvent?.getContent<{ name?: unknown }>().name;
+        const nextName = event.getContent<{ name?: unknown }>().name;
+        if (!Object.is(previousName, nextName)) pendingNameRooms.add(roomId);
+      }
+    }
+  );
+  client.on(RoomStateEvent.Update, () => {
     refresh();
-    const entry = {
-      roomId: event.getRoomId() ?? '',
-      eventType: event.getType(),
-      stateKey: event.getStateKey() ?? '',
-      content: event.getContent() as JsonObject,
-      eventId: event.getId() ?? undefined,
-      sender: event.getSender() ?? undefined,
-      timestamp: event.getTs() ?? undefined,
-    };
-    stateListeners.forEach((listener) => listener(entry));
+    const ready = pendingStateEntries.filter((entry) => !pendingNameRooms.has(entry.roomId));
+    pendingStateEntries = pendingStateEntries.filter((entry) => pendingNameRooms.has(entry.roomId));
+    notifyStateListeners(ready);
+    pendingNameRooms.forEach((roomId) => {
+      if (!pendingStateEntries.some((entry) => entry.roomId === roomId))
+        pendingNameRooms.delete(roomId);
+    });
+  });
+  client.on(RoomEvent.Name, (room: Room) => {
+    refresh();
+    pendingNameRooms.delete(room.roomId);
+    const ready = pendingStateEntries.filter((entry) => entry.roomId === room.roomId);
+    pendingStateEntries = pendingStateEntries.filter((entry) => entry.roomId !== room.roomId);
+    notifyStateListeners(ready);
   });
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);

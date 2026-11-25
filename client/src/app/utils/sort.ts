@@ -14,26 +14,14 @@ import { RoomSortType } from '../../types/matrix/accountData';
 
 export type { SortFunc } from '@harrier/core';
 
-type LegacyRoomSortMeta = {
-  name: string;
-  getLastActiveTimestamp(): number;
-};
-
 export type RoomSortSource = {
-  getRoom(roomId: string): RoomSortMeta | LegacyRoomSortMeta | null;
+  getRoom(roomId: string): RoomSortMeta | null;
 };
-
-const isPlainRoomSortMeta = (room: RoomSortMeta | LegacyRoomSortMeta): room is RoomSortMeta =>
-  'lastActiveTimestamp' in room;
 
 const factoryGetMeta =
   (source: RoomSortSource) =>
-  (roomId: string): RoomSortMeta | undefined => {
-    const room = source.getRoom(roomId);
-    if (!room) return undefined;
-    if (isPlainRoomSortMeta(room)) return room;
-    return { name: room.name, lastActiveTimestamp: room.getLastActiveTimestamp() };
-  };
+  (roomId: string): RoomSortMeta | undefined =>
+    source.getRoom(roomId) ?? undefined;
 
 export const factoryRoomIdByActivity = (source: RoomSortSource): SortFunc<string> =>
   coreFactoryRoomIdByActivity(factoryGetMeta(source));

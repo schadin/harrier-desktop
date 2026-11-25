@@ -190,6 +190,79 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('state listeners observe recalculated room names', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!name-refresh:example.org';
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Old name' }],
+      });
+      let observedName: string | undefined;
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId !== roomId || entry.eventType !== 'm.room.name') return;
+        observedName = core.rooms.room(roomId).getSnapshot().value?.name;
+        expect(core.rooms.all.getSnapshot().value[0]?.name).toBe('New name');
+        expect(core.rooms.list.getSnapshot().value[0]?.name).toBe('New name');
+        expect(observedName).toBe('New name');
+      });
+
+      try {
+        await harness.applySyncFixture({
+          rooms: [{ roomId, membership: 'join', name: 'New name' }],
+        });
+        expect(observedName).toBe('New name');
+        expect(core.rooms.room(roomId).getSnapshot().value?.name).toBe('New name');
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('state listeners observe updated member counts', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!member-refresh:example.org';
+    try {
+      await harness.applySyncFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            name: 'Members',
+            members: [{ userId: '@alice:example.org', displayName: 'Alice' }],
+          },
+        ],
+      });
+      expect(core.rooms.room(roomId).getSnapshot().value?.memberCount).toBe(1);
+      let observedMemberCount: number | undefined;
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId !== roomId || entry.eventType !== 'm.room.member') return;
+        if (entry.stateKey !== '@bob:example.org') return;
+        observedMemberCount = core.rooms.room(roomId).getSnapshot().value?.memberCount;
+        expect(observedMemberCount).toBe(2);
+      });
+
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              members: [{ userId: '@bob:example.org', displayName: 'Bob' }],
+            },
+          ],
+        });
+        expect(observedMemberCount).toBe(2);
+        expect(core.rooms.room(roomId).getSnapshot().value?.memberCount).toBe(2);
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest(
     'room activity follows the last live timeline event across syncs',
     async (harness) => {
@@ -201,6 +274,7 @@ export const roomsCases = [
               roomId: '!activity:example.org',
               membership: 'join',
               name: 'Activity',
+              backwardToken: 'history-start',
               messages: [
                 {
                   eventId: '$newer-timestamp',
@@ -229,6 +303,18 @@ export const roomsCases = [
           ],
         });
 
+        expect(core.rooms.all.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
+        expect(core.rooms.list.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
+        expect(
+          core.rooms.room('!activity:example.org').getSnapshot().value?.lastActiveTimestamp
+        ).toBe(100);
+
+        const timeline = core.timeline.timeline('!activity:example.org');
+        const pagination = await core.timeline.paginateBackward('!activity:example.org', 10);
+        expect(pagination).toEqual({ ok: true, value: undefined });
+        expect(timeline.getSnapshot().value.items.map((item) => item.eventId)).toContain(
+          '$history-only'
+        );
         expect(core.rooms.all.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
         expect(core.rooms.list.getSnapshot().value[0]?.lastActiveTimestamp).toBe(100);
         expect(
@@ -296,7 +382,6 @@ export const roomsCases = [
             {
               roomId,
               membership: 'join',
-              name: 'Receipts',
               receipts: [{ eventId: '$message', userId: '@bob:example.org' }],
             },
           ],
