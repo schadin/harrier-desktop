@@ -556,6 +556,8 @@ export function createSyncDriver(): SyncDriver {
     }
     if (item.direct) directRooms.add(item.roomId);
     if (item.sendFails) sendFailRooms.add(item.roomId);
+    // SyncApi.injectRoomEvents awaits timeline processing before the final recalculate.
+    await Promise.resolve();
     const forwardRoomName = () => {
       client.emit(RoomEvent.Name, room);
     };
@@ -566,6 +568,9 @@ export function createSyncDriver(): SyncDriver {
       room.removeListener(RoomEvent.Name, forwardRoomName);
     }
     if (!existingRoom) client.emit(ClientEvent.Room, room);
+    states.forEach((event) => {
+      client.emit(ClientEvent.Event, event);
+    });
 
     const events = [
       ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),

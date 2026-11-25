@@ -220,6 +220,74 @@ export const roomsCases = [
     }
   }),
 
+  contractTest('no-op explicit names do not block later state listeners', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!noop-name:example.org';
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId, membership: 'join' }],
+      });
+      expect(core.rooms.room(roomId).getSnapshot().value?.name).toBe('Empty room');
+      const observedTypes: string[] = [];
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId === roomId) observedTypes.push(entry.eventType);
+      });
+
+      try {
+        await harness.applySyncFixture({
+          rooms: [{ roomId, membership: 'join', name: 'Empty room' }],
+        });
+        await harness.applySyncFixture({
+          rooms: [{ roomId, membership: 'join', topic: 'After no-op name' }],
+        });
+
+        expect(observedTypes).toEqual(['m.room.name', 'm.room.topic']);
+        expect(core.rooms.state(roomId, 'm.room.topic').getSnapshot().value).toEqual({
+          topic: 'After no-op name',
+        });
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('state listeners observe derived names after member joins', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!derived-name:example.org';
+    try {
+      await harness.applySyncFixture({
+        rooms: [{ roomId, membership: 'join' }],
+      });
+      let observedName: string | undefined;
+      const unsubscribe = core.rooms.onState((entry) => {
+        if (entry.roomId !== roomId || entry.eventType !== 'm.room.member') return;
+        if (entry.stateKey !== '@alice:example.org') return;
+        observedName = core.rooms.room(roomId).getSnapshot().value?.name;
+        expect(observedName).toBe('Empty room (was Alice)');
+      });
+
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              members: [{ userId: '@alice:example.org', displayName: 'Alice' }],
+            },
+          ],
+        });
+        expect(observedName).toBe('Empty room (was Alice)');
+        expect(core.rooms.room(roomId).getSnapshot().value?.name).toBe('Empty room (was Alice)');
+      } finally {
+        unsubscribe();
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
   contractTest('state listeners observe updated member counts', async (harness) => {
     const core = await harness.create();
     const roomId = '!member-refresh:example.org';

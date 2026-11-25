@@ -751,11 +751,20 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   };
 
   type StateListenerEntry = RoomStateEntry & { roomId: string; eventType: string };
+  type PendingStateEntry = { readonly event: MatrixEvent; readonly entry: StateListenerEntry };
   const stateListeners = new Set<(entry: StateListenerEntry) => void>();
-  let pendingStateEntries: StateListenerEntry[] = [];
-  const pendingNameRooms = new Set<string>();
+  let pendingStateEntries: PendingStateEntry[] = [];
   const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
     entries.forEach((entry) => stateListeners.forEach((listener) => listener(entry)));
+  };
+  const takePendingStateEntries = (roomIds?: ReadonlySet<string>): StateListenerEntry[] => {
+    const ready = pendingStateEntries
+      .filter(({ entry }) => roomIds === undefined || roomIds.has(entry.roomId))
+      .map(({ entry }) => entry);
+    pendingStateEntries = pendingStateEntries.filter(
+      ({ entry }) => roomIds !== undefined && !roomIds.has(entry.roomId)
+    );
+    return ready;
   };
 
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
@@ -985,43 +994,43 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (roomId && eventType) publishStateList(roomId, eventType);
     });
   };
-  client.on(
-    RoomStateEvent.Events,
-    (event: MatrixEvent, _state: unknown, previousEvent: MatrixEvent | null) => {
-      const roomId = event.getRoomId() ?? '';
-      pendingStateEntries.push({
-        roomId,
+  client.on(RoomStateEvent.Events, (event: MatrixEvent) => {
+    pendingStateEntries.push({
+      event,
+      entry: {
+        roomId: event.getRoomId() ?? '',
         eventType: event.getType(),
         stateKey: event.getStateKey() ?? '',
         content: event.getContent() as JsonObject,
         eventId: event.getId() ?? undefined,
         sender: event.getSender() ?? undefined,
         timestamp: event.getTs() ?? undefined,
-      });
-      if (event.getType() === 'm.room.name') {
-        const previousName = previousEvent?.getContent<{ name?: unknown }>().name;
-        const nextName = event.getContent<{ name?: unknown }>().name;
-        if (!Object.is(previousName, nextName)) pendingNameRooms.add(roomId);
-      }
-    }
-  );
-  client.on(RoomStateEvent.Update, () => {
-    refresh();
-    const ready = pendingStateEntries.filter((entry) => !pendingNameRooms.has(entry.roomId));
-    pendingStateEntries = pendingStateEntries.filter((entry) => pendingNameRooms.has(entry.roomId));
-    notifyStateListeners(ready);
-    pendingNameRooms.forEach((roomId) => {
-      if (!pendingStateEntries.some((entry) => entry.roomId === roomId))
-        pendingNameRooms.delete(roomId);
+      },
     });
   });
-  client.on(RoomEvent.Name, (room: Room) => {
-    refresh();
-    pendingNameRooms.delete(room.roomId);
-    const ready = pendingStateEntries.filter((entry) => entry.roomId === room.roomId);
-    pendingStateEntries = pendingStateEntries.filter((entry) => entry.roomId !== room.roomId);
-    notifyStateListeners(ready);
+  // Both sync v2 and sliding sync emit ClientEvent.Event only after room.recalculate().
+  // RoomState.update is earlier: member state is ready, but a derived room name may not be.
+  client.on(ClientEvent.Event, (event: MatrixEvent) => {
+    const eventId = event.getId();
+    const readyRooms = new Set<string>();
+    pendingStateEntries.forEach(({ event: pendingEvent, entry }) => {
+      const pendingEventId = pendingEvent.getId();
+      if (pendingEvent === event || (eventId && pendingEventId === eventId)) {
+        readyRooms.add(entry.roomId);
+      }
+    });
+    const ready = takePendingStateEntries(readyRooms);
+    if (ready.length > 0) {
+      refresh();
+      notifyStateListeners(ready);
+    }
   });
+  // A sync-boundary fallback also covers SDK paths that do not emit ClientEvent.Event.
+  client.on(ClientEvent.Sync, () => {
+    refresh();
+    notifyStateListeners(takePendingStateEntries());
+  });
+  client.on(RoomEvent.Name, refresh);
   client.on(ClientEvent.Room, refresh);
   client.on(RoomEvent.MyMembership, refresh);
   client.on(ClientEvent.AccountData, refresh);
