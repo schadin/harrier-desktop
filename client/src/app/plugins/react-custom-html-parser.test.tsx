@@ -168,6 +168,47 @@ describe('renderMatrixMention', () => {
     });
   });
 
+  it('keeps core room order when multiple live rooms share an alias', () => {
+    const core = makeCore({
+      rooms: [
+        makeRoom('!first:example.org', 'First General', GENERAL_ALIAS),
+        makeRoom(GENERAL_ROOM_ID, 'General', GENERAL_ALIAS),
+      ],
+    });
+
+    const mention = renderMatrixMention(
+      core,
+      undefined,
+      `https://matrix.to/#/${GENERAL_ALIAS}`,
+      {}
+    );
+
+    expect(mention?.props).toMatchObject({
+      'data-mention-id': '!first:example.org',
+      children: '#First General',
+    });
+  });
+
+  it('does not treat a sole tombstoned alias owner as a joined mention room', () => {
+    const core = makeCore({
+      rooms: [makeRoom('!old:example.org', 'Old General', GENERAL_ALIAS)],
+      tombstonedRoomIds: ['!old:example.org'],
+    });
+
+    const mention = renderMatrixMention(
+      core,
+      undefined,
+      `https://matrix.to/#/${GENERAL_ALIAS}?via=via.example.org`,
+      {}
+    );
+
+    expect(mention?.props).toMatchObject({
+      'data-mention-id': GENERAL_ALIAS,
+      'data-mention-via': 'via.example.org',
+      children: GENERAL_ALIAS,
+    });
+  });
+
   it('keeps an unknown room alias and its via servers as fallback mention data', () => {
     const core = makeCore();
 

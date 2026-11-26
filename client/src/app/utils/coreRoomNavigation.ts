@@ -5,11 +5,34 @@ import { isRoomAlias } from './matrix';
 const isTombstoned = (core: HarrierCore, roomId: string): boolean =>
   core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().value !== null;
 
-export const getCanonicalAliasRoomId = (core: HarrierCore, alias: string): string | undefined =>
-  core.rooms.all.getSnapshot().value.find(({ roomId }) => {
+export const getCanonicalAliasRoomId = (
+  core: HarrierCore,
+  alias: string,
+  candidateRoomIds?: readonly string[]
+): string | undefined => {
+  const candidates =
+    candidateRoomIds ?? core.rooms.all.getSnapshot().value.map(({ roomId }) => roomId);
+  return candidates.find((roomId) => {
     const room = core.rooms.room(roomId).getSnapshot().value;
     return room?.canonicalAlias === alias && !isTombstoned(core, roomId);
-  })?.roomId;
+  });
+};
+
+export const getCanonicalAliasRoomIdWithTombstoneFallback = (
+  core: HarrierCore,
+  alias: string
+): string | undefined => {
+  const aliasedRooms = core.rooms.all
+    .getSnapshot()
+    .value.filter(
+      ({ roomId }) => core.rooms.room(roomId).getSnapshot().value?.canonicalAlias === alias
+    );
+
+  return (
+    aliasedRooms.find(({ roomId }) => !isTombstoned(core, roomId))?.roomId ??
+    aliasedRooms[0]?.roomId
+  );
+};
 
 export const getCanonicalAliasOrRoomId = (
   core: HarrierCore,
@@ -52,7 +75,8 @@ const getSpecialUsers = (core: HarrierCore, roomId: string): Set<string> => {
   }
 
   const powerLevels = core.rooms.powerLevels(roomId).getSnapshot().value;
-  const defaultPower = powerLevels.users_default ?? 0;
+  const defaultPower =
+    typeof powerLevels.users_default === 'number' ? powerLevels.users_default : 0;
   if (powerLevels.users && typeof powerLevels.users === 'object') {
     Object.entries(powerLevels.users).forEach(([userId, powerLevel]) => {
       if (powerLevel > defaultPower) specialUsers.add(userId);

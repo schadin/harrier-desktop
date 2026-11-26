@@ -1,7 +1,7 @@
 import { useMatch, useParams } from 'react-router-dom';
 import { useSyncExternalStore } from 'react';
 import { isRoomAlias } from '../../utils/matrix';
-import { getCanonicalAliasRoomId } from '../../utils/coreRoomNavigation';
+import { getCanonicalAliasRoomIdWithTombstoneFallback } from '../../utils/coreRoomNavigation';
 import { useCore } from '../useCore';
 import { useCoreRoomNavigationRevision } from '../useCoreRoomNavigation';
 import { getSpaceLobbyPath, getSpaceSearchPath } from '../../pages/pathUtils';
@@ -16,7 +16,7 @@ export const useSelectedSpace = (): string | undefined => {
   useCoreRoomNavigationRevision();
   const { spaceIdOrAlias } = useParams();
   if (!spaceIdOrAlias || !isRoomAlias(spaceIdOrAlias)) return spaceIdOrAlias;
-  const aliasedSpaceId = getCanonicalAliasRoomId(core, spaceIdOrAlias);
+  const aliasedSpaceId = getCanonicalAliasRoomIdWithTombstoneFallback(core, spaceIdOrAlias);
   return aliasedSpaceId && rooms.some((room) => room.roomId === aliasedSpaceId)
     ? aliasedSpaceId
     : spaceIdOrAlias;

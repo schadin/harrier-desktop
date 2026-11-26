@@ -1,26 +1,48 @@
-import { useCallback, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { StateEvent } from '../../types/matrix/room';
 import { useCore } from './useCore';
 
-/** Re-renders alias/tombstone consumers after core publishes the corresponding room state. */
-export const useCoreRoomNavigationRevision = (): number => {
+/** Race-free snapshot of the core stores that determine alias/tombstone navigation. */
+export const useCoreRoomNavigationRevision = (): string => {
   const core = useCore();
-  const revision = useRef(0);
-  const subscribe = useCallback(
-    (onChange: () => void) =>
-      core.rooms.onState((entry) => {
-        if (
-          entry.eventType !== StateEvent.RoomCanonicalAlias &&
-          entry.eventType !== StateEvent.RoomTombstone
-        ) {
-          return;
-        }
-        revision.current += 1;
-        onChange();
-      }),
-    [core]
+  const getSnapshot = useCallback(() => {
+    const allRooms = core.rooms.all.getSnapshot();
+    const revisions = [allRooms.revision];
+    allRooms.value.forEach(({ roomId }) => {
+      revisions.push(
+        core.rooms.room(roomId).getSnapshot().revision,
+        core.rooms.stateEntry(roomId, StateEvent.RoomCanonicalAlias).getSnapshot().revision,
+        core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().revision
+      );
+    });
+    return revisions.join(':');
+  }, [core]);
+
+  const allRooms = useSyncExternalStore(
+    core.rooms.all.subscribe,
+    core.rooms.all.getSnapshot,
+    core.rooms.all.getSnapshot
   );
-  const getSnapshot = useCallback(() => revision.current, []);
+  const roomIds = useMemo(() => allRooms.value.map(({ roomId }) => roomId), [allRooms]);
+  const navigationStores = useMemo(
+    () =>
+      roomIds.flatMap((roomId) => [
+        core.rooms.room(roomId),
+        core.rooms.stateEntry(roomId, StateEvent.RoomCanonicalAlias),
+        core.rooms.stateEntry(roomId, StateEvent.RoomTombstone),
+      ]),
+    [core, roomIds]
+  );
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const unsubscribes = [
+        core.rooms.all.subscribe(onChange),
+        ...navigationStores.map((store) => store.subscribe(onChange)),
+      ];
+      return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+    },
+    [core, navigationStores]
+  );
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 };

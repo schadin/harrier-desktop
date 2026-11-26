@@ -101,15 +101,20 @@ let useSelectedSpace: typeof import('./useSelectedSpace').useSelectedSpace;
 const renderSelection = (
   kind: 'room' | 'space',
   fixture: ReturnType<typeof createCore>,
-  onSelection: (value: string | undefined) => void
+  onSelection: (value: string | undefined) => void,
+  duringRender?: () => void
 ) => {
   function RoomProbe() {
-    onSelection(useSelectedRoom());
+    const selection = useSelectedRoom();
+    onSelection(selection);
+    duringRender?.();
     return null;
   }
 
   function SpaceProbe() {
-    onSelection(useSelectedSpace());
+    const selection = useSelectedSpace();
+    onSelection(selection);
+    duringRender?.();
     return null;
   }
 
@@ -211,6 +216,111 @@ describe('selected route room state subscriptions', () => {
           fixture.emitState(StateEvent.RoomTombstone);
         });
         expect(selection).toBe(fixture.firstRoom.roomId);
+      } finally {
+        await act(async () => root.unmount());
+      }
+    }
+  );
+
+  it.each(['room', 'space'] as const)(
+    'selects the sole tombstoned alias owner for the %s route',
+    async (kind) => {
+      const fixture = createCore();
+      fixture.secondStore.publish({ ...fixture.secondRoom, canonicalAlias: undefined });
+      let selection: string | undefined;
+      const { root, render } = renderSelection(kind, fixture, (value) => {
+        selection = value;
+      });
+
+      try {
+        await act(async () => render());
+        expect(selection).toBe(fixture.firstRoom.roomId);
+      } finally {
+        await act(async () => root.unmount());
+      }
+    }
+  );
+
+  it.each(['room', 'space'] as const)(
+    'keeps the selected %s on its owner when the live room becomes tombstoned',
+    async (kind) => {
+      const fixture = createCore();
+      fixture.secondStore.publish({ ...fixture.secondRoom, canonicalAlias: undefined });
+      fixture.tombstoneStore.publish(null);
+      let selection: string | undefined;
+      const { root, render } = renderSelection(kind, fixture, (value) => {
+        selection = value;
+      });
+
+      try {
+        await act(async () => render());
+        expect(selection).toBe(fixture.firstRoom.roomId);
+
+        await act(async () => {
+          fixture.tombstoneStore.publish({ replacement_room: '!replacement:example.org' });
+          fixture.emitState(StateEvent.RoomTombstone);
+        });
+        expect(selection).toBe(fixture.firstRoom.roomId);
+      } finally {
+        await act(async () => root.unmount());
+      }
+    }
+  );
+
+  it.each(['room', 'space'] as const)(
+    'observes a %s alias change published between render and subscribe',
+    async (kind) => {
+      const fixture = createCore();
+      fixture.tombstoneStore.publish(null);
+      let published = false;
+      let selection: string | undefined;
+      const { root, render } = renderSelection(
+        kind,
+        fixture,
+        (value) => {
+          selection = value;
+        },
+        () => {
+          if (published) return;
+          published = true;
+          fixture.firstStore.publish({ ...fixture.firstRoom, canonicalAlias: undefined });
+        }
+      );
+
+      try {
+        await act(async () => render());
+        expect(selection).toBe(fixture.secondRoom.roomId);
+        expect(fixture.allStore.getSnapshot().revision).toBe(0);
+      } finally {
+        await act(async () => root.unmount());
+      }
+    }
+  );
+
+  it.each(['room', 'space'] as const)(
+    'observes a %s tombstone published between render and subscribe',
+    async (kind) => {
+      const fixture = createCore();
+      fixture.tombstoneStore.publish(null);
+      let published = false;
+      let selection: string | undefined;
+      const { root, render } = renderSelection(
+        kind,
+        fixture,
+        (value) => {
+          selection = value;
+        },
+        () => {
+          if (published) return;
+          published = true;
+          fixture.tombstoneStore.publish({ replacement_room: '!replacement:example.org' });
+        }
+      );
+
+      try {
+        await act(async () => render());
+        expect(selection).toBe(fixture.secondRoom.roomId);
+        expect(fixture.allStore.getSnapshot().revision).toBe(0);
       } finally {
         await act(async () => root.unmount());
       }

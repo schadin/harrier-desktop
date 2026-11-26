@@ -22,11 +22,12 @@ import FocusTrap from 'focus-trap-react';
 import * as css from './style.css';
 import { RoomAvatar } from '../room-avatar';
 import { getMxIdLocalPart, isRoomAlias } from '../../utils/matrix';
+import { getCanonicalAliasRoomId } from '../../utils/coreRoomNavigation';
 import { nameInitials } from '../../utils/common';
 import { millify } from '../../plugins/millify';
 import { AsyncStatus, useAsyncCallback } from '../../hooks/useAsyncCallback';
 import { onEnterOrSpace, stopPropagation } from '../../utils/keyboard';
-import { RoomType, StateEvent } from '../../../types/matrix/room';
+import { RoomType } from '../../../types/matrix/room';
 import { useElementSizeObserver } from '../../hooks/useElementSizeObserver';
 import { useCore } from '../../hooks/useCore';
 import { useCoreRoom } from '../../hooks/useCoreRoom';
@@ -163,12 +164,7 @@ export const RoomCard = as<'div', RoomCardProps>(
     const core = useCore();
     const joinedRoomId = useMemo(() => {
       if (isRoomAlias(roomIdOrAlias)) {
-        return allRooms.find((roomId) => {
-          const room = core.rooms.room(roomId).getSnapshot().value;
-          const tombstoned =
-            core.rooms.stateEntry(roomId, StateEvent.RoomTombstone).getSnapshot().value !== null;
-          return room?.canonicalAlias === roomIdOrAlias && !tombstoned;
-        });
+        return getCanonicalAliasRoomId(core, roomIdOrAlias, allRooms);
       }
       return allRooms.includes(roomIdOrAlias) ? roomIdOrAlias : undefined;
     }, [core, allRooms, roomIdOrAlias]);

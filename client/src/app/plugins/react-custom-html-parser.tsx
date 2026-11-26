@@ -21,9 +21,9 @@ import Linkify from 'linkify-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { ChildNode } from 'domhandler';
 import type { HarrierCore, RoomView } from '@harrier/core';
-import { StateEvent } from '../../types/matrix/room';
 import * as css from '../styles/CustomHtml.css';
 import { getMxIdLocalPart, isRoomAlias } from '../utils/matrix';
+import { getCanonicalAliasRoomId } from '../utils/coreRoomNavigation';
 import { EMOJI_PATTERN, sanitizeForRegex, URL_NEG_LB } from '../utils/regex';
 import { getHexcodeForEmoji, getShortcodeFor } from './emoji';
 import { findAndReplace } from '../utils/findAndReplace';
@@ -67,20 +67,11 @@ export const makeMentionCustomProps = (
 });
 
 const getMentionRoom = (core: HarrierCore, roomIdOrAlias: string): RoomView | null => {
-  if (!isRoomAlias(roomIdOrAlias)) {
-    return core.rooms.room(roomIdOrAlias).getSnapshot().value;
-  }
+  const roomId = isRoomAlias(roomIdOrAlias)
+    ? getCanonicalAliasRoomId(core, roomIdOrAlias) ?? roomIdOrAlias
+    : roomIdOrAlias;
 
-  const aliasedRoom = core.rooms.all
-    .getSnapshot()
-    .value.map((summary) => core.rooms.room(summary.roomId).getSnapshot().value)
-    .find(
-      (room): room is RoomView =>
-        room?.canonicalAlias === roomIdOrAlias &&
-        core.rooms.stateEntry(room.roomId, StateEvent.RoomTombstone).getSnapshot().value === null
-    );
-
-  return core.rooms.room(aliasedRoom?.roomId ?? roomIdOrAlias).getSnapshot().value;
+  return core.rooms.room(roomId).getSnapshot().value;
 };
 
 export const renderMatrixMention = (

@@ -235,6 +235,22 @@ describe('core room navigation helpers', () => {
     ).toBeUndefined();
   });
 
+  it('treats a malformed users_default as zero when scoring elevated users', () => {
+    const malformedPowerLevels = {
+      users_default: 'invalid',
+      users: { '@admin:example.org': 10 },
+    } as unknown as IPowerLevels;
+    const { core } = makeCore([
+      { room: makeRoom('!room:example.org'), powerLevels: malformedPowerLevels },
+      { room: makeRoom('!parent:example.org'), powerLevels: malformedPowerLevels },
+      { room: makeRoom('!other:example.org') },
+    ]);
+
+    expect(
+      guessPerfectParent(core, '!room:example.org', ['!other:example.org', '!parent:example.org'])
+    ).toBe('!parent:example.org');
+  });
+
   it('keeps the sole parent even when no special users match', () => {
     const { core } = makeCore([
       { room: makeRoom('!room:example.org') },
