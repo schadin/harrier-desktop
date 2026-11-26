@@ -4,7 +4,8 @@ import { getUIAFlowForStages } from '../utils/matrix-uia';
 import { useSupportedUIAFlows, useUIACompleted, useUIAFlow } from '../hooks/useUIAFlows';
 import { UIAFlowOverlay } from './UIAFlowOverlay';
 import { PasswordStage, SSOStage } from './uia-stages';
-import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useCore } from '../hooks/useCore';
+import { getSessionUserId, useCoreSession } from '../hooks/useCoreSession';
 
 export const SUPPORTED_IN_APP_UIA_STAGES = ['m.login.password', 'm.login.sso'];
 
@@ -21,13 +22,18 @@ type ActionUIAProps = {
   onCancel: () => void;
 };
 export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIAProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const session = useCoreSession();
   const completed = useUIACompleted(authData);
   const { getStageToComplete } = useUIAFlow(authData, ongoingFlow);
 
   const stageToComplete = getStageToComplete();
 
   if (!stageToComplete) return null;
+  const ssoRedirectURL =
+    stageToComplete.type === 'm.login.sso'
+      ? core.auth.fallbackAuthUrl(stageToComplete.type, stageToComplete.session ?? '')
+      : null;
   return (
     <UIAFlowOverlay
       currentStep={completed.length + 1}
@@ -36,15 +42,15 @@ export function ActionUIA({ authData, ongoingFlow, action, onCancel }: ActionUIA
     >
       {stageToComplete.type === 'm.login.password' && (
         <PasswordStage
-          userId={mx.getUserId()!}
+          userId={getSessionUserId(session)}
           stageData={stageToComplete}
           onCancel={onCancel}
           submitAuthDict={action}
         />
       )}
-      {stageToComplete.type === 'm.login.sso' && stageToComplete.session && (
+      {stageToComplete.type === 'm.login.sso' && ssoRedirectURL !== null && (
         <SSOStage
-          ssoRedirectURL={mx.getFallbackAuthUrl('m.login.sso', stageToComplete.session)}
+          ssoRedirectURL={ssoRedirectURL}
           stageData={stageToComplete}
           onCancel={onCancel}
           submitAuthDict={action}

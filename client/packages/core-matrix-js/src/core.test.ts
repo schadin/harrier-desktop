@@ -59,6 +59,59 @@ const emitTimeline = (client: MatrixClient, event: MatrixEvent, room: Room) => {
   });
 };
 
+describe('matrix-js UIA fallback auth', () => {
+  it('forwards the stage and session to the current SDK client without HTTP requests', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const fallbackSpy = vi.spyOn(driver.client, 'getFallbackAuthUrl');
+    const requestSpy = vi.spyOn(driver.client.http, 'authedRequest');
+    try {
+      const authSessionId = 'uia session+/=&?';
+      const sessionBefore = core.auth.session.getSnapshot();
+      const first = core.auth.fallbackAuthUrl('m.login.sso', authSessionId);
+      const second = core.auth.fallbackAuthUrl('m.login.sso', authSessionId);
+
+      expect(fallbackSpy).toHaveBeenNthCalledWith(1, 'm.login.sso', authSessionId);
+      expect(fallbackSpy).toHaveBeenNthCalledWith(2, 'm.login.sso', authSessionId);
+      expect(second).toBe(first);
+      expect(core.auth.session.getSnapshot()).toBe(sessionBefore);
+      expect(requestSpy).not.toHaveBeenCalled();
+    } finally {
+      fallbackSpy.mockRestore();
+      requestSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it('does not call the SDK for an empty stage or session', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const fallbackSpy = vi.spyOn(driver.client, 'getFallbackAuthUrl');
+    try {
+      expect(core.auth.fallbackAuthUrl('', 'uia-session')).toBeNull();
+      expect(core.auth.fallbackAuthUrl('m.login.sso', '')).toBeNull();
+      expect(fallbackSpy).not.toHaveBeenCalled();
+    } finally {
+      fallbackSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it('returns null when SDK fallback URL construction throws', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const fallbackSpy = vi.spyOn(driver.client, 'getFallbackAuthUrl').mockImplementation(() => {
+      throw new Error('Unable to build fallback URL');
+    });
+    try {
+      expect(core.auth.fallbackAuthUrl('m.login.sso', 'uia-session')).toBeNull();
+    } finally {
+      fallbackSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+});
+
 describe('matrix-js core state listener flushing', () => {
   it('does not flush another room with the same event id', async () => {
     const driver = createSyncDriver();

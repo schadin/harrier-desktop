@@ -94,6 +94,7 @@ export type AuthOperations = {
 export type AuthModule = {
   readonly session: SnapshotStore<SessionView | null>;
   accessToken(): string | null;
+  fallbackAuthUrl(loginType: string, authSessionId: string): string | null;
   readonly sync: SnapshotStore<SyncView>;
   readonly capabilities: SnapshotStore<CapabilitiesView>;
   readonly authMetadata: SnapshotStore<AuthMetadataView | null>;

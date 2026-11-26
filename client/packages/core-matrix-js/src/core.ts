@@ -1781,6 +1781,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     auth: {
       session: sessionStore,
       accessToken: () => client.getAccessToken() ?? null,
+      fallbackAuthUrl(loginType, authSessionId) {
+        if (!sessionStore.getSnapshot().value || !loginType || !authSessionId) return null;
+        try {
+          return client.getFallbackAuthUrl(loginType, authSessionId) || null;
+        } catch {
+          return null;
+        }
+      },
       capabilities: capabilitiesStore,
       authMetadata: authMetadataStore,
       accountDataTypes: globalAccountDataTypesStore,

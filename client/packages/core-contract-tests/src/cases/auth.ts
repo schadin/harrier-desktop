@@ -1,4 +1,4 @@
-import { expect } from 'vitest';
+import { expect, vi } from 'vitest';
 import { contractTest } from '../suite';
 
 export const authCases = [
@@ -64,4 +64,65 @@ export const authCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest(
+    'UIA fallback auth returns an encoded HTTP(S) URL for the active session',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        const authSessionId = 'uia session+/=&?';
+        const fallbackUrl = core.auth.fallbackAuthUrl('m.login.sso', authSessionId);
+        expect(fallbackUrl).not.toBeNull();
+        const url = new URL(fallbackUrl!);
+        expect(['http:', 'https:']).toContain(url.protocol);
+        expect(url.pathname).toBe('/_matrix/client/v3/auth/m.login.sso/fallback/web');
+        expect(url.searchParams.get('session')).toBe(authSessionId);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('UIA fallback auth returns null for an empty stage or session', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(core.auth.fallbackAuthUrl('', 'uia-session')).toBeNull();
+      expect(core.auth.fallbackAuthUrl('m.login.sso', '')).toBeNull();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('UIA fallback auth returns null after logout', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(core.auth.fallbackAuthUrl('m.login.sso', 'uia-session')).not.toBeNull();
+      const result = await core.auth.logout();
+      expect(result.ok).toBe(true);
+      expect(core.auth.fallbackAuthUrl('m.login.sso', 'uia-session')).toBeNull();
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'UIA fallback auth is repeatable without session mutation or HTTP requests',
+    async (harness) => {
+      const core = await harness.create();
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+      try {
+        const sessionBefore = core.auth.session.getSnapshot();
+        const first = core.auth.fallbackAuthUrl('m.login.sso', 'uia-session');
+        const second = core.auth.fallbackAuthUrl('m.login.sso', 'uia-session');
+        expect(first).not.toBeNull();
+        expect(second).toBe(first);
+        expect(core.auth.session.getSnapshot()).toBe(sessionBefore);
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+        await harness.dispose(core);
+      }
+    }
+  ),
 ];
