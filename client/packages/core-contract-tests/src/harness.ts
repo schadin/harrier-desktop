@@ -99,6 +99,7 @@ export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
   readonly presence?: readonly SyncFixturePresence[];
   readonly devices?: readonly SyncFixtureDevice[];
+  readonly threepids?: unknown;
 };
 
 export type ContractOperationFailure = {

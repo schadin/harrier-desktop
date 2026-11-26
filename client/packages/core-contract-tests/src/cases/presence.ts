@@ -82,6 +82,104 @@ export const presenceCases = [
     }
   }),
 
+  contractTest(
+    'own profile display name preserves exact input and updates the snapshot',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        const profile = core.presence.profile('@tester:example.org');
+        expect(profile.getSnapshot().value).toEqual({ userId: '@tester:example.org' });
+
+        const result = await core.presence.setOwnProfile({ displayName: '  Alice  ' });
+
+        expect(result).toEqual({ ok: true, value: undefined });
+        expect(profile.getSnapshot().value).toEqual({
+          userId: '@tester:example.org',
+          displayName: '  Alice  ',
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('own profile avatar accepts MXC URLs and removes null avatars', async (harness) => {
+    const core = await harness.create();
+    try {
+      const profile = core.presence.profile('@tester:example.org');
+      const avatarUrl = 'mxc://example.org/avatar';
+
+      const uploaded = await core.presence.setOwnProfile({ avatarUrl });
+      expect(uploaded).toEqual({ ok: true, value: undefined });
+      expect(profile.getSnapshot().value).toEqual({
+        userId: '@tester:example.org',
+        avatarUrl,
+      });
+
+      const removed = await core.presence.setOwnProfile({ avatarUrl: null });
+      expect(removed).toEqual({ ok: true, value: undefined });
+      expect(profile.getSnapshot().value).toEqual({ userId: '@tester:example.org' });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('own profile rejects an empty update as invalid-request', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.presence.setOwnProfile({});
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({ code: 'invalid-request', retryable: false });
+      }
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'own profile partial failure keeps the successful display name update',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        const profile = core.presence.profile('@tester:example.org');
+        const initial = await core.presence.setOwnProfile({
+          avatarUrl: 'mxc://example.org/old-avatar',
+        });
+        expect(initial.ok).toBe(true);
+        harness.failNextOperation('/avatar_url', {
+          operation: '/avatar_url',
+          httpStatus: 403,
+          errcode: 'M_FORBIDDEN',
+          error: 'Forbidden',
+        });
+
+        const result = await core.presence.setOwnProfile({
+          displayName: 'Alice',
+          avatarUrl: 'mxc://example.org/new-avatar',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toMatchObject({
+            code: 'forbidden',
+            retryable: false,
+            httpStatus: 403,
+            errcode: 'M_FORBIDDEN',
+          });
+        }
+        expect(profile.getSnapshot().value).toEqual({
+          userId: '@tester:example.org',
+          displayName: 'Alice',
+          avatarUrl: 'mxc://example.org/old-avatar',
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('typing members are listed for the room', async (harness) => {
     const core = await harness.create();
     try {

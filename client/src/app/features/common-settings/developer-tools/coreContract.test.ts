@@ -85,4 +85,39 @@ describe('core contract boundary', () => {
     expect(source).toContain('toMediaRef(');
     expect(source).not.toContain('mxcUrlToHttp');
   });
+
+  it('loads contact 3PIDs through core while rendering email addresses only', () => {
+    const source = readTarget('src/app/features/settings/account/ContactInfo.tsx');
+    expect(source).toContain('unwrapCoreResult(core.auth.threePids())');
+    expect(source).toContain("id.medium === 'email'");
+    expect(source).not.toContain('useMatrixClient');
+    expect(source).not.toContain('mx.getThreePids');
+    expect(source).not.toContain('.threepids');
+  });
+
+  it('writes own profile fields through core without changing input or avatar timing', () => {
+    const source = readTarget('src/app/features/settings/account/Profile.tsx');
+    expect(source).toContain('core.presence.setOwnProfile({ avatarUrl: mxc })');
+    expect(source).toContain('core.presence.setOwnProfile({ avatarUrl: null })');
+    expect(source).toContain('core.presence.setOwnProfile({ displayName: name })');
+    expect(source).toContain('changeDisplayName(name);');
+    expect(source).not.toContain('changeDisplayName(name.trim())');
+    expect(source).toContain('getSessionUserId(session)');
+    expect(source).toContain('useUserProfile(userId)');
+    expect(source).toContain("capabilities['m.set_avatar_url']?.enabled === false");
+    expect(source).toContain("capabilities['m.set_displayname']?.enabled === false");
+    expect(source).not.toContain('useMatrixClient');
+    expect(source).not.toContain('mx.setAvatarUrl');
+    expect(source).not.toContain('mx.setDisplayName');
+
+    const uploadCall = source.indexOf('core.presence.setOwnProfile({ avatarUrl: mxc })');
+    const uploadCleanup = source.indexOf('handleRemoveUpload();', uploadCall);
+    expect(uploadCall).toBeGreaterThanOrEqual(0);
+    expect(uploadCleanup).toBeGreaterThan(uploadCall);
+
+    const removeCall = source.indexOf('core.presence.setOwnProfile({ avatarUrl: null })');
+    const removeCleanup = source.indexOf('setAlertRemove(false);', removeCall);
+    expect(removeCall).toBeGreaterThanOrEqual(0);
+    expect(removeCleanup).toBeGreaterThan(removeCall);
+  });
 });

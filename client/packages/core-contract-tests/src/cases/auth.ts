@@ -125,4 +125,198 @@ export const authCases = [
       }
     }
   ),
+
+  contractTest('3PIDs map homeserver records to typed views in order', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [],
+        threepids: [
+          {
+            medium: 'email',
+            address: 'alice@example.org',
+            validated_at: 1_700_000_000_001,
+            added_at: 1_700_000_000_000,
+            bound: true,
+          },
+          {
+            medium: 'msisdn',
+            address: '+15550001',
+            validated_at: 1_700_000_000_002,
+            added_at: 1_700_000_000_003,
+            bound: false,
+          },
+        ],
+      });
+
+      const result = await core.auth.threePids();
+
+      expect(result).toEqual({
+        ok: true,
+        value: [
+          {
+            medium: 'email',
+            address: 'alice@example.org',
+            validatedAt: 1_700_000_000_001,
+            addedAt: 1_700_000_000_000,
+            bound: true,
+          },
+          {
+            medium: 'msisdn',
+            address: '+15550001',
+            validatedAt: 1_700_000_000_002,
+            addedAt: 1_700_000_000_003,
+            bound: false,
+          },
+        ],
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    '3PIDs filter unknown media and malformed addresses without reordering',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [],
+          threepids: [
+            null,
+            'not-a-record',
+            [],
+            { medium: 'unknown', address: 'unknown@example.org' },
+            { medium: 'email' },
+            { medium: 'email', address: 42 },
+            { medium: 'msisdn', address: ' \t ' },
+            { medium: 'email', address: 'first@example.org' },
+            { medium: 'msisdn', address: '+15550002' },
+            { medium: 'email', address: 'first@example.org' },
+          ],
+        });
+
+        const result = await core.auth.threePids();
+
+        expect(result).toEqual({
+          ok: true,
+          value: [
+            { medium: 'email', address: 'first@example.org' },
+            { medium: 'msisdn', address: '+15550002' },
+            { medium: 'email', address: 'first@example.org' },
+          ],
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    '3PIDs keep records with missing or invalid optional timestamps',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [],
+          threepids: [
+            { medium: 'email', address: 'no-times@example.org' },
+            {
+              medium: 'email',
+              address: 'zero@example.org',
+              validated_at: 0,
+              added_at: 0,
+              bound: false,
+            },
+            {
+              medium: 'msisdn',
+              address: '+15550003',
+              validated_at: Number.NaN,
+              added_at: Number.POSITIVE_INFINITY,
+              bound: 'false',
+            },
+            {
+              medium: 'email',
+              address: 'string-times@example.org',
+              validated_at: '1700000000000',
+              added_at: null,
+            },
+          ],
+        });
+
+        const result = await core.auth.threePids();
+
+        expect(result).toEqual({
+          ok: true,
+          value: [
+            { medium: 'email', address: 'no-times@example.org' },
+            {
+              medium: 'email',
+              address: 'zero@example.org',
+              validatedAt: 0,
+              addedAt: 0,
+              bound: false,
+            },
+            { medium: 'msisdn', address: '+15550003' },
+            { medium: 'email', address: 'string-times@example.org' },
+          ],
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('3PIDs return an empty list for missing or malformed arrays', async (harness) => {
+    const core = await harness.create();
+    try {
+      const missing = await core.auth.threePids();
+      expect(missing).toEqual({ ok: true, value: [] });
+
+      await harness.applySyncFixture({ rooms: [], threepids: null });
+      expect(await core.auth.threePids()).toEqual({ ok: true, value: [] });
+
+      await harness.applySyncFixture({ rooms: [], threepids: { medium: 'email' } });
+      expect(await core.auth.threePids()).toEqual({ ok: true, value: [] });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  ...(
+    [
+      [401, 'M_UNAUTHORIZED', 'unauthorized', false, undefined],
+      [403, 'M_FORBIDDEN', 'forbidden', false, undefined],
+      [429, 'M_LIMIT_EXCEEDED', 'rate-limited', true, 1200],
+    ] as const
+  ).map(([httpStatus, errcode, code, retryable, retryAfterMs]) =>
+    contractTest(`3PID HTTP ${httpStatus} failures normalize to ${code}`, async (harness) => {
+      const core = await harness.create();
+      try {
+        harness.failNextOperation('/account/3pid', {
+          operation: '/account/3pid',
+          httpStatus,
+          errcode,
+          error: '3PID request failed',
+          ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+        });
+
+        const result = await core.auth.threePids();
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toMatchObject({
+            code,
+            retryable,
+            httpStatus,
+            errcode,
+            message: '3PID request failed',
+          });
+          if (retryAfterMs !== undefined) expect(result.error.retryAfterMs).toBe(retryAfterMs);
+        }
+      } finally {
+        await harness.dispose(core);
+      }
+    })
+  ),
 ];

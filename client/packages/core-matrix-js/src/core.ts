@@ -41,6 +41,7 @@ import {
   type BackupStatusView,
   type CapabilitiesView,
   type AuthMetadataView,
+  type ThreepidView,
   type CallView,
   type UnreadCountView,
   type UnreadMapEntry,
@@ -175,6 +176,29 @@ const stringOrUndefined = (value: unknown): string | undefined =>
 
 const numberOrUndefined = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const toThreepidViews = (value: unknown): readonly ThreepidView[] => {
+  if (!Array.isArray(value)) return [];
+
+  const views: ThreepidView[] = [];
+  value.forEach((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return;
+    const raw = item as Record<string, unknown>;
+    if (raw.medium !== 'email' && raw.medium !== 'msisdn') return;
+    if (typeof raw.address !== 'string' || raw.address.trim().length === 0) return;
+
+    const validatedAt = numberOrUndefined(raw.validated_at);
+    const addedAt = numberOrUndefined(raw.added_at);
+    views.push({
+      medium: raw.medium,
+      address: raw.address,
+      ...(validatedAt !== undefined ? { validatedAt } : {}),
+      ...(addedAt !== undefined ? { addedAt } : {}),
+      ...(typeof raw.bound === 'boolean' ? { bound: raw.bound } : {}),
+    });
+  });
+  return views;
+};
 
 const attachmentKind = (msgtype: string): MessageAttachmentKind | undefined => {
   switch (msgtype) {
@@ -1943,6 +1967,14 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       refreshCapabilities,
       refreshAuthMetadata,
+      async threePids() {
+        try {
+          const response = await client.getThreePids();
+          return { ok: true, value: toThreepidViews(response?.threepids) };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
       sync: syncStore,
       async start(): Promise<CoreResult<void>> {
         try {
@@ -2665,6 +2697,26 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             ...(info.avatar_url ? { avatarUrl: info.avatar_url } : {}),
             ...(info.displayname ? { displayName: info.displayname } : {}),
           });
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async setOwnProfile(update) {
+        if (update.displayName === undefined && update.avatarUrl === undefined) {
+          return {
+            ok: false,
+            error: new CoreError('invalid-request', 'Empty own profile update'),
+          };
+        }
+
+        try {
+          if (update.displayName !== undefined) {
+            await client.setDisplayName(update.displayName);
+          }
+          if (update.avatarUrl !== undefined) {
+            await client.setAvatarUrl(update.avatarUrl ?? '');
+          }
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: normalizeMatrixError(error) };

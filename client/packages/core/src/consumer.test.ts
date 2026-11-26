@@ -1,5 +1,13 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { HarrierCore, RoomSummaryView, RoomView, TimelineItem } from './index';
+import type {
+  HarrierCore,
+  OwnProfileUpdate,
+  RoomSummaryView,
+  RoomView,
+  ThreepidMediumView,
+  ThreepidView,
+  TimelineItem,
+} from './index';
 
 describe('public contract consumer', () => {
   it('exposes required room activity and optional room version snapshots', () => {
@@ -13,6 +21,14 @@ describe('public contract consumer', () => {
     expectTypeOf<TimelineItem['kind']>().toEqualTypeOf<
       'message' | 'sticker' | 'state' | 'encrypted' | 'redacted' | 'unsupported'
     >();
+  });
+
+  it('exposes own profile updates and homeserver 3PID views', () => {
+    expectTypeOf<ThreepidMediumView>().toEqualTypeOf<'email' | 'msisdn'>();
+    expectTypeOf<OwnProfileUpdate['avatarUrl']>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<ThreepidView['validatedAt']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<ThreepidView['addedAt']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<ThreepidView['bound']>().toEqualTypeOf<boolean | undefined>();
   });
 });
 

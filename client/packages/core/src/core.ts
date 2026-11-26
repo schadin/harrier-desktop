@@ -24,6 +24,7 @@ import type {
   CallView,
   CapabilitiesView,
   AuthMetadataView,
+  ThreepidView,
   LoginFlowsView,
   LoginRequestView,
   LoginResponseView,
@@ -106,6 +107,7 @@ export type AuthModule = {
   setAccountData(type: string, content: JsonObject): Promise<CoreResult<void>>;
   refreshCapabilities(): Promise<CoreResult<void>>;
   refreshAuthMetadata(): Promise<CoreResult<void>>;
+  threePids(): Promise<CoreResult<readonly ThreepidView[]>>;
   start(): Promise<CoreResult<void>>;
   retrySync(): Promise<CoreResult<void>>;
   onLoggedOut(listener: () => void): () => void;
@@ -233,10 +235,16 @@ export type TimelineModule = {
   event(roomId: RoomId, eventId: EventId): Promise<CoreResult<TimelineItem | null>>;
 };
 
+export type OwnProfileUpdate = {
+  readonly displayName?: string;
+  readonly avatarUrl?: string | null;
+};
+
 export type PresenceModule = {
   presence(userId: string): SnapshotStore<PresenceView | null>;
   profile(userId: string): SnapshotStore<UserProfileView>;
   refreshProfile(userId: string): Promise<CoreResult<void>>;
+  setOwnProfile(update: OwnProfileUpdate): Promise<CoreResult<void>>;
   typing(roomId: RoomId): SnapshotStore<readonly string[]>;
   setTyping(roomId: RoomId, typing: boolean, timeoutMs?: number): Promise<CoreResult<void>>;
   getOwnPresence(): Promise<CoreResult<PresenceView | null>>;

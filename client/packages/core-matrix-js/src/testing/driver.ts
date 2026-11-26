@@ -133,6 +133,7 @@ export type SyncFixture = {
     readonly lastSeenIp?: string;
     readonly lastSeenTs?: number;
   }[];
+  readonly threepids?: unknown;
 };
 
 export type SyncOperationFailure = {
@@ -375,6 +376,7 @@ export function createSyncDriver(): SyncDriver {
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
   const roomSummaryResponses = new Map<string, unknown>();
   const calls: FakeTransportCall[] = [];
+  let threepids: unknown = [];
   let thirdPartyProtocolsResponse: unknown = {
     'org.example.bridge': {
       user_fields: ['@alice:example.org'],
@@ -427,6 +429,14 @@ export function createSyncDriver(): SyncDriver {
     versions: ['v1.11'],
     unstable_features: {},
   })) as typeof client.getVersions;
+  const ensureOwnUser = () => {
+    const existing = client.getUser(TEST_USER_ID);
+    if (existing) return existing;
+    const user = User.createUser(TEST_USER_ID, client);
+    user.setDisplayName('');
+    client.store.storeUser(user);
+    return user;
+  };
   client.http.authedRequest = (async (
     method: string,
     path: string,
@@ -440,6 +450,15 @@ export function createSyncDriver(): SyncDriver {
       ...(body !== undefined ? { body } : {}),
     });
     failMatchingOperation(path);
+    if (method === 'PUT' && /^\/profile\/[^/]+\/displayname$/.test(path)) {
+      ensureOwnUser();
+      return {};
+    }
+    if (method === 'PUT' && /^\/profile\/[^/]+\/avatar_url$/.test(path)) {
+      ensureOwnUser();
+      return {};
+    }
+    if (method === 'GET' && path === '/account/3pid') return { threepids };
     if (path.endsWith('/logout')) return {};
     if (path.includes('/join/')) {
       return { room_id: decodeURIComponent(path.split('/join/')[1]?.split('/')[0] ?? '') };
@@ -769,6 +788,7 @@ export function createSyncDriver(): SyncDriver {
     },
     async applyFixture(fixture) {
       if (fixture.devices) devices = fixture.devices;
+      if (fixture.threepids !== undefined) threepids = fixture.threepids;
       await fixture.rooms.reduce(async (previous, item) => {
         await previous;
         await applyRoom(item);

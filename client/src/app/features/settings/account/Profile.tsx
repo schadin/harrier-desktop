@@ -28,10 +28,12 @@ import FocusTrap from 'focus-trap-react';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { UserProfile, useUserProfile } from '../../../hooks/useUserProfile';
 import { getMxIdLocalPart } from '../../../utils/matrix';
 import { toMediaRef, useMediaUrl } from '../../../utils/coreMedia';
+import { unwrapCoreResult } from '../../../utils/coreRoomActions';
 import { UserAvatar } from '../../../components/user-avatar';
 import { useMediaAuthentication } from '../../../hooks/useMediaAuthentication';
 import { nameInitials } from '../../../utils/common';
@@ -50,7 +52,7 @@ type ProfileProps = {
   userId: string;
 };
 function ProfileAvatar({ profile, userId }: ProfileProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const useAuthentication = useMediaAuthentication();
   const capabilities = useCapabilities();
   const [alertRemove, setAlertRemove] = useState(false);
@@ -79,14 +81,14 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
   const handleUploaded = useCallback(
     (upload: UploadSuccess) => {
       const { mxc } = upload;
-      mx.setAvatarUrl(mxc);
+      unwrapCoreResult(core.presence.setOwnProfile({ avatarUrl: mxc }));
       handleRemoveUpload();
     },
-    [mx, handleRemoveUpload]
+    [core, handleRemoveUpload]
   );
 
   const handleRemoveAvatar = () => {
-    mx.setAvatarUrl('');
+    unwrapCoreResult(core.presence.setOwnProfile({ avatarUrl: null }));
     setAlertRemove(false);
   };
 
@@ -209,7 +211,7 @@ function ProfileAvatar({ profile, userId }: ProfileProps) {
 }
 
 function ProfileDisplayName({ profile, userId }: ProfileProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const capabilities = useCapabilities();
   const disableSetDisplayname = capabilities['m.set_displayname']?.enabled === false;
 
@@ -217,7 +219,10 @@ function ProfileDisplayName({ profile, userId }: ProfileProps) {
   const [displayName, setDisplayName] = useState<string>(defaultDisplayName);
 
   const [changeState, changeDisplayName] = useAsyncCallback(
-    useCallback((name: string) => mx.setDisplayName(name), [mx])
+    useCallback(
+      (name: string) => unwrapCoreResult(core.presence.setOwnProfile({ displayName: name })),
+      [core]
+    )
   );
   const changingDisplayName = changeState.status === AsyncStatus.Loading;
 
@@ -307,8 +312,8 @@ function ProfileDisplayName({ profile, userId }: ProfileProps) {
 }
 
 export function Profile() {
-  const mx = useMatrixClient();
-  const userId = mx.getUserId()!;
+  const session = useCoreSession();
+  const userId = getSessionUserId(session);
   const profile = useUserProfile(userId);
 
   return (

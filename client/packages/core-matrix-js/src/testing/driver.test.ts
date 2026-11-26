@@ -1,4 +1,4 @@
-import { ClientEvent, RoomEvent, RoomStateEvent } from 'matrix-js-sdk';
+import { ClientEvent, Method, RoomEvent, RoomStateEvent } from 'matrix-js-sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { createSyncDriver } from './driver';
 
@@ -78,5 +78,15 @@ describe('matrix-js-sdk sync driver', () => {
 
     expect(onRoom).not.toHaveBeenCalled();
     expect(onState).not.toHaveBeenCalled();
+  });
+
+  it('logs the method, path and body of profile transport calls', async () => {
+    const driver = createSyncDriver();
+    const path = '/profile/%40tester%3Aexample.org/displayname';
+    const body = { displayname: '  Alice  ' };
+
+    await driver.client.http.authedRequest(Method.Put, path, undefined, body);
+
+    expect(driver.getCalls()).toContainEqual({ method: 'PUT', path, body });
   });
 });

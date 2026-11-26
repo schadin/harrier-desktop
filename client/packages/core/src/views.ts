@@ -237,6 +237,16 @@ export type AuthMetadataView = {
   readonly [key: string]: unknown;
 };
 
+export type ThreepidMediumView = 'email' | 'msisdn';
+
+export type ThreepidView = {
+  readonly medium: ThreepidMediumView;
+  readonly address: string;
+  readonly validatedAt?: Timestamp;
+  readonly addedAt?: Timestamp;
+  readonly bound?: boolean;
+};
+
 export type CapabilitiesView = {
   readonly 'm.room_versions'?: {
     readonly default?: string;
