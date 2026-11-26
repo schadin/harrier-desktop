@@ -7,6 +7,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const normalizeRateLimitHeader = (header: string, retryAfterMs = 450) =>
+  normalizeMatrixError(
+    new MatrixError(
+      { errcode: 'M_LIMIT_EXCEEDED', error: 'Slow down', retry_after_ms: retryAfterMs },
+      429,
+      undefined,
+      undefined,
+      new Headers({ 'Retry-After': header })
+    )
+  );
+
 describe('normalizeMatrixError', () => {
   it.each([
     [400, 'M_BAD_JSON', 'invalid-request', false],
@@ -93,6 +104,56 @@ describe('normalizeMatrixError', () => {
 
     expect(future.retryAfterMs).toBe(5000);
     expect(past.retryAfterMs).toBe(0);
+  });
+
+  it.each([
+    ['IMF-fixdate', 'Thu, 26 Nov 2026 12:00:05 GMT'],
+    ['RFC850', 'Thursday, 26-Nov-26 12:00:05 GMT'],
+    ['asctime', 'Thu Nov 26 12:00:05 2026'],
+  ])('parses %s HTTP dates as UTC', (_format, header) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
+
+    expect(normalizeRateLimitHeader(header).retryAfterMs).toBe(5000);
+  });
+
+  it('parses a space-padded asctime day', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-06T12:00:00.000Z'));
+
+    expect(normalizeRateLimitHeader('Fri Nov  6 12:00:05 2026').retryAfterMs).toBe(5000);
+  });
+
+  it.each(['Thursday, 26-Nov-26 11:59:59 GMT', 'Thu Nov 26 11:59:59 2026'])(
+    'clamps past obs-date %s to zero',
+    (header) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
+
+      expect(normalizeRateLimitHeader(header).retryAfterMs).toBe(0);
+    }
+  );
+
+  it('applies the RFC850 two-digit year boundary relative to the current year', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
+
+    expect(normalizeRateLimitHeader('Thursday, 26-Nov-26 12:00:05 GMT').retryAfterMs).toBe(5000);
+    expect(normalizeRateLimitHeader('Thursday, 26-Nov-77 12:00:05 GMT').retryAfterMs).toBe(0);
+  });
+
+  it.each([
+    'Thu, 31 Feb 2026 12:00:05 GMT',
+    'Thursday, 31-Feb-26 12:00:05 GMT',
+    'Thu Feb 31 12:00:05 2026',
+    'Thu, 26 Nov 2026 24:00:00 GMT',
+    'Thursday, 26 Nov 26 12:00:05 GMT',
+    'Thu Nov 6 12:00:05 2026',
+  ])('rejects impossible or malformed HTTP date %s and keeps the fallback', (header) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
+
+    expect(normalizeRateLimitHeader(header).retryAfterMs).toBe(450);
   });
 
   it('ignores malformed Retry-After values and falls back to legacy data', () => {

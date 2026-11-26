@@ -11,8 +11,27 @@ const STATUS_CODES: Readonly<Record<number, CoreErrorCode>> = {
   429: 'rate-limited',
 };
 
-const HTTP_DATE =
-  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+const MONTH_INDEX: Readonly<Record<string, number>> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+const IMF_FIXDATE =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+const RFC850_DATE =
+  /^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), (\d{2})-(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-(\d{2}) (\d{2}):(\d{2}):(\d{2}) GMT$/;
+const ASCTIME_DATE =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ( \d|\d{2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/;
 
 const isRecord = (value: unknown): value is ErrorRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -76,6 +95,68 @@ const retryAfterHeader = (headers: unknown): string | undefined => {
   return typeof entry?.[1] === 'string' ? entry[1] : undefined;
 };
 
+const utcTimestamp = (
+  year: number,
+  month: string,
+  day: string,
+  hour: string,
+  minute: string,
+  second: string
+): number | undefined => {
+  const monthIndex = MONTH_INDEX[month];
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, Number(day));
+  date.setUTCHours(Number(hour), Number(minute), Number(second), 0);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== monthIndex ||
+    date.getUTCDate() !== Number(day) ||
+    date.getUTCHours() !== Number(hour) ||
+    date.getUTCMinutes() !== Number(minute) ||
+    date.getUTCSeconds() !== Number(second)
+  ) {
+    return undefined;
+  }
+  return date.getTime();
+};
+
+const rfc850Year = (twoDigitYear: number, now: number): number => {
+  const currentYear = new Date(now).getUTCFullYear();
+  let year = Math.floor(currentYear / 100) * 100 + twoDigitYear;
+  if (year > currentYear + 50) year -= 100;
+  return year;
+};
+
+const parseHttpDate = (value: string, now: number): number | undefined => {
+  const imf = IMF_FIXDATE.exec(value);
+  if (imf) {
+    return utcTimestamp(Number(imf[3]), imf[2], imf[1], imf[4], imf[5], imf[6]);
+  }
+  const rfc850 = RFC850_DATE.exec(value);
+  if (rfc850) {
+    return utcTimestamp(
+      rfc850Year(Number(rfc850[3]), now),
+      rfc850[2],
+      rfc850[1],
+      rfc850[4],
+      rfc850[5],
+      rfc850[6]
+    );
+  }
+  const asctime = ASCTIME_DATE.exec(value);
+  if (asctime) {
+    return utcTimestamp(
+      Number(asctime[6]),
+      asctime[1],
+      asctime[2],
+      asctime[3],
+      asctime[4],
+      asctime[5]
+    );
+  }
+  return undefined;
+};
+
 const parseRetryAfterHeader = (value: string | undefined): number | undefined => {
   const header = value?.trim();
   if (!header) return undefined;
@@ -83,10 +164,9 @@ const parseRetryAfterHeader = (value: string | undefined): number | undefined =>
     const milliseconds = Number(header) * 1000;
     return Number.isFinite(milliseconds) ? milliseconds : undefined;
   }
-  if (!HTTP_DATE.test(header)) return undefined;
-  const date = Date.parse(header);
-  if (!Number.isFinite(date) || new Date(date).toUTCString() !== header) return undefined;
-  return Math.max(0, date - Date.now());
+  const now = Date.now();
+  const timestamp = parseHttpDate(header, now);
+  return timestamp === undefined ? undefined : Math.max(0, timestamp - now);
 };
 
 const retryAfterOf = (record: ErrorRecord | undefined, data: JsonValue | undefined) => {
