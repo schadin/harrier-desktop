@@ -6,6 +6,7 @@ import {
   EventTimeline,
   type IEvent,
   MatrixClient,
+  MatrixError,
   type RoomState,
   MatrixEvent,
   ReceiptType,
@@ -123,9 +124,18 @@ export type SyncFixture = {
   }[];
 };
 
+export type SyncOperationFailure = {
+  readonly httpStatus: number;
+  readonly errcode?: string;
+  readonly error?: string;
+  readonly retryAfterMs?: number;
+  readonly data?: Record<string, unknown>;
+};
+
 export type SyncDriver = {
   readonly client: MatrixClient;
   applyFixture(fixture: SyncFixture): Promise<void>;
+  failNextOperation(operation: string, failure: SyncOperationFailure): void;
 };
 
 let eventCounter = 0;
@@ -342,6 +352,22 @@ export function createSyncDriver(): SyncDriver {
   const sendAttempts = new Map<string, number>();
   const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
+  const operationFailures: Array<{ operation: string; failure: SyncOperationFailure }> = [];
+  const failMatchingOperation = (path: string) => {
+    const index = operationFailures.findIndex(({ operation }) => path.includes(operation));
+    if (index < 0) return;
+    const [{ failure }] = operationFailures.splice(index, 1);
+    const data = {
+      ...failure.data,
+      ...(failure.errcode !== undefined ? { errcode: failure.errcode } : {}),
+      ...(failure.error !== undefined ? { error: failure.error } : {}),
+    };
+    const error = new MatrixError(data, failure.httpStatus);
+    if (failure.retryAfterMs !== undefined) {
+      Object.assign(error, { retryAfterMs: failure.retryAfterMs });
+    }
+    throw error;
+  };
 
   client.getAuthMetadata = (async () => undefined) as unknown as typeof client.getAuthMetadata;
   client.getVersions = (async () => ({
@@ -349,6 +375,7 @@ export function createSyncDriver(): SyncDriver {
     unstable_features: {},
   })) as typeof client.getVersions;
   client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
+    failMatchingOperation(path);
     if (path.endsWith('/logout')) return {};
     if (path.includes('/join/')) {
       return { room_id: decodeURIComponent(path.split('/join/')[1]?.split('/')[0] ?? '') };
@@ -649,6 +676,9 @@ export function createSyncDriver(): SyncDriver {
 
   return {
     client,
+    failNextOperation(operation, failure) {
+      operationFailures.push({ operation, failure });
+    },
     async applyFixture(fixture) {
       if (fixture.devices) devices = fixture.devices;
       await fixture.rooms.reduce(async (previous, item) => {

@@ -2,7 +2,6 @@ import {
   CoreError,
   createSnapshotStore,
   fillMissingPowers,
-  toCoreError,
   type CoreResult,
   type DeviceTrust,
   type DeviceView,
@@ -92,6 +91,7 @@ import {
 } from 'matrix-js-sdk/lib/matrixrtc/MatrixRTCSession';
 import { decryptAttachment } from 'browser-encrypt-attachment';
 import { registerMatrixClient } from './legacy';
+import { normalizeMatrixError } from './error';
 import { clearSecretStorageKeys, storeSecretStorageKey } from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
@@ -1198,7 +1198,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   ): CoreResult<string> => {
     const room = client.getRoom(roomId);
     if (!room) {
-      return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+      return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
     }
     sendCounter += 1;
     const localId = `harrier-local-${sendCounter}`;
@@ -1383,7 +1383,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       publishUnverifiedCounts(userId);
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
 
@@ -1507,7 +1507,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const verificationById = (id: string) => {
     const request = verificationRequests.get(id);
     if (!request)
-      return { ok: false as const, error: toCoreError(new Error(`Unknown verification ${id}`)) };
+      return {
+        ok: false as const,
+        error: new CoreError('not-found', `Unknown verification ${id}`),
+      };
     return { ok: true as const, request };
   };
 
@@ -1521,7 +1524,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       await action(found.request);
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
 
@@ -1552,7 +1555,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       mediaConfigStore.publish(typeof maxUploadSize === 'number' ? { maxUploadSize } : {});
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
   refreshMediaConfig().catch(() => undefined);
@@ -1660,7 +1663,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       publishBackupStatus();
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
 
@@ -1710,7 +1713,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       capabilitiesStore.publish(capabilities as JsonObject);
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
   refreshCapabilities().catch(() => undefined);
@@ -1739,7 +1742,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       authMetadataStore.publish((metadata as AuthMetadataView | undefined) ?? null);
       return { ok: true, value: undefined };
     } catch (error) {
-      return { ok: false, error: toCoreError(error) };
+      return { ok: false, error: normalizeMatrixError(error) };
     }
   };
   refreshAuthMetadata().catch(() => undefined);
@@ -1802,7 +1805,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           publishGlobalAccountData(type, content);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       refreshCapabilities,
@@ -1817,8 +1820,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: true, value: undefined };
         } catch (error) {
           deactivatePendingState();
-          syncStore.publish({ phase: 'error', error: toCoreError(error).message });
-          return { ok: false, error: toCoreError(error) };
+          const normalized = normalizeMatrixError(error);
+          syncStore.publish({ phase: 'error', error: normalized.message });
+          return { ok: false, error: normalized };
         }
       },
       async retrySync() {
@@ -1830,8 +1834,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: true, value: undefined };
         } catch (error) {
           deactivatePendingState();
-          syncStore.publish({ phase: 'error', error: toCoreError(error).message });
-          return { ok: false, error: toCoreError(error) };
+          const normalized = normalizeMatrixError(error);
+          syncStore.publish({ phase: 'error', error: normalized.message });
+          return { ok: false, error: normalized };
         }
       },
       onLoggedOut(listener) {
@@ -1867,7 +1872,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: true, value: undefined };
         } catch (error) {
           deactivatePendingState();
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
     },
@@ -1913,7 +1918,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           const result = await client.getRoomIdForAlias(alias);
           return { ok: true, value: result?.room_id ?? null };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async aliases(roomId) {
@@ -1934,7 +1939,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async createAlias(alias, roomId) {
@@ -1942,7 +1947,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.createAlias(alias, roomId);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async deleteAlias(alias) {
@@ -1950,7 +1955,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.deleteAlias(alias);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async directoryVisibility(roomId) {
@@ -1958,7 +1963,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           const result = await client.getRoomDirectoryVisibility(roomId);
           return { ok: true, value: result.visibility === 'public' ? 'public' : 'private' };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async setDirectoryVisibility(roomId, visibility) {
@@ -1966,7 +1971,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.setRoomDirectoryVisibility(roomId, visibility as never);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async mutualRooms(userId) {
@@ -1990,7 +1995,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             const shared = await client._unstable_getSharedRooms(userId);
             return { ok: true, value: shared };
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         }
       },
@@ -2072,7 +2077,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       viaServers(roomId) {
@@ -2114,7 +2119,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.setRoomAccountData(roomId, type as never, content as never);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       parents(roomId) {
@@ -2164,7 +2169,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.sendStateEvent(roomId, eventType as never, content as never, stateKey);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async join(roomIdOrAlias, viaServers): Promise<CoreResult<string>> {
@@ -2178,7 +2183,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           else if (typeof response.room_id === 'string') roomId = response.room_id;
           return { ok: true, value: roomId };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async leave(roomId): Promise<CoreResult<void>> {
@@ -2186,7 +2191,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.leave(roomId);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async invite(roomId, userId, reason): Promise<CoreResult<void>> {
@@ -2194,7 +2199,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.invite(roomId, userId, reason);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async createRoom(params): Promise<CoreResult<string>> {
@@ -2277,7 +2282,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
 
           return { ok: true, value: result.room_id };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async upgrade(roomId, params): Promise<CoreResult<string>> {
@@ -2295,7 +2300,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           );
           return { ok: true, value: response.replacement_room ?? '' };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async searchDirectory(params): Promise<CoreResult<PublicRoomsResult>> {
@@ -2327,7 +2332,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async hierarchy(roomId, params): Promise<CoreResult<PublicRoomsResult>> {
@@ -2351,7 +2356,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async getState(roomId, eventType, stateKey): Promise<CoreResult<JsonObject | null>> {
@@ -2372,7 +2377,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     timeline: {
       async markRead(roomId, eventId, privateReceipt = false) {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         const event = room.findEventById(eventId);
         if (!event) {
           return {
@@ -2387,7 +2393,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           );
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       timeline(roomId) {
@@ -2406,7 +2412,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async paginateBackward(roomId, limit): Promise<CoreResult<void>> {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
           const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
           await client.paginateEventTimeline(firstLinkedTimeline(anchor), {
@@ -2416,12 +2423,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           publishTimeline(roomId);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async paginateForward(roomId, limit): Promise<CoreResult<void>> {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
           const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
           const last = lastLinkedTimeline(anchor);
@@ -2431,18 +2439,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async focusEvent(roomId, eventId): Promise<CoreResult<number>> {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
           const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
           if (!timeline) {
             return {
               ok: false,
-              error: toCoreError(new Error(`Event ${eventId} not found in ${roomId}`)),
+              error: new CoreError('not-found', `Event ${eventId} not found in ${roomId}`),
             };
           }
           for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -2460,10 +2469,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
           return {
             ok: false,
-            error: toCoreError(new Error(`Event ${eventId} not found in ${roomId}`)),
+            error: new CoreError('not-found', `Event ${eventId} not found in ${roomId}`),
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       clearFocus(roomId) {
@@ -2471,7 +2480,8 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async event(roomId, eventId): Promise<CoreResult<TimelineItem | null>> {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         const local = room.findEventById(eventId);
         if (local) return { ok: true, value: toItem(roomId, local, new Map(), []) };
         try {
@@ -2505,7 +2515,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           });
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       presence(userId) {
@@ -2524,12 +2534,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async setTyping(roomId, typing, timeoutMs) {
         const room = client.getRoom(roomId);
-        if (!room) return { ok: false, error: toCoreError(new Error(`Unknown room ${roomId}`)) };
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
           await client.sendTyping(roomId, typing, timeoutMs ?? 20000);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       setLocalOwnStatus(statusMessage) {
@@ -2559,7 +2570,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async setOwnPresence(input) {
@@ -2575,7 +2586,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
     },
@@ -2608,13 +2619,17 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             undefined,
             mediaAuthenticatedStore.getSnapshot().value
           );
-          if (!url) return { ok: false, error: toCoreError(new Error('Invalid MXC URL')) };
+          if (!url)
+            return { ok: false, error: new CoreError('invalid-request', 'Invalid MXC URL') };
           if (!ref.encrypted) return { ok: true, value: { kind: 'url', url } };
           const response = await fetch(url, { method: 'GET' });
           if (!response.ok) {
             return {
               ok: false,
-              error: toCoreError(new Error(`Media request failed: ${response.status}`)),
+              error: normalizeMatrixError({
+                httpStatus: response.status,
+                error: `Media request failed: ${response.status}`,
+              }),
             };
           }
           const data = await response.arrayBuffer();
@@ -2629,7 +2644,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async thumbnail(ref) {
@@ -2637,7 +2652,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async download(ref, filename) {
         if (filename.length === 0) {
-          return { ok: false, error: toCoreError(new Error('Filename is required')) };
+          return { ok: false, error: new CoreError('invalid-request', 'Filename is required') };
         }
         const result = await this.resolve(ref);
         if (!result.ok) return result;
@@ -2646,7 +2661,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         if (!response.ok) {
           return {
             ok: false,
-            error: toCoreError(new Error(`Media request failed: ${response.status}`)),
+            error: normalizeMatrixError({
+              httpStatus: response.status,
+              error: `Media request failed: ${response.status}`,
+            }),
           };
         }
         return { ok: true, value: await response.blob() };
@@ -2667,7 +2685,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
     },
@@ -2713,7 +2731,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.setPushRuleActions('global', kind as never, ruleId, actions as never);
           return await refreshNotificationPreferences();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async addPushRule(kind, ruleId, actions, options) {
@@ -2725,7 +2743,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           });
           return await refreshNotificationPreferences();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async deletePushRule(kind, ruleId) {
@@ -2733,7 +2751,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.deletePushRule('global', kind as never, ruleId);
           return await refreshNotificationPreferences();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async emailNotifications() {
@@ -2754,7 +2772,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
               : { enabled: false, email: emailAddresses[0] },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async setPusher(pusher) {
@@ -2762,7 +2780,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.setPusher(pusher as never);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async list(from, limit, onlyHighlight) {
@@ -2812,7 +2830,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             value: { items, ...(response.next_token ? { nextToken: response.next_token } : {}) },
           };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async setRoomMode(roomId, mode, previousMode) {
@@ -2837,7 +2855,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           } as never);
           return await refreshNotificationPreferences();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
     },
@@ -2851,7 +2869,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         async restore() {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           try {
             backupProgressStore.publish({ status: 'fetching' });
             await crypto.restoreKeyBackup({
@@ -2881,19 +2899,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             return { ok: true, value: undefined };
           } catch (error) {
             backupProgressStore.publish({ status: 'idle' });
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         async decodeRecoveryKey(keyId, input) {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           try {
             const info = client
               .getAccountData(`m.secret_storage.key.${keyId}`)
               ?.getContent<Record<string, unknown>>();
             if (!info) {
-              return { ok: false, error: toCoreError(new Error('Unknown secret storage key')) };
+              return { ok: false, error: new CoreError('not-found', 'Unknown secret storage key') };
             }
             let decoded: Uint8Array;
             if (input.recoveryKey !== undefined) {
@@ -2905,7 +2923,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
               if (!passphrase?.salt || !passphrase.iterations) {
                 return {
                   ok: false,
-                  error: toCoreError(new Error('Secret storage key has no passphrase')),
+                  error: new CoreError('invalid-request', 'Secret storage key has no passphrase'),
                 };
               }
               decoded = await deriveRecoveryKeyFromPassphrase(
@@ -2915,26 +2933,29 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
                 passphrase.bits
               );
             } else {
-              return { ok: false, error: toCoreError(new Error('No recovery input provided')) };
+              return {
+                ok: false,
+                error: new CoreError('invalid-request', 'No recovery input provided'),
+              };
             }
             const matches = await client.secretStorage.checkKey(decoded, info as never);
             if (!matches) {
-              return { ok: false, error: toCoreError(new Error('Invalid recovery key.')) };
+              return { ok: false, error: new CoreError('unauthorized', 'Invalid recovery key.') };
             }
             storeSecretStorageKey(keyId, decoded);
             return { ok: true, value: undefined };
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         async requestKey(roomId, eventId) {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           const room = client.getRoom(roomId);
           const event = room?.findEventById(eventId);
           if (!event) {
-            return { ok: false, error: toCoreError(new Error(`Unknown event ${eventId}`)) };
+            return { ok: false, error: new CoreError('not-found', `Unknown event ${eventId}`) };
           }
           const lastSentAt = keyRequestSentAt.get(eventId);
           if (lastSentAt && Date.now() - lastSentAt < 60_000) {
@@ -2948,7 +2969,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           };
           const senderId = event.getSender();
           if (!senderId || !wire.algorithm || !wire.sender_key || !wire.session_id) {
-            return { ok: false, error: toCoreError(new Error('Event has no key metadata')) };
+            return { ok: false, error: new CoreError('unsupported', 'Event has no key metadata') };
           }
           const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
           const body = {
@@ -2968,13 +2989,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             keyRequestSentAt.set(eventId, Date.now());
             return { ok: true, value: undefined };
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         async retryDecryption() {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           const retryable = new Set([
             'MEGOLM_UNKNOWN_INBOUND_SESSION_ID',
             'HISTORICAL_MESSAGE_WORKING_BACKUP',
@@ -2994,13 +3015,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           );
           const failed = results.some((result) => result.status === 'rejected');
           if (failed)
-            return { ok: false, error: toCoreError(new Error('Decryption retry failed')) };
+            return { ok: false, error: new CoreError('unknown', 'Decryption retry failed') };
           return { ok: true, value: undefined };
         },
         async unlockSecretStorage() {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           try {
             await crypto.bootstrapCrossSigning({});
             await crypto.bootstrapSecretStorage({});
@@ -3008,19 +3029,19 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             await refreshBackupStatus();
             return { ok: true, value: undefined };
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         async prepareAndRestore() {
           const crypto = client.getCrypto();
           if (!crypto)
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           try {
             await crypto.bootstrapSecretStorage({});
             await crypto.loadSessionBackupPrivateKeyFromSecretStorage();
             return await this.restore();
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         onDecryptionKeyCached(listener) {
@@ -3033,7 +3054,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         async request(deviceId) {
           const crypto = client.getCrypto();
           if (!crypto) {
-            return { ok: false, error: toCoreError(new Error('Crypto is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
           }
           try {
             const request = await crypto.requestDeviceVerification(
@@ -3045,7 +3066,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
               value: buildVerificationView(registerVerification(request), request),
             };
           } catch (error) {
-            return { ok: false, error: toCoreError(error) };
+            return { ok: false, error: normalizeMatrixError(error) };
           }
         },
         view(id) {
@@ -3073,7 +3094,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           if (!sasCallbacks) {
             return Promise.resolve({
               ok: false,
-              error: toCoreError(new Error('SAS is not available')),
+              error: new CoreError('unsupported', 'SAS is not available'),
             });
           }
           return runVerificationCommand(id, () => sasCallbacks.confirm());
@@ -3083,7 +3104,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           if (!found.ok) return found;
           const sasCallbacks = attachedSasCallbacks.get(id);
           if (!sasCallbacks) {
-            return { ok: false, error: toCoreError(new Error('SAS is not available')) };
+            return { ok: false, error: new CoreError('unsupported', 'SAS is not available') };
           }
           sasCallbacks.mismatch();
           return { ok: true, value: undefined };
@@ -3117,7 +3138,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.setDeviceDetails(deviceId, { display_name: displayName });
           return await refreshDevices();
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async deleteDevices(deviceIds, auth) {
@@ -3125,23 +3146,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           await client.deleteMultipleDevices([...deviceIds], auth as never);
           return await refreshDevices();
         } catch (error) {
-          const err = error as {
-            httpStatus?: number;
-            errcode?: string;
-            data?: unknown;
-            message?: string;
-          };
-          return {
-            ok: false,
-            error: new CoreError(
-              'unknown',
-              err.message ?? String(error),
-              false,
-              err.httpStatus,
-              err.errcode,
-              err.data
-            ),
-          };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
     },
@@ -3193,27 +3198,33 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       async cancel(localId) {
         const found = pendingEventOf(localId);
         if (!found) {
-          return { ok: false, error: toCoreError(new Error(`Unknown pending event ${localId}`)) };
+          return {
+            ok: false,
+            error: new CoreError('not-found', `Unknown pending event ${localId}`),
+          };
         }
         try {
           client.cancelPendingEvent(found.event);
           publishSendStatus(localId);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       async resend(localId) {
         const found = pendingEventOf(localId);
         if (!found) {
-          return { ok: false, error: toCoreError(new Error(`Unknown pending event ${localId}`)) };
+          return {
+            ok: false,
+            error: new CoreError('not-found', `Unknown pending event ${localId}`),
+          };
         }
         try {
           await client.resendEvent(found.event, found.room);
           publishSendStatus(localId);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       status(localId) {
@@ -3285,7 +3296,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       async cancel(localId) {
         const promise = uploadPromises.get(localId);
         if (!promise) {
-          return { ok: false, error: toCoreError(new Error(`Unknown upload ${localId}`)) };
+          return { ok: false, error: new CoreError('not-found', `Unknown upload ${localId}`) };
         }
         try {
           await client.cancelUpload(promise);
@@ -3293,7 +3304,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           uploadStores.get(localId)?.publish(null);
           return { ok: true, value: undefined };
         } catch (error) {
-          return { ok: false, error: toCoreError(error) };
+          return { ok: false, error: normalizeMatrixError(error) };
         }
       },
       status(localId) {

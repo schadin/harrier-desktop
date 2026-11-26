@@ -704,3 +704,26 @@ describe('matrix-js core state listener flushing', () => {
     }
   );
 });
+
+describe('matrix-js core local validation errors', () => {
+  it('keeps deliberate local failures typed instead of converting them to unknown', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    driver.client.getCrypto = () => undefined;
+    try {
+      const missingRoom = await core.send.sendMessage('!missing:example.org', { body: 'Hello' });
+      expect(missingRoom.ok).toBe(false);
+      if (!missingRoom.ok) expect(missingRoom.error.code).toBe('not-found');
+
+      const unsupported = await core.crypto.backup.restore();
+      expect(unsupported.ok).toBe(false);
+      if (!unsupported.ok) expect(unsupported.error.code).toBe('unsupported');
+
+      const invalidFilename = await core.media.download({ mxcUrl: 'mxc://example.org/media' }, '');
+      expect(invalidFilename.ok).toBe(false);
+      if (!invalidFilename.ok) expect(invalidFilename.error.code).toBe('invalid-request');
+    } finally {
+      await core.auth.stop();
+    }
+  });
+});

@@ -1,4 +1,14 @@
-export type CoreErrorCode = 'unknown' | 'network' | 'unauthorized' | 'forbidden' | 'not-found';
+export type CoreErrorCode =
+  | 'unknown'
+  | 'network'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not-found'
+  | 'invalid-request'
+  | 'conflict'
+  | 'rate-limited'
+  | 'unsupported'
+  | 'cancelled';
 
 export class CoreError extends Error {
   readonly code: CoreErrorCode;
@@ -11,7 +21,8 @@ export class CoreError extends Error {
     retryable?: boolean,
     readonly httpStatus?: number,
     readonly errcode?: string,
-    readonly data?: unknown
+    readonly data?: unknown,
+    readonly retryAfterMs?: number
   ) {
     super(message);
     this.name = 'CoreError';

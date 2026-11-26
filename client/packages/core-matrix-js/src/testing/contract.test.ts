@@ -1,5 +1,6 @@
 import {
   authCases,
+  errorCases,
   notificationCases,
   presenceCases,
   receiptsTypingCases,
@@ -30,6 +31,10 @@ const matrixJsHarness: CoreContractHarness = {
     if (!driver) throw new Error('create() must run before applySyncFixture()');
     await driver.applyFixture(fixture);
   },
+  failNextOperation(operation, failure) {
+    if (!driver) throw new Error('create() must run before failNextOperation()');
+    driver.failNextOperation(operation, failure);
+  },
   async dispose() {
     driver?.client.stopClient();
     driver = undefined;
@@ -50,4 +55,5 @@ runCoreContractSuite(matrixJsHarness, [
   ...callsCases,
   ...notificationCases,
   ...authCases,
+  ...errorCases,
 ]);

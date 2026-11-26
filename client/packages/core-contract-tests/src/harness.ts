@@ -1,4 +1,4 @@
-import type { HarrierCore } from '@harrier/core';
+import type { HarrierCore, JsonObject } from '@harrier/core';
 
 export type SyncFixtureMessage = {
   readonly eventId: string;
@@ -101,9 +101,19 @@ export type SyncFixture = {
   readonly devices?: readonly SyncFixtureDevice[];
 };
 
+export type ContractOperationFailure = {
+  readonly operation: string;
+  readonly httpStatus: number;
+  readonly errcode?: string;
+  readonly error?: string;
+  readonly retryAfterMs?: number;
+  readonly data?: JsonObject;
+};
+
 export type CoreContractHarness = {
   readonly name: string;
   create(): Promise<HarrierCore>;
   applySyncFixture(fixture: SyncFixture): Promise<void>;
+  failNextOperation(operation: string, failure: ContractOperationFailure): void;
   dispose(core: HarrierCore): Promise<void>;
 };

@@ -4,12 +4,12 @@ import {
   encryptAttachment,
 } from 'browser-encrypt-attachment';
 import to from 'await-to-js';
+import { CoreError } from '@harrier/core';
 import { IImageInfo, IThumbnailContent, IVideoInfo } from '../../types/matrix/common';
 import { AccountDataEvent } from '../../types/matrix/accountData';
 import {
   EventTimelineDirection,
   MatrixClientLike,
-  MatrixErrorLike,
   MatrixEventLike,
   RoomLike,
   RoomMemberLike,
@@ -230,6 +230,38 @@ export const downloadMedia = async (src: string): Promise<Blob> => {
   return blob;
 };
 
+type RateLimitFailure = {
+  readonly code?: unknown;
+  readonly httpStatus?: unknown;
+  readonly retryAfterMs?: unknown;
+  readonly data?: unknown;
+  readonly getRetryAfterMs?: unknown;
+};
+
+const rateLimitFailure = (value: unknown): RateLimitFailure | undefined =>
+  typeof value === 'object' && value !== null ? (value as RateLimitFailure) : undefined;
+
+const finiteDelay = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const retryDelay = (failure: RateLimitFailure): number => {
+  const direct = finiteDelay(failure.retryAfterMs);
+  if (direct !== undefined) return direct;
+  if (typeof failure.getRetryAfterMs === 'function') {
+    try {
+      const legacy = finiteDelay(failure.getRetryAfterMs());
+      if (legacy !== undefined) return legacy;
+    } catch {
+      // Legacy raw SDK failures fall through to plain data or the default delay.
+    }
+  }
+  if (typeof failure.data === 'object' && failure.data !== null) {
+    const legacyData = finiteDelay((failure.data as { retry_after_ms?: unknown }).retry_after_ms);
+    if (legacyData !== undefined) return legacyData;
+  }
+  return 3000;
+};
+
 export const rateLimitedActions = async <T, R = void>(
   data: T[],
   callback: (item: T, index: number) => Promise<R>,
@@ -245,20 +277,25 @@ export const rateLimitedActions = async <T, R = void>(
     });
 
   const performAction = async (dataItem: T, index: number) => {
-    const [err] = await to<R, MatrixErrorLike>(callback(dataItem, index));
+    const [err] = await to<R, unknown>(callback(dataItem, index));
+    const failure = rateLimitFailure(err);
+    const rateLimited =
+      err instanceof CoreError
+        ? err.code === 'rate-limited' || err.httpStatus === 429
+        : failure?.httpStatus === 429;
 
-    if (err?.httpStatus === 429) {
-      if (retryCount === maxRetryCount) {
-        return;
-      }
-
-      const waitMS = err.getRetryAfterMs() ?? 3000;
-      actionInterval = waitMS * 1.5;
-      await sleepForMs(waitMS);
-      retryCount += 1;
-
-      await performAction(dataItem, index);
+    if (!rateLimited) {
+      if (err instanceof CoreError) throw err;
+      return;
     }
+    if (!failure || retryCount === maxRetryCount) return;
+
+    const waitMS = retryDelay(failure);
+    actionInterval = waitMS * 1.5;
+    await sleepForMs(waitMS);
+    retryCount += 1;
+
+    await performAction(dataItem, index);
   };
 
   for (let i = 0; i < data.length; i += 1) {

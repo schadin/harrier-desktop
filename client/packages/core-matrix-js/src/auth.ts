@@ -6,14 +6,36 @@ import {
   type ServerDiscoveryView,
 } from '@harrier/core';
 import { createClient, type SSOAction } from 'matrix-js-sdk';
+import { normalizeMatrixError } from './error';
 
-const authError = (status: number | undefined, errcode: string | undefined): CoreError => {
-  let code = 'Unknown';
-  if (status === 400) code = 'InvalidRequest';
-  else if (status === 429) code = 'RateLimited';
-  else if (status === 403) code = 'Forbidden';
-  else if (errcode === 'M_USER_DEACTIVATED') code = 'UserDeactivated';
-  return new CoreError('unknown', code, false, status, code);
+const authAlias = (status: number | undefined, errcode: string | undefined): string => {
+  if (status === 400) return 'InvalidRequest';
+  if (status === 429) return 'RateLimited';
+  if (status === 403) return 'Forbidden';
+  if (errcode === 'M_USER_DEACTIVATED') return 'UserDeactivated';
+  return 'Unknown';
+};
+
+const withAuthAlias = (error: CoreError, alias: string): CoreError =>
+  new CoreError(
+    error.code,
+    alias,
+    error.retryable,
+    error.httpStatus,
+    alias,
+    error.data,
+    error.retryAfterMs
+  );
+
+const authError = (value: unknown): CoreError => {
+  const error = normalizeMatrixError(value);
+  return withAuthAlias(error, authAlias(error.httpStatus, error.errcode));
+};
+
+const dataErrorMessage = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fallback;
+  const { error } = value as { error?: unknown };
+  return typeof error === 'string' ? error : fallback;
 };
 
 export function createAuthOperations(): AuthOperations {
@@ -50,8 +72,7 @@ export function createAuthOperations(): AuthOperations {
           },
         };
       } catch (error) {
-        const err = error as { httpStatus?: number; errcode?: string };
-        return { ok: false, error: authError(err.httpStatus, err.errcode) };
+        return { ok: false, error: authError(error) };
       }
     },
     async loginFlows(baseUrl) {
@@ -73,8 +94,7 @@ export function createAuthOperations(): AuthOperations {
         }));
         return { ok: true, value: { flows } };
       } catch (error) {
-        const err = error as { httpStatus?: number; errcode?: string };
-        return { ok: false, error: authError(err.httpStatus, err.errcode) };
+        return { ok: false, error: authError(error) };
       }
     },
     async register(baseUrl, request) {
@@ -92,13 +112,9 @@ export function createAuthOperations(): AuthOperations {
           },
         };
       } catch (error) {
-        const err = error as {
-          httpStatus?: number;
-          errcode?: string;
-          data?: { error?: string };
-        };
-        if (err.httpStatus === 401) {
-          return { ok: true, value: { auth: (err.data ?? {}) as never } };
+        const normalized = normalizeMatrixError(error);
+        if (normalized.httpStatus === 401) {
+          return { ok: true, value: { auth: (normalized.data ?? {}) as never } };
         }
         const registerCodes: Record<string, string> = {
           M_USER_IN_USE: 'UserTaken',
@@ -107,22 +123,20 @@ export function createAuthOperations(): AuthOperations {
           M_WEAK_PASSWORD: 'PasswordWeak',
           M_PASSWORD_TOO_SHORT: 'PasswordShort',
         };
-        let errcode = err.errcode ? registerCodes[err.errcode] : undefined;
-        if (!errcode) {
-          if (err.httpStatus === 429) errcode = 'RateLimited';
-          else if (err.httpStatus === 400) errcode = 'InvalidRequest';
-          else if (err.httpStatus === 403) errcode = 'Forbidden';
-          else errcode = 'Unknown';
-        }
+        const rawErrcode = normalized.errcode;
+        const alias = rawErrcode
+          ? registerCodes[rawErrcode] ?? authAlias(normalized.httpStatus, rawErrcode)
+          : authAlias(normalized.httpStatus, undefined);
         return {
           ok: false,
           error: new CoreError(
-            'unknown',
-            err.data?.error ?? errcode,
-            false,
-            err.httpStatus,
-            errcode,
-            err.data
+            normalized.code,
+            dataErrorMessage(normalized.data, alias),
+            normalized.retryable,
+            normalized.httpStatus,
+            alias,
+            normalized.data,
+            normalized.retryAfterMs
           ),
         };
       }
@@ -144,8 +158,7 @@ export function createAuthOperations(): AuthOperations {
           },
         };
       } catch (error) {
-        const err = error as { httpStatus?: number; errcode?: string };
-        return { ok: false, error: authError(err.httpStatus, err.errcode) };
+        return { ok: false, error: authError(error) };
       }
     },
     async requestRegisterEmailToken(baseUrl, email, clientSecret, sendAttempt, nextLink) {
@@ -165,8 +178,7 @@ export function createAuthOperations(): AuthOperations {
           },
         };
       } catch (error) {
-        const err = error as { httpStatus?: number; errcode?: string };
-        return { ok: false, error: authError(err.httpStatus, err.errcode) };
+        return { ok: false, error: authError(error) };
       }
     },
     async setPassword(baseUrl, auth, newPassword, logoutDevices) {
@@ -175,19 +187,20 @@ export function createAuthOperations(): AuthOperations {
         await mx.setPassword(auth as never, newPassword, logoutDevices);
         return { ok: true, value: { response: {} } };
       } catch (error) {
-        const err = error as { httpStatus?: number; errcode?: string; data?: JsonObject };
-        if (err.httpStatus === 401) {
-          return { ok: true, value: { auth: (err.data ?? {}) as JsonObject } };
+        const normalized = normalizeMatrixError(error);
+        if (normalized.httpStatus === 401) {
+          return { ok: true, value: { auth: (normalized.data ?? {}) as JsonObject } };
         }
         return {
           ok: false,
           error: new CoreError(
-            'unknown',
-            err.errcode ?? 'Unknown',
-            false,
-            err.httpStatus,
-            err.errcode,
-            err.data
+            normalized.code,
+            normalized.errcode ?? 'Unknown',
+            normalized.retryable,
+            normalized.httpStatus,
+            normalized.errcode,
+            normalized.data,
+            normalized.retryAfterMs
           ),
         };
       }
