@@ -16,6 +16,13 @@ const authAlias = (status: number | undefined, errcode: string | undefined): str
   return 'Unknown';
 };
 
+const registerFallbackAlias = (status: number | undefined): string => {
+  if (status === 429) return 'RateLimited';
+  if (status === 400) return 'InvalidRequest';
+  if (status === 403) return 'Forbidden';
+  return 'Unknown';
+};
+
 const withAuthAlias = (error: CoreError, alias: string): CoreError =>
   new CoreError(
     error.code,
@@ -124,9 +131,10 @@ export function createAuthOperations(): AuthOperations {
           M_PASSWORD_TOO_SHORT: 'PasswordShort',
         };
         const rawErrcode = normalized.errcode;
-        const alias = rawErrcode
-          ? registerCodes[rawErrcode] ?? authAlias(normalized.httpStatus, rawErrcode)
-          : authAlias(normalized.httpStatus, undefined);
+        const alias =
+          rawErrcode && Object.prototype.hasOwnProperty.call(registerCodes, rawErrcode)
+            ? registerCodes[rawErrcode]
+            : registerFallbackAlias(normalized.httpStatus);
         return {
           ok: false,
           error: new CoreError(

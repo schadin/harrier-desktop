@@ -11,6 +11,9 @@ const STATUS_CODES: Readonly<Record<number, CoreErrorCode>> = {
   429: 'rate-limited',
 };
 
+const HTTP_DATE =
+  /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} GMT$/;
+
 const isRecord = (value: unknown): value is ErrorRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -37,7 +40,13 @@ const toPlainJson = (value: unknown, seen = new WeakSet<object>()): JsonValue | 
     const result: JsonObject = {};
     Object.entries(value).forEach(([key, item]) => {
       const plain = toPlainJson(item, seen);
-      if (plain !== undefined) result[key] = plain;
+      if (plain === undefined) return;
+      Object.defineProperty(result, key, {
+        value: plain,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     });
     return result;
   } finally {
@@ -74,8 +83,10 @@ const parseRetryAfterHeader = (value: string | undefined): number | undefined =>
     const milliseconds = Number(header) * 1000;
     return Number.isFinite(milliseconds) ? milliseconds : undefined;
   }
+  if (!HTTP_DATE.test(header)) return undefined;
   const date = Date.parse(header);
-  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : undefined;
+  if (!Number.isFinite(date) || new Date(date).toUTCString() !== header) return undefined;
+  return Math.max(0, date - Date.now());
 };
 
 const retryAfterOf = (record: ErrorRecord | undefined, data: JsonValue | undefined) => {

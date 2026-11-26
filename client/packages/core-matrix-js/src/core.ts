@@ -2628,6 +2628,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
               ok: false,
               error: normalizeMatrixError({
                 httpStatus: response.status,
+                httpHeaders: response.headers,
                 error: `Media request failed: ${response.status}`,
               }),
             };
@@ -2663,6 +2664,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             ok: false,
             error: normalizeMatrixError({
               httpStatus: response.status,
+              httpHeaders: response.headers,
               error: `Media request failed: ${response.status}`,
             }),
           };

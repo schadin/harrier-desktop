@@ -122,6 +122,56 @@ describe('createAuthOperations', () => {
     }
   });
 
+  it.each([500, undefined])(
+    'keeps M_USER_DEACTIVATED registration fallback Unknown for HTTP %s',
+    async (httpStatus) => {
+      const data = { errcode: 'M_USER_DEACTIVATED', error: 'Registration failed' };
+      vi.spyOn(MatrixClient.prototype, 'registerRequest').mockRejectedValueOnce(
+        new MatrixError(data, httpStatus)
+      );
+
+      const result = await createAuthOperations().register('https://matrix.example.org', {
+        type: 'm.login.password',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'unknown',
+          message: 'Registration failed',
+          retryable: httpStatus === 500,
+          httpStatus,
+          errcode: 'Unknown',
+          data,
+        });
+      }
+    }
+  );
+
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'does not read inherited register aliases for %s',
+    async (errcode) => {
+      const data = { errcode, error: 'Registration failed' };
+      vi.spyOn(MatrixClient.prototype, 'registerRequest').mockRejectedValueOnce(
+        new MatrixError(data, 400)
+      );
+
+      const result = await createAuthOperations().register('https://matrix.example.org', {
+        type: 'm.login.password',
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'invalid-request',
+          message: 'Registration failed',
+          errcode: 'InvalidRequest',
+          data,
+        });
+      }
+    }
+  );
+
   it('preserves registration and password UIA responses', async () => {
     const auth = { session: 'uia-session', flows: [{ stages: ['m.login.password'] }] };
     vi.spyOn(MatrixClient.prototype, 'registerRequest').mockRejectedValueOnce(

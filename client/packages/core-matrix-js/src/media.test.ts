@@ -8,6 +8,8 @@ afterEach(() => {
   driver?.client.stopClient();
   driver = undefined;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('matrix-js media URL', () => {
@@ -60,5 +62,90 @@ describe('matrix-js media URL', () => {
     expect(url).toBe(
       'https://matrix.example.org/_matrix/client/v1/media/download/example.org/file?allow_redirect=true'
     );
+  });
+});
+
+describe('matrix-js media failures', () => {
+  const encryptedRef = {
+    mxcUrl: 'mxc://example.org/encrypted',
+    encrypted: {
+      url: 'mxc://example.org/encrypted',
+      key: { kty: 'oct', k: 'secret' },
+      iv: 'initialization-vector',
+    },
+  };
+
+  it('preserves Retry-After seconds from encrypted resolve responses', async () => {
+    driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 429, headers: { 'Retry-After': '2' } }))
+    );
+
+    const result = await core.media.resolve(encryptedRef);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        code: 'rate-limited',
+        retryable: true,
+        httpStatus: 429,
+        retryAfterMs: 2000,
+        data: { error: 'Media request failed: 429' },
+      });
+      expect('cause' in result.error).toBe(false);
+    }
+  });
+
+  it('preserves an HTTP-date Retry-After from download responses', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T12:00:00.000Z'));
+    driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(null, {
+            status: 429,
+            headers: { 'Retry-After': 'Thu, 26 Nov 2026 12:00:05 GMT' },
+          })
+      )
+    );
+
+    const result = await core.media.download({ mxcUrl: 'mxc://example.org/file' }, 'file');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        code: 'rate-limited',
+        retryable: true,
+        httpStatus: 429,
+        retryAfterMs: 5000,
+        data: { error: 'Media request failed: 429' },
+      });
+    }
+  });
+
+  it.each([500, 503])('marks media HTTP %i responses retryable', async (httpStatus) => {
+    driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: httpStatus }))
+    );
+
+    const result = await core.media.resolve(encryptedRef);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatchObject({
+        code: 'unknown',
+        retryable: true,
+        httpStatus,
+        data: { error: `Media request failed: ${httpStatus}` },
+      });
+    }
   });
 });

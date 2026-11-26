@@ -119,6 +119,23 @@ describe('normalizeMatrixError', () => {
     expect(fallback.retryAfterMs).toBe(450);
   });
 
+  it.each(['-1', '1.5', '+2'])(
+    'rejects numeric-like Retry-After %s and falls back to legacy data',
+    (header) => {
+      const error = normalizeMatrixError(
+        new MatrixError(
+          { errcode: 'M_LIMIT_EXCEEDED', error: 'Slow down', retry_after_ms: 450 },
+          429,
+          undefined,
+          undefined,
+          new Headers({ 'Retry-After': header })
+        )
+      );
+
+      expect(error.retryAfterMs).toBe(450);
+    }
+  );
+
   it('prefers a direct retryAfterMs and safely reads legacy retry methods', () => {
     const direct = Object.assign(new Error('Slow down'), {
       httpStatus: 429,
@@ -201,6 +218,30 @@ describe('normalizeMatrixError', () => {
     });
     expect('cause' in error).toBe(false);
     expect(error.data).not.toBe(data);
+  });
+
+  it('sanitizes __proto__ as an own data key without changing prototypes', () => {
+    const data = JSON.parse(
+      '{"__proto__":{"polluted":"yes"},"nested":{"__proto__":{"deep":"yes"}}}'
+    ) as Record<string, unknown>;
+    const error = normalizeMatrixError({ httpStatus: 400, data });
+    const sanitized = error.data as Record<string, unknown>;
+    const nested = sanitized.nested as Record<string, unknown>;
+
+    const protoData = Object.getOwnPropertyDescriptor(sanitized, '__proto__')?.value;
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(sanitized, '__proto__')).toBe(true);
+    expect(protoData).toEqual({ polluted: 'yes' });
+    expect(Object.getPrototypeOf(protoData)).toBe(Object.prototype);
+    expect('polluted' in sanitized).toBe(false);
+    expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+
+    const nestedProtoData = Object.getOwnPropertyDescriptor(nested, '__proto__')?.value;
+    expect(Object.getPrototypeOf(nested)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(nested, '__proto__')).toBe(true);
+    expect(nestedProtoData).toEqual({ deep: 'yes' });
+    expect(Object.getPrototypeOf(nestedProtoData)).toBe(Object.prototype);
+    expect('deep' in nested).toBe(false);
   });
 
   it('normalizes error-shaped plain objects and ordinary errors', () => {
