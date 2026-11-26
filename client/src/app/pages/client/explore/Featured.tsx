@@ -64,10 +64,10 @@ export function FeaturedRooms() {
                               <RoomCard
                                 roomIdOrAlias={roomIdOrAlias}
                                 allRooms={allRooms}
-                                avatarUrl={roomSummary?.avatar_url}
+                                avatarUrl={roomSummary?.avatarMxc}
                                 name={roomSummary?.name}
                                 topic={roomSummary?.topic}
-                                memberCount={roomSummary?.num_joined_members}
+                                memberCount={roomSummary?.joinedMembers}
                                 onView={navigateSpace}
                                 renderTopicViewer={(name, topic, requestClose) => (
                                   <RoomTopicViewer
@@ -93,10 +93,10 @@ export function FeaturedRooms() {
                               <RoomCard
                                 roomIdOrAlias={roomIdOrAlias}
                                 allRooms={allRooms}
-                                avatarUrl={roomSummary?.avatar_url}
+                                avatarUrl={roomSummary?.avatarMxc}
                                 name={roomSummary?.name}
                                 topic={roomSummary?.topic}
-                                memberCount={roomSummary?.num_joined_members}
+                                memberCount={roomSummary?.joinedMembers}
                                 onView={navigateRoom}
                                 renderTopicViewer={(name, topic, requestClose) => (
                                   <RoomTopicViewer

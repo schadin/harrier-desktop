@@ -1162,4 +1162,479 @@ export const roomsCases = [
       await harness.dispose(core);
     }
   }),
+
+  contractTest(
+    'rooms.summary maps room IDs and aliases to plain federated views',
+    async (harness) => {
+      const core = await harness.create();
+      const roomId = '!federated:remote.example';
+      const alias = '#federated:remote.example';
+      const response = {
+        room_id: roomId,
+        name: 'Federated Room',
+        avatar_url: 'mxc://remote.example/avatar',
+        topic: 'Federated topic',
+        num_joined_members: 17,
+        room_type: 'm.space',
+        membership: 'leave',
+        'im.nheko.summary.room_version': '12',
+        'im.nheko.summary.encryption': 'm.megolm.v1.aes-sha2',
+      };
+      const expected = {
+        roomId,
+        name: 'Federated Room',
+        avatarMxc: 'mxc://remote.example/avatar',
+        topic: 'Federated topic',
+        joinedMembers: 17,
+        roomType: 'm.space',
+        membership: 'leave',
+        roomVersion: '12',
+        encryption: 'm.megolm.v1.aes-sha2',
+      };
+      try {
+        harness.setRoomSummaryResponse(roomId, response);
+        harness.setRoomSummaryResponse(alias, response);
+
+        const byId = await core.rooms.summary(roomId);
+        const byAlias = await core.rooms.summary(alias);
+        expect(byId).toStrictEqual({ ok: true, value: expected });
+        expect(byAlias).toStrictEqual({ ok: true, value: expected });
+        if (byId.ok) {
+          expect(byId.value).not.toHaveProperty('room_id');
+          expect(byId.value).not.toHaveProperty('avatar_url');
+          expect(byId.value).not.toHaveProperty('num_joined_members');
+        }
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'rooms.summary omits absent or malformed optional fields without defaults',
+    async (harness) => {
+      const core = await harness.create();
+      const minimalId = '!minimal:remote.example';
+      const malformedId = '!malformed:remote.example';
+      try {
+        harness.setRoomSummaryResponse(minimalId, { room_id: minimalId });
+        harness.setRoomSummaryResponse(malformedId, {
+          room_id: malformedId,
+          name: 7,
+          avatar_url: null,
+          topic: false,
+          num_joined_members: '12',
+          room_type: [],
+          membership: 'unknown',
+          'im.nheko.summary.room_version': 12,
+          'im.nheko.summary.encryption': false,
+        });
+
+        expect(await core.rooms.summary(minimalId)).toStrictEqual({
+          ok: true,
+          value: { roomId: minimalId },
+        });
+        expect(await core.rooms.summary(malformedId)).toStrictEqual({
+          ok: true,
+          value: { roomId: malformedId },
+        });
+
+        harness.setRoomSummaryResponse(malformedId, {
+          room_id: malformedId,
+          num_joined_members: 0,
+          name: '',
+          membership: 'knock',
+        });
+        expect(await core.rooms.summary(malformedId)).toStrictEqual({
+          ok: true,
+          value: { roomId: malformedId, joinedMembers: 0, name: '', membership: 'knock' },
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('rooms.summary rejects invalid responses', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!invalid-summary:remote.example';
+    try {
+      await [{}, { room_id: 7 }, null, []].reduce(async (previous, response) => {
+        await previous;
+        harness.setRoomSummaryResponse(roomId, response);
+        const result = await core.rooms.summary(roomId);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toBeInstanceOf(Error);
+          expect(result.error).toMatchObject({
+            name: 'CoreError',
+            code: 'invalid-request',
+            message: 'Invalid room summary',
+          });
+        }
+      }, Promise.resolve());
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('rooms.summary normalizes HTTP failures and consumes them once', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!summary-errors:remote.example';
+    harness.setRoomSummaryResponse(roomId, { room_id: roomId });
+    const failures = [
+      {
+        httpStatus: 404,
+        errcode: 'M_NOT_FOUND',
+        error: 'Summary not found',
+        code: 'not-found',
+        retryable: false,
+      },
+      {
+        httpStatus: 403,
+        errcode: 'M_FORBIDDEN',
+        error: 'Summary forbidden',
+        code: 'forbidden',
+        retryable: false,
+      },
+      {
+        httpStatus: 429,
+        errcode: 'M_LIMIT_EXCEEDED',
+        error: 'Slow down',
+        code: 'rate-limited',
+        retryable: true,
+      },
+    ] as const;
+    try {
+      await failures.reduce(async (previous, failure) => {
+        await previous;
+        harness.failNextOperation('/summary/', {
+          operation: '/summary/',
+          ...failure,
+          ...(failure.httpStatus === 429 ? { retryAfterMs: 1250 } : {}),
+        });
+        const result = await core.rooms.summary(roomId);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toMatchObject({
+            code: failure.code,
+            retryable: failure.retryable,
+            httpStatus: failure.httpStatus,
+            errcode: failure.errcode,
+          });
+          if (failure.httpStatus === 429) expect(result.error.retryAfterMs).toBe(1250);
+        }
+        expect(await core.rooms.summary(roomId)).toStrictEqual({
+          ok: true,
+          value: { roomId },
+        });
+      }, Promise.resolve());
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('rooms.summary uses the SDK M_UNRECOGNIZED fallback once', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!fallback-summary:remote.example';
+    harness.setRoomSummaryResponse(roomId, { room_id: roomId, name: 'Fallback summary' });
+    try {
+      harness.failNextOperation('/summary/', {
+        operation: '/summary/',
+        httpStatus: 400,
+        errcode: 'M_UNRECOGNIZED',
+        error: 'Use the room summary endpoint',
+      });
+      expect(await core.rooms.summary(roomId)).toStrictEqual({
+        ok: true,
+        value: { roomId, name: 'Fallback summary' },
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest('rooms.summary accepts federation routing servers', async (harness) => {
+    const core = await harness.create();
+    const roomId = '!via-summary:remote.example';
+    harness.setRoomSummaryResponse(roomId, { room_id: roomId });
+    try {
+      expect(await core.rooms.summary(roomId, ['remote.example', 'backup.example'])).toStrictEqual({
+        ok: true,
+        value: { roomId },
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'rooms.thirdPartyProtocols preserves protocol and instance order',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        harness.setThirdPartyProtocolsResponse({
+          'org.example.bridge': {
+            user_fields: ['@alice:example.org'],
+            location_fields: ['!room:example.org'],
+            icon: 'mxc://example.org/bridge',
+            field_types: {},
+            instances: [
+              {
+                instance_id: 'bridge-two',
+                desc: 'Second bridge',
+                network_id: 'matrix-two',
+                icon: 'mxc://example.org/bridge-two',
+                fields: {},
+              },
+              {
+                instance_id: 'bridge-one',
+                desc: 'First bridge',
+                network_id: 'matrix-one',
+                fields: {},
+              },
+            ],
+          },
+          'org.example.irc': {
+            user_fields: [],
+            location_fields: ['#channel:example.org'],
+            field_types: {},
+            instances: [
+              {
+                instance_id: 'irc-one',
+                desc: 'IRC network',
+                network_id: 'irc',
+                fields: {},
+              },
+            ],
+          },
+        });
+
+        expect(await core.rooms.thirdPartyProtocols()).toStrictEqual({
+          ok: true,
+          value: [
+            {
+              protocol: 'org.example.bridge',
+              userFields: ['@alice:example.org'],
+              locationFields: ['!room:example.org'],
+              icon: 'mxc://example.org/bridge',
+              fieldTypes: {},
+              instances: [
+                {
+                  instanceId: 'bridge-two',
+                  description: 'Second bridge',
+                  networkId: 'matrix-two',
+                  icon: 'mxc://example.org/bridge-two',
+                  fields: {},
+                },
+                {
+                  instanceId: 'bridge-one',
+                  description: 'First bridge',
+                  networkId: 'matrix-one',
+                  fields: {},
+                },
+              ],
+            },
+            {
+              protocol: 'org.example.irc',
+              userFields: [],
+              locationFields: ['#channel:example.org'],
+              fieldTypes: {},
+              instances: [
+                {
+                  instanceId: 'irc-one',
+                  description: 'IRC network',
+                  networkId: 'irc',
+                  fields: {},
+                },
+              ],
+            },
+          ],
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('rooms.thirdPartyProtocols returns plain typed field data', async (harness) => {
+    const core = await harness.create();
+    const nested = { enabled: true };
+    const fields: Record<string, unknown> = {
+      token: 'secret',
+      nested,
+      values: ['one', 1, null],
+      omitted: () => undefined,
+    };
+    Object.defineProperty(fields, '__proto__', {
+      value: { safe: true },
+      enumerable: true,
+    });
+    try {
+      harness.setThirdPartyProtocolsResponse({
+        'org.example.typed': {
+          user_fields: ['@alice:example.org', 7, null],
+          location_fields: [false, '#room:example.org'],
+          field_types: {
+            token: { regexp: '^[a-z]+$', placeholder: 'Token' },
+            malformed: { regexp: '^x$', placeholder: 7 },
+            ['__proto__']: { regexp: '^safe$', placeholder: 'Safe' },
+          },
+          instances: [{ instance_id: 'typed', fields }],
+        },
+      });
+
+      const result = await core.rooms.thirdPartyProtocols();
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toStrictEqual([
+        {
+          protocol: 'org.example.typed',
+          userFields: ['@alice:example.org'],
+          locationFields: ['#room:example.org'],
+          fieldTypes: {
+            token: { regexp: '^[a-z]+$', placeholder: 'Token' },
+            ['__proto__']: { regexp: '^safe$', placeholder: 'Safe' },
+          },
+          instances: [
+            {
+              instanceId: 'typed',
+              description: 'typed',
+              networkId: '',
+              fields: {
+                token: 'secret',
+                nested: { enabled: true },
+                values: ['one', 1, null],
+                ['__proto__']: { safe: true },
+              },
+            },
+          ],
+        },
+      ]);
+      const plainFields = result.value[0]?.instances[0]?.fields;
+      expect(Object.getPrototypeOf(plainFields)).toBe(Object.prototype);
+      expect(plainFields).not.toBe(fields);
+      expect(plainFields?.nested).not.toBe(nested);
+      expect(Object.prototype.hasOwnProperty.call(plainFields, '__proto__')).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'rooms.thirdPartyProtocols skips malformed instances and supplies documented fallbacks',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        harness.setThirdPartyProtocolsResponse({
+          'org.example.bridge': {
+            instances: [
+              null,
+              {},
+              { instance_id: 7 },
+              {
+                instance_id: 'minimal',
+                desc: 7,
+                network_id: false,
+                icon: [],
+                fields: [],
+              },
+            ],
+          },
+          'org.example.empty': {},
+          malformed: null,
+        });
+
+        expect(await core.rooms.thirdPartyProtocols()).toStrictEqual({
+          ok: true,
+          value: [
+            {
+              protocol: 'org.example.bridge',
+              userFields: [],
+              locationFields: [],
+              fieldTypes: {},
+              instances: [
+                { instanceId: 'minimal', description: 'minimal', networkId: '', fields: {} },
+              ],
+            },
+            {
+              protocol: 'org.example.empty',
+              userFields: [],
+              locationFields: [],
+              fieldTypes: {},
+              instances: [],
+            },
+          ],
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'rooms.thirdPartyProtocols maps an empty object to an empty list',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        harness.setThirdPartyProtocolsResponse({});
+        expect(await core.rooms.thirdPartyProtocols()).toStrictEqual({ ok: true, value: [] });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'rooms.thirdPartyProtocols normalizes endpoint failures without fallback',
+    async (harness) => {
+      const core = await harness.create();
+      const failures = [
+        {
+          httpStatus: 403,
+          errcode: 'M_FORBIDDEN',
+          error: 'Protocols forbidden',
+          code: 'forbidden',
+          retryable: false,
+        },
+        {
+          httpStatus: 429,
+          errcode: 'M_LIMIT_EXCEEDED',
+          error: 'Slow down',
+          code: 'rate-limited',
+          retryable: true,
+        },
+        {
+          httpStatus: 400,
+          errcode: 'M_UNRECOGNIZED',
+          error: 'Unsupported endpoint',
+          code: 'invalid-request',
+          retryable: false,
+        },
+      ] as const;
+      try {
+        await failures.reduce(async (previous, failure) => {
+          await previous;
+          harness.failNextOperation('/thirdparty/protocols', {
+            operation: '/thirdparty/protocols',
+            ...failure,
+            ...(failure.httpStatus === 429 ? { retryAfterMs: 1250 } : {}),
+          });
+          const result = await core.rooms.thirdPartyProtocols();
+          expect(result.ok).toBe(false);
+          if (!result.ok) {
+            expect(result.error).toMatchObject({
+              code: failure.code,
+              retryable: failure.retryable,
+              httpStatus: failure.httpStatus,
+              errcode: failure.errcode,
+            });
+            if (failure.httpStatus === 429) expect(result.error.retryAfterMs).toBe(1250);
+          }
+        }, Promise.resolve());
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
 ];

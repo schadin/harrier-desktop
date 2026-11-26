@@ -50,6 +50,18 @@ export type RoomSummaryView = {
   readonly notificationMode?: NotificationMode;
 };
 
+export type FederatedRoomSummaryView = {
+  readonly roomId: RoomId;
+  readonly name?: string;
+  readonly avatarMxc?: string;
+  readonly topic?: string;
+  readonly joinedMembers?: number;
+  readonly roomType?: string;
+  readonly membership?: Membership;
+  readonly roomVersion?: string;
+  readonly encryption?: string;
+};
+
 export type RoomAliasesView = {
   readonly canonical?: string;
   readonly alternatives: readonly string[];
@@ -467,6 +479,28 @@ export type PublicRoomView = {
   readonly joinedMembers: number;
   readonly worldReadable: boolean;
   readonly guestCanJoin: boolean;
+};
+
+export type ThirdPartyFieldTypeView = {
+  readonly regexp: string;
+  readonly placeholder: string;
+};
+
+export type ThirdPartyInstanceView = {
+  readonly instanceId: string;
+  readonly description: string;
+  readonly networkId: string;
+  readonly icon?: string;
+  readonly fields: JsonObject;
+};
+
+export type ThirdPartyProtocolView = {
+  readonly protocol: string;
+  readonly userFields: readonly string[];
+  readonly locationFields: readonly string[];
+  readonly icon?: string;
+  readonly fieldTypes: Readonly<Record<string, ThirdPartyFieldTypeView>>;
+  readonly instances: readonly ThirdPartyInstanceView[];
 };
 
 export type UploadStatus = 'uploading' | 'done' | 'failed';

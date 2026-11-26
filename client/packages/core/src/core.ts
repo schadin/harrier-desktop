@@ -3,6 +3,7 @@ import type { IPowerLevels } from './permissions';
 import type { SnapshotStore } from './snapshot';
 import type {
   EventId,
+  FederatedRoomSummaryView,
   JsonObject,
   MemberView,
   PublicRoomView,
@@ -46,6 +47,7 @@ import type {
   TimelineItem,
   SendStatusView,
   UploadView,
+  ThirdPartyProtocolView,
   UnreadMapEntry,
   UserId,
 } from './views';
@@ -188,6 +190,11 @@ export type RoomsModule = {
   upgrade(roomId: RoomId, params: RoomUpgradeParams): Promise<CoreResult<RoomId>>;
   searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;
   hierarchy(roomId: RoomId, params: HierarchyParams): Promise<CoreResult<PublicRoomsResult>>;
+  summary(
+    roomIdOrAlias: string,
+    via?: readonly string[]
+  ): Promise<CoreResult<FederatedRoomSummaryView>>;
+  thirdPartyProtocols(): Promise<CoreResult<readonly ThirdPartyProtocolView[]>>;
   state(roomId: RoomId, eventType: string, stateKey?: string): SnapshotStore<JsonObject | null>;
   stateEntry(
     roomId: RoomId,

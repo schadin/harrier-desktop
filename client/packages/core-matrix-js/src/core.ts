@@ -5,9 +5,11 @@ import {
   type CoreResult,
   type DeviceTrust,
   type DeviceView,
+  type FederatedRoomSummaryView,
   type HarrierCore,
   type IPowerLevels,
   type JsonObject,
+  type JsonValue,
   type MemberView,
   type Membership,
   type MessageAttachmentKind,
@@ -28,6 +30,9 @@ import {
   type RoomView,
   type SendStatus,
   type SendStatusView,
+  type ThirdPartyFieldTypeView,
+  type ThirdPartyInstanceView,
+  type ThirdPartyProtocolView,
   type UploadView,
   type UserProfileView,
   type VerificationPhaseView,
@@ -588,6 +593,126 @@ const toPublicRoomView = (room: Record<string, unknown>): PublicRoomView => ({
   worldReadable: room.world_readable === true,
   guestCanJoin: room.guest_can_join === true,
 });
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const toPlainJson = (value: unknown, seen = new WeakSet<object>()): JsonValue | undefined => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'object' || value === null || seen.has(value)) return undefined;
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => toPlainJson(item, seen) ?? null);
+    }
+    if (!isPlainRecord(value)) return undefined;
+    const result: JsonObject = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const plain = toPlainJson(item, seen);
+      if (plain === undefined) return;
+      Object.defineProperty(result, key, {
+        value: plain,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    });
+    return result;
+  } finally {
+    seen.delete(value);
+  }
+};
+
+const toPlainJsonObject = (value: unknown): JsonObject => {
+  const plain = toPlainJson(value);
+  return typeof plain === 'object' && plain !== null && !Array.isArray(plain) ? plain : {};
+};
+
+const toFederatedRoomSummaryView = (response: unknown): FederatedRoomSummaryView => {
+  if (!isPlainRecord(response) || typeof response.room_id !== 'string') {
+    throw new CoreError('invalid-request', 'Invalid room summary');
+  }
+  const name = stringOrUndefined(response.name);
+  const avatarMxc = stringOrUndefined(response.avatar_url);
+  const topic = stringOrUndefined(response.topic);
+  const joinedMembers = numberOrUndefined(response.num_joined_members);
+  const roomType = stringOrUndefined(response.room_type);
+  const membership = toMembership(stringOrUndefined(response.membership));
+  const roomVersion = stringOrUndefined(response['im.nheko.summary.room_version']);
+  const encryption = stringOrUndefined(response['im.nheko.summary.encryption']);
+  return {
+    roomId: response.room_id,
+    ...(name !== undefined ? { name } : {}),
+    ...(avatarMxc !== undefined ? { avatarMxc } : {}),
+    ...(topic !== undefined ? { topic } : {}),
+    ...(joinedMembers !== undefined ? { joinedMembers } : {}),
+    ...(roomType !== undefined ? { roomType } : {}),
+    ...(membership !== null ? { membership } : {}),
+    ...(roomVersion !== undefined ? { roomVersion } : {}),
+    ...(encryption !== undefined ? { encryption } : {}),
+  };
+};
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+const toThirdPartyFieldTypes = (value: unknown): Record<string, ThirdPartyFieldTypeView> => {
+  if (!isPlainRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([name, fieldType]) => {
+      if (!isPlainRecord(fieldType)) return [];
+      const regexp = stringOrUndefined(fieldType.regexp);
+      const placeholder = stringOrUndefined(fieldType.placeholder);
+      return regexp !== undefined && placeholder !== undefined
+        ? [[name, { regexp, placeholder }]]
+        : [];
+    })
+  );
+};
+
+const toThirdPartyInstances = (value: unknown): ThirdPartyInstanceView[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((instance) => {
+    if (!isPlainRecord(instance) || typeof instance.instance_id !== 'string') return [];
+    const instanceId = instance.instance_id;
+    const description = stringOrUndefined(instance.desc) ?? instanceId;
+    const networkId = stringOrUndefined(instance.network_id) ?? '';
+    const icon = stringOrUndefined(instance.icon);
+    return [
+      {
+        instanceId,
+        description,
+        networkId,
+        ...(icon !== undefined ? { icon } : {}),
+        fields: toPlainJsonObject(instance.fields),
+      },
+    ];
+  });
+};
+
+const toThirdPartyProtocolViews = (response: unknown): readonly ThirdPartyProtocolView[] => {
+  if (!isPlainRecord(response)) {
+    throw new CoreError('invalid-request', 'Invalid third-party protocols');
+  }
+  return Object.entries(response).flatMap(([protocol, value]) => {
+    if (!isPlainRecord(value)) return [];
+    const icon = stringOrUndefined(value.icon);
+    return [
+      {
+        protocol,
+        userFields: toStringArray(value.user_fields),
+        locationFields: toStringArray(value.location_fields),
+        ...(icon !== undefined ? { icon } : {}),
+        fieldTypes: toThirdPartyFieldTypes(value.field_types),
+        instances: toThirdPartyInstances(value.instances),
+      },
+    ];
+  });
+};
 
 const unreadCountOf = (room: Room) => {
   const total = room.getUnreadNotificationCount(NotificationCountType.Total);
@@ -2363,6 +2488,25 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
                 : {}),
             },
           };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async summary(roomIdOrAlias, via): Promise<CoreResult<FederatedRoomSummaryView>> {
+        try {
+          const response: unknown = await client.getRoomSummary(
+            roomIdOrAlias,
+            via ? [...via] : undefined
+          );
+          return { ok: true, value: toFederatedRoomSummaryView(response) };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async thirdPartyProtocols(): Promise<CoreResult<readonly ThirdPartyProtocolView[]>> {
+        try {
+          const response: unknown = await client.getThirdpartyProtocols();
+          return { ok: true, value: toThirdPartyProtocolViews(response) };
         } catch (error) {
           return { ok: false, error: normalizeMatrixError(error) };
         }

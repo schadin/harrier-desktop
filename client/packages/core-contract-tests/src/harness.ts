@@ -115,5 +115,7 @@ export type CoreContractHarness = {
   create(): Promise<HarrierCore>;
   applySyncFixture(fixture: SyncFixture): Promise<void>;
   failNextOperation(operation: string, failure: ContractOperationFailure): void;
+  setRoomSummaryResponse(roomIdOrAlias: string, response: unknown): void;
+  setThirdPartyProtocolsResponse(response: unknown): void;
   dispose(core: HarrierCore): Promise<void>;
 };

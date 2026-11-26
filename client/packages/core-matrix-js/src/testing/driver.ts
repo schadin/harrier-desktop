@@ -29,6 +29,17 @@ import {
 
 export const TEST_USER_ID = '@tester:example.org';
 const DIRECT_PARTNER_ID = '@alice:example.org';
+const DEFAULT_ROOM_SUMMARY_RESPONSE = {
+  room_id: '!federated:remote.example',
+  name: 'Federated Room',
+  avatar_url: 'mxc://remote.example/avatar',
+  topic: 'Federated topic',
+  num_joined_members: 17,
+  room_type: 'm.space',
+  membership: 'leave',
+  'im.nheko.summary.room_version': '12',
+  'im.nheko.summary.encryption': 'm.megolm.v1.aes-sha2',
+};
 
 export type SyncFixtureReaction = {
   readonly eventId: string;
@@ -132,10 +143,20 @@ export type SyncOperationFailure = {
   readonly data?: Record<string, unknown>;
 };
 
+export type FakeTransportCall = {
+  readonly method: string;
+  readonly path: string;
+  readonly query?: Readonly<Record<string, unknown>>;
+  readonly body?: unknown;
+};
+
 export type SyncDriver = {
   readonly client: MatrixClient;
   applyFixture(fixture: SyncFixture): Promise<void>;
   failNextOperation(operation: string, failure: SyncOperationFailure): void;
+  setRoomSummaryResponse(roomIdOrAlias: string, response: unknown): void;
+  setThirdPartyProtocolsResponse(response: unknown): void;
+  getCalls(): readonly FakeTransportCall[];
 };
 
 let eventCounter = 0;
@@ -352,6 +373,38 @@ export function createSyncDriver(): SyncDriver {
   const sendAttempts = new Map<string, number>();
   const knownEvents = new Map<string, Record<string, unknown>>();
   const historyByRoom = new Map<string, SyncFixtureRoom['history']>();
+  const roomSummaryResponses = new Map<string, unknown>();
+  const calls: FakeTransportCall[] = [];
+  let thirdPartyProtocolsResponse: unknown = {
+    'org.example.bridge': {
+      user_fields: ['@alice:example.org'],
+      location_fields: ['!room:example.org'],
+      icon: 'mxc://example.org/bridge',
+      field_types: { token: { regexp: '^[a-z]+$', placeholder: 'Token' } },
+      instances: [
+        {
+          instance_id: 'bridge-one',
+          desc: 'Example Bridge',
+          network_id: 'matrix',
+          icon: 'mxc://example.org/bridge-one',
+          fields: { token: 'example' },
+        },
+      ],
+    },
+    'org.example.irc': {
+      user_fields: [],
+      location_fields: ['#channel:example.org'],
+      field_types: {},
+      instances: [
+        {
+          instance_id: 'irc-one',
+          desc: 'Example IRC',
+          network_id: 'irc',
+          fields: {},
+        },
+      ],
+    },
+  };
   const operationFailures: Array<{ operation: string; failure: SyncOperationFailure }> = [];
   const failMatchingOperation = (path: string) => {
     const index = operationFailures.findIndex(({ operation }) => path.includes(operation));
@@ -374,7 +427,18 @@ export function createSyncDriver(): SyncDriver {
     versions: ['v1.11'],
     unstable_features: {},
   })) as typeof client.getVersions;
-  client.http.authedRequest = (async (_method: string, path: string, params: { from?: string }) => {
+  client.http.authedRequest = (async (
+    method: string,
+    path: string,
+    query?: Record<string, unknown>,
+    body?: unknown
+  ) => {
+    calls.push({
+      method,
+      path,
+      ...(query !== undefined ? { query } : {}),
+      ...(body !== undefined ? { body } : {}),
+    });
     failMatchingOperation(path);
     if (path.endsWith('/logout')) return {};
     if (path.includes('/join/')) {
@@ -447,6 +511,21 @@ export function createSyncDriver(): SyncDriver {
         next_batch: undefined,
       };
     }
+    const summaryMatch = /^\/summary\/(.+)$/.exec(path);
+    if (summaryMatch) {
+      const roomIdOrAlias = decodeURIComponent(summaryMatch[1]);
+      return roomSummaryResponses.has(roomIdOrAlias)
+        ? roomSummaryResponses.get(roomIdOrAlias)
+        : DEFAULT_ROOM_SUMMARY_RESPONSE;
+    }
+    const fallbackSummaryMatch = /^\/rooms\/([^/]+)\/summary$/.exec(path);
+    if (fallbackSummaryMatch) {
+      const roomIdOrAlias = decodeURIComponent(fallbackSummaryMatch[1]);
+      return roomSummaryResponses.has(roomIdOrAlias)
+        ? roomSummaryResponses.get(roomIdOrAlias)
+        : DEFAULT_ROOM_SUMMARY_RESPONSE;
+    }
+    if (path === '/thirdparty/protocols') return thirdPartyProtocolsResponse;
     if (path.includes('/context/')) {
       const eventId = decodeURIComponent(path.split('/context/')[1]?.split('/')[0] ?? '');
       const raw = knownEvents.get(eventId);
@@ -469,7 +548,7 @@ export function createSyncDriver(): SyncDriver {
       const history = historyByRoom.get(roomId);
       if (!history) throw new Error(`No fake history for ${roomId}`);
       return {
-        start: params.from ?? 't0',
+        start: typeof query?.from === 'string' ? query.from : 't0',
         end: history.nextToken,
         chunk: history.messages.map((message) => messageEvent(roomId, message).event),
       };
@@ -678,6 +757,15 @@ export function createSyncDriver(): SyncDriver {
     client,
     failNextOperation(operation, failure) {
       operationFailures.push({ operation, failure });
+    },
+    setRoomSummaryResponse(roomIdOrAlias, response) {
+      roomSummaryResponses.set(roomIdOrAlias, response);
+    },
+    setThirdPartyProtocolsResponse(response) {
+      thirdPartyProtocolsResponse = response;
+    },
+    getCalls() {
+      return [...calls];
     },
     async applyFixture(fixture) {
       if (fixture.devices) devices = fixture.devices;

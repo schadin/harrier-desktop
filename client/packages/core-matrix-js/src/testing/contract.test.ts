@@ -35,6 +35,14 @@ const matrixJsHarness: CoreContractHarness = {
     if (!driver) throw new Error('create() must run before failNextOperation()');
     driver.failNextOperation(operation, failure);
   },
+  setRoomSummaryResponse(roomIdOrAlias, response) {
+    if (!driver) throw new Error('create() must run before setRoomSummaryResponse()');
+    driver.setRoomSummaryResponse(roomIdOrAlias, response);
+  },
+  setThirdPartyProtocolsResponse(response) {
+    if (!driver) throw new Error('create() must run before setThirdPartyProtocolsResponse()');
+    driver.setThirdPartyProtocolsResponse(response);
+  },
   async dispose() {
     driver?.client.stopClient();
     driver = undefined;

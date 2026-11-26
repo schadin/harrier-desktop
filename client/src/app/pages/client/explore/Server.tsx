@@ -33,8 +33,8 @@ import { useAtomValue } from 'jotai';
 import { useQuery } from '@tanstack/react-query';
 import { RoomType } from '../../../../types/matrix/room';
 import { Page, PageContent, PageContentCenter, PageHeader } from '../../../components/page';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
+import { getSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { RoomTopicViewer } from '../../../components/room-topic-viewer';
 import { RoomCard, RoomCardBase, RoomCardGrid } from '../../../components/room-card';
 import { ExploreServerPathSearchParams } from '../../paths';
@@ -147,19 +147,23 @@ function Search({ active, loading, searchInputRef, onSearch, onReset }: SearchPr
 }
 
 const DEFAULT_INSTANCE_NAME = 'Matrix';
-function ThirdPartyProtocolsSelector({
+export function ThirdPartyProtocolsSelector({
   instanceId,
   onChange,
 }: {
   instanceId?: string;
   onChange: (instanceId?: string) => void;
 }) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const [menuAnchor, setMenuAnchor] = useState<RectCords>();
 
   const { data } = useQuery({
     queryKey: ['thirdparty', 'protocols'],
-    queryFn: () => mx.getThirdpartyProtocols(),
+    queryFn: async () => {
+      const result = await core.rooms.thirdPartyProtocols();
+      if (!result.ok) throw result.error;
+      return result.value;
+    },
   });
 
   const handleInstanceSelect: MouseEventHandler<HTMLButtonElement> = (evt): void => {
@@ -172,9 +176,9 @@ function ThirdPartyProtocolsSelector({
     setMenuAnchor(evt.currentTarget.getBoundingClientRect());
   };
 
-  const instances = data && Object.keys(data).flatMap((protocol) => data[protocol].instances);
-  if (!instances || instances.length === 0) return null;
-  const selectedInstance = instances.find((instance) => instanceId === instance.instance_id);
+  const instances = data?.flatMap((protocol) => protocol.instances) ?? [];
+  if (instances.length === 0) return null;
+  const selectedInstance = instances.find((instance) => instanceId === instance.instanceId);
 
   return (
     <PopOut
@@ -214,15 +218,15 @@ function ThirdPartyProtocolsSelector({
                 {instances.map((instance) => (
                   <MenuItem
                     size="300"
-                    key={instance.instance_id}
-                    data-instance-id={instance.instance_id}
-                    aria-pressed={instanceId === instance.instance_id}
+                    key={instance.instanceId}
+                    data-instance-id={instance.instanceId}
+                    aria-pressed={instanceId === instance.instanceId}
                     variant="Surface"
                     radii="300"
                     onClick={handleInstanceSelect}
                   >
                     <Text size="T200" truncate>
-                      {instance.desc}
+                      {instance.description}
                     </Text>
                   </MenuItem>
                 ))}
@@ -241,7 +245,7 @@ function ThirdPartyProtocolsSelector({
         after={<Icon size="100" src={Icons.ChevronBottom} />}
       >
         <Text size="T200" truncate>
-          {selectedInstance?.desc ?? DEFAULT_INSTANCE_NAME}
+          {selectedInstance?.description ?? DEFAULT_INSTANCE_NAME}
         </Text>
       </Chip>
     </PopOut>
@@ -343,9 +347,9 @@ function LimitButton({ limit, onLimitChange }: LimitButtonProps) {
 
 export function PublicRooms() {
   const { server } = useParams();
-  const mx = useMatrixClient();
   const core = useCore();
-  const userId = mx.getUserId();
+  const session = useCoreSession();
+  const userId = getSessionUserId(session);
   const userServer = userId && getMxIdServer(userId);
   const allRooms = useAtomValue(allRoomsAtom);
   const { navigateSpace, navigateRoom } = useRoomNavigate();

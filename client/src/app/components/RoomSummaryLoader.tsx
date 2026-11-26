@@ -1,35 +1,28 @@
 import { ReactNode, useCallback, useState } from 'react';
-import type { PublicRoomView } from '@harrier/core';
+import type { FederatedRoomSummaryView, PublicRoomView } from '@harrier/core';
 import { useQuery } from '@tanstack/react-query';
 import { useCore } from '../hooks/useCore';
 import { useCoreRoom } from '../hooks/useCoreRoom';
 import { useCoreRoomState } from '../hooks/useCoreRoomState';
-import { useMatrixClient } from '../hooks/useMatrixClient';
 import { useRoomMembers } from '../hooks/useRoomMembers';
 import { AsyncState, AsyncStatus } from '../hooks/useAsyncCallback';
 import { StateEvent } from '../../types/matrix/room';
 
-// The public core contract has no federated room-summary operation yet.
-export type IRoomSummary = {
-  room_id: string;
-  name?: string;
-  avatar_url?: string;
-  topic?: string;
-  num_joined_members?: number;
-  room_type?: string;
-};
-
 type RoomSummaryLoaderProps = {
   roomIdOrAlias: string;
-  children: (roomSummary?: IRoomSummary) => ReactNode;
+  children: (roomSummary?: FederatedRoomSummaryView) => ReactNode;
 };
 export function RoomSummaryLoader({ roomIdOrAlias, children }: RoomSummaryLoaderProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
 
-  const fetchSummary = useCallback(() => mx.getRoomSummary(roomIdOrAlias), [mx, roomIdOrAlias]);
+  const fetchSummary = useCallback(async () => {
+    const result = await core.rooms.summary(roomIdOrAlias);
+    if (!result.ok) throw result.error;
+    return result.value;
+  }, [core, roomIdOrAlias]);
 
   const { data } = useQuery({
-    queryKey: [roomIdOrAlias, `summary`],
+    queryKey: [roomIdOrAlias, 'summary'],
     queryFn: fetchSummary,
   });
 

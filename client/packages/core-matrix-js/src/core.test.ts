@@ -780,3 +780,87 @@ describe('matrix-js core local validation errors', () => {
     }
   });
 });
+
+describe('matrix-js federated room queries', () => {
+  it('forwards readonly via servers and logs the encoded summary transport call', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!federated:remote.example';
+    const via = ['remote.example', 'backup.example'] as const;
+    driver.setRoomSummaryResponse(roomId, { room_id: roomId, name: 'Federated Room' });
+    const summarySpy = vi.spyOn(driver.client, 'getRoomSummary');
+    try {
+      expect(await core.rooms.summary(roomId, via)).toStrictEqual({
+        ok: true,
+        value: { roomId, name: 'Federated Room' },
+      });
+      expect(summarySpy).toHaveBeenCalledWith(roomId, [...via]);
+      const summaryCalls = driver.getCalls().filter((call) => call.path.includes('/summary/'));
+      expect(summaryCalls).toHaveLength(1);
+      expect(summaryCalls[0]).toMatchObject({
+        method: 'GET',
+        path: `/summary/${encodeURIComponent(roomId)}`,
+        query: { via: [...via] },
+      });
+    } finally {
+      summarySpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it('uses both SDK summary routes with the same via servers after M_UNRECOGNIZED', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!fallback:remote.example';
+    const via = ['remote.example'];
+    driver.setRoomSummaryResponse(roomId, { room_id: roomId });
+    try {
+      driver.failNextOperation('/summary/', {
+        httpStatus: 400,
+        errcode: 'M_UNRECOGNIZED',
+        error: 'Use fallback',
+      });
+      expect(await core.rooms.summary(roomId, via)).toStrictEqual({
+        ok: true,
+        value: { roomId },
+      });
+      const summaryCalls = driver
+        .getCalls()
+        .filter((call) => call.path.includes('/summary/') || call.path.endsWith('/summary'));
+      expect(summaryCalls.map((call) => call.path)).toEqual([
+        `/summary/${encodeURIComponent(roomId)}`,
+        `/rooms/${encodeURIComponent(roomId)}/summary`,
+      ]);
+      expect(summaryCalls.map((call) => call.query?.via)).toEqual([via, via]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('makes one third-party request and does not fall back on M_UNRECOGNIZED', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    driver.setThirdPartyProtocolsResponse({});
+    try {
+      driver.failNextOperation('/thirdparty/protocols', {
+        httpStatus: 400,
+        errcode: 'M_UNRECOGNIZED',
+        error: 'Unsupported endpoint',
+      });
+      const result = await core.rooms.thirdPartyProtocols();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'invalid-request',
+          httpStatus: 400,
+          errcode: 'M_UNRECOGNIZED',
+        });
+      }
+      const calls = driver.getCalls().filter((call) => call.path === '/thirdparty/protocols');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.method).toBe('GET');
+    } finally {
+      await core.auth.stop();
+    }
+  });
+});

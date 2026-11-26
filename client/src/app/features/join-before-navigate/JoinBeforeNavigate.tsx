@@ -61,11 +61,11 @@ export function JoinBeforeNavigate({
                   style={{ maxWidth: toRem(364), width: '100%' }}
                   roomIdOrAlias={roomIdOrAlias}
                   allRooms={allRooms}
-                  avatarUrl={summary?.avatar_url}
+                  avatarUrl={summary?.avatarMxc}
                   name={summary?.name}
                   topic={summary?.topic}
-                  memberCount={summary?.num_joined_members}
-                  roomType={summary?.room_type}
+                  memberCount={summary?.joinedMembers}
+                  roomType={summary?.roomType}
                   viaServers={viaServers}
                   renderTopicViewer={(name, topic, requestClose) => (
                     <RoomTopicViewer name={name} topic={topic} requestClose={requestClose} />
