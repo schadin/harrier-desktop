@@ -16,6 +16,8 @@ import {
   RoomMemberEvent,
   RoomStateEvent,
   User,
+  UserEvent,
+  MatrixEventEvent,
 } from 'matrix-js-sdk';
 import {
   ImportRoomKeyStage,
@@ -24,7 +26,13 @@ import {
   VerifierEvent,
   type CryptoApi,
   type VerificationRequest,
+  DecryptionFailureCode,
 } from 'matrix-js-sdk/lib/crypto-api';
+import {
+  DecryptionError,
+  type EventDecryptionResult,
+} from 'matrix-js-sdk/lib/common-crypto/CryptoBackend';
+import type { DecryptionFailureCode as CoreDecryptionFailureCode } from '@harrier/core';
 
 export const TEST_USER_ID = '@tester:example.org';
 const DIRECT_PARTNER_ID = '@alice:example.org';
@@ -46,6 +54,15 @@ export type SyncFixtureReaction = {
   readonly sender: string;
   readonly key: string;
   readonly shortcode?: string;
+  readonly redacted?: boolean;
+  readonly redactionReason?: string;
+  readonly redactionEventId?: string;
+};
+
+export type SyncFixtureRedaction = {
+  readonly eventId: string;
+  readonly reason?: string;
+  readonly redactionEventId?: string;
 };
 
 export type SyncFixtureMessage = {
@@ -63,6 +80,14 @@ export type SyncFixtureMessage = {
   readonly status?: 'sending' | 'sent' | 'failed';
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
+  readonly failureCode?: CoreDecryptionFailureCode;
+  readonly decryptedContent?: Record<string, unknown>;
+  readonly decryptedType?: string;
+  readonly eventType?: string;
+  readonly content?: Record<string, unknown>;
+  readonly unsigned?: Record<string, unknown>;
+  readonly redactionReason?: string;
+  readonly redactionEventId?: string;
   readonly threadRoot?: string;
   readonly timestamp?: number;
 };
@@ -76,7 +101,9 @@ export type SyncFixtureRoom = {
   readonly roomType?: string;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
+  readonly eventOrder?: readonly string[];
   readonly reactions?: readonly SyncFixtureReaction[];
+  readonly redactions?: readonly SyncFixtureRedaction[];
   readonly receipts?: readonly { readonly eventId: string; readonly userId: string }[];
   readonly backwardToken?: string;
   readonly history?: {
@@ -125,8 +152,23 @@ export type SyncFixturePresence = {
   readonly lastActiveTs?: number;
 };
 
+export type SyncFixtureNotification = {
+  readonly roomId: string;
+  readonly event?: {
+    readonly eventId?: string;
+    readonly sender?: string;
+    readonly type?: string;
+    readonly content?: Record<string, unknown>;
+    readonly unsigned?: Record<string, unknown>;
+    readonly timestamp?: number;
+  };
+  readonly timestamp?: number;
+  readonly read?: boolean;
+};
+
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
+  readonly notifications?: readonly SyncFixtureNotification[];
   readonly presence?: readonly SyncFixturePresence[];
   readonly devices?: readonly {
     readonly deviceId: string;
@@ -168,6 +210,12 @@ export type SyncDriver = {
   setKeyBackupInfo(info: Record<string, unknown> | null): void;
   setActiveSessionBackupVersion(version: string | undefined): void;
   setKeyBackupTrust(trust: { trusted: boolean; matchesDecryptionKey: boolean }): void;
+  queueDecryption(
+    eventId: string,
+    clear?: { readonly type: string; readonly content: Record<string, unknown> },
+    failureCode?: CoreDecryptionFailureCode
+  ): void;
+  decryptEvent(eventId: string): Promise<boolean>;
   getCalls(): readonly FakeTransportCall[];
 };
 
@@ -191,64 +239,92 @@ function stateEvent(
   });
 }
 
-function redactionEvent(roomId: string, sender: string): IEvent {
+function redactionEvent(
+  roomId: string,
+  sender: string,
+  reason?: string,
+  eventId = '$redaction'
+): IEvent {
   return {
     type: 'm.room.redaction',
-    event_id: '$redaction',
+    event_id: eventId,
     room_id: roomId,
     sender,
     origin_server_ts: 1_700_000_000_000,
-    content: {},
+    content: { ...(reason !== undefined ? { reason } : {}) },
   } as IEvent;
 }
 
 function messageEvent(roomId: string, message: SyncFixtureMessage): MatrixEvent {
-  const content: Record<string, unknown> = {
-    msgtype: message.encrypted ? 'm.bad.encrypted' : message.msgtype ?? 'm.text',
-    body: message.body,
-  };
-  if (message.formattedBody !== undefined) {
-    content.formatted_body = message.formattedBody;
-    content.format = 'org.matrix.custom.html';
-  }
-  if (message.url !== undefined) content.url = message.url;
-  if (message.filename !== undefined) content.filename = message.filename;
-  if (message.info !== undefined) content.info = message.info;
+  const relation: Record<string, unknown> = {};
   if (message.replaces !== undefined) {
-    content['m.new_content'] = {
-      msgtype: message.msgtype ?? 'm.text',
-      body: message.body,
-      ...(message.formattedBody !== undefined
-        ? {
-            formatted_body: message.formattedBody,
-            format: 'org.matrix.custom.html',
-          }
-        : {}),
-    };
-    content['m.relates_to'] = { rel_type: 'm.replace', event_id: message.replaces };
+    relation.rel_type = 'm.replace';
+    relation.event_id = message.replaces;
   }
   if (message.replyTo !== undefined) {
-    content['m.relates_to'] = { 'm.in_reply_to': { event_id: message.replyTo } };
+    relation['m.in_reply_to'] = { event_id: message.replyTo };
   }
   if (message.threadRoot !== undefined) {
-    content['m.relates_to'] = {
-      rel_type: 'm.thread',
-      event_id: message.threadRoot,
-      'm.in_reply_to': { event_id: message.threadRoot },
-    };
+    relation.rel_type = 'm.thread';
+    relation.event_id = message.threadRoot;
+    relation['m.in_reply_to'] = { event_id: message.threadRoot };
   }
-  if (message.redacted) {
-    Object.keys(content).forEach((key) => delete content[key]);
-  }
+
+  const content: Record<string, unknown> = message.encrypted
+    ? {
+        algorithm: 'm.megolm.v1.aes-sha2',
+        ciphertext: message.body,
+        ...(Object.keys(relation).length > 0 ? { 'm.relates_to': relation } : {}),
+      }
+    : {
+        msgtype: message.msgtype ?? 'm.text',
+        body: message.body,
+        ...(message.formattedBody !== undefined
+          ? { formatted_body: message.formattedBody, format: 'org.matrix.custom.html' }
+          : {}),
+        ...(message.url !== undefined ? { url: message.url } : {}),
+        ...(message.filename !== undefined ? { filename: message.filename } : {}),
+        ...(message.info !== undefined ? { info: message.info } : {}),
+        ...(message.replaces !== undefined
+          ? {
+              'm.new_content': {
+                msgtype: message.msgtype ?? 'm.text',
+                body: message.body,
+                ...(message.formattedBody !== undefined
+                  ? {
+                      formatted_body: message.formattedBody,
+                      format: 'org.matrix.custom.html',
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+        ...(Object.keys(relation).length > 0 ? { 'm.relates_to': relation } : {}),
+      };
+  Object.assign(content, message.content ?? {});
+  if (message.redacted) Object.keys(content).forEach((key) => delete content[key]);
   eventCounter += 1;
   const event = new MatrixEvent({
-    type: message.encrypted ? 'm.room.encrypted' : 'm.room.message',
+    type: message.encrypted ? 'm.room.encrypted' : message.eventType ?? 'm.room.message',
     sender: message.sender,
     room_id: roomId,
     event_id: message.eventId,
     origin_server_ts: message.timestamp ?? 1_700_000_000_000 + eventCounter,
     content,
-    unsigned: message.redacted ? { redacted_because: redactionEvent(roomId, message.sender) } : {},
+    unsigned:
+      message.redacted ||
+      message.redactionReason !== undefined ||
+      message.redactionEventId !== undefined
+        ? {
+            ...(message.unsigned ?? {}),
+            redacted_because: redactionEvent(
+              roomId,
+              message.sender,
+              message.redactionReason,
+              message.redactionEventId
+            ),
+          }
+        : { ...(message.unsigned ?? {}) },
   });
   const statusByFixture: Record<string, EventStatus> = {
     sending: EventStatus.SENDING,
@@ -267,10 +343,29 @@ function reactionEvent(roomId: string, reaction: SyncFixtureReaction): MatrixEve
     room_id: roomId,
     event_id: reaction.eventId,
     origin_server_ts: 1_700_000_000_000 + eventCounter,
-    content: {
-      'm.relates_to': { rel_type: 'm.annotation', event_id: reaction.target, key: reaction.key },
-      ...(reaction.shortcode !== undefined ? { shortcode: reaction.shortcode } : {}),
-    },
+    content: reaction.redacted
+      ? {}
+      : {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: reaction.target,
+            key: reaction.key,
+          },
+          ...(reaction.shortcode !== undefined ? { shortcode: reaction.shortcode } : {}),
+        },
+    unsigned:
+      reaction.redacted ||
+      reaction.redactionReason !== undefined ||
+      reaction.redactionEventId !== undefined
+        ? {
+            redacted_because: redactionEvent(
+              roomId,
+              reaction.sender,
+              reaction.redactionReason,
+              reaction.redactionEventId
+            ),
+          }
+        : {},
   });
 }
 
@@ -345,12 +440,16 @@ type FakeCryptoState = {
   keyBackupTrust: { trusted: boolean; matchesDecryptionKey: boolean };
 };
 
+type FakeClearEvent = { readonly type: string; readonly content: Record<string, unknown> };
+
 const createFakeCrypto = (
   state: FakeCryptoState,
   cryptoCalls: string[],
   failOperation: (operation: string) => void
-): CryptoApi =>
-  ({
+) => {
+  const clearEvents = new Map<string, FakeClearEvent>();
+  const failureQueues = new Map<string, DecryptionFailureCode[]>();
+  const crypto = {
     getDeviceVerificationStatus: async () => ({ crossSigningVerified: false }),
     getOwnDeviceKeys: async () => ({ ed25519: 'ed25519-test-key' }),
     requestDeviceVerification: async () =>
@@ -401,7 +500,39 @@ const createFakeCrypto = (
     bootstrapSecretStorage: async () => undefined,
     loadSessionBackupPrivateKeyFromSecretStorage: async () => undefined,
     bootstrapCrossSigning: async () => undefined,
-  } as unknown as CryptoApi);
+    decryptEvent: async (event: MatrixEvent): Promise<EventDecryptionResult> => {
+      const eventId = event.getId() ?? '';
+      const failureCode = failureQueues.get(eventId)?.shift();
+      if (failureCode) {
+        throw new DecryptionError(failureCode, `Fake decryption failure: ${failureCode}`);
+      }
+      const clear = clearEvents.get(eventId);
+      if (!clear) {
+        throw new DecryptionError(
+          DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID,
+          'No fake decryption data'
+        );
+      }
+      return { clearEvent: clear };
+    },
+  } as unknown as CryptoApi;
+
+  return {
+    crypto,
+    queueDecryption(
+      eventId: string,
+      clear?: FakeClearEvent,
+      failureCode?: CoreDecryptionFailureCode
+    ) {
+      if (clear) clearEvents.set(eventId, clear);
+      if (failureCode) {
+        const queue = failureQueues.get(eventId) ?? [];
+        queue.push(failureCode as DecryptionFailureCode);
+        failureQueues.set(eventId, queue);
+      }
+    },
+  };
+};
 
 export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
   const client = createClient({
@@ -446,10 +577,8 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
     keyBackupInfo: null,
     keyBackupTrust: { trusted: false, matchesDecryptionKey: false },
   };
-  const crypto =
-    options.crypto === false
-      ? undefined
-      : createFakeCrypto(cryptoState, cryptoCalls, failNamedOperation);
+  const fakeCrypto = createFakeCrypto(cryptoState, cryptoCalls, failNamedOperation);
+  const crypto = options.crypto === false ? undefined : fakeCrypto.crypto;
   let devices: readonly {
     deviceId: string;
     displayName?: string;
@@ -465,6 +594,7 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
     })),
   })) as typeof client.getDevices;
   client.getCrypto = (() => crypto) as typeof client.getCrypto;
+  let notifications: readonly SyncFixtureNotification[] = [];
   const directRooms = new Set<string>();
   const sendFailRooms = new Set<string>();
   const sendAttempts = new Map<string, number>();
@@ -549,7 +679,40 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
     if (path.includes('/pushrules/')) return {};
     if (path.endsWith('/config') || path.includes('/media/config')) return {};
     if (path.includes('/preview_url')) return {};
-    if (path.includes('/notifications')) return { notifications: [], next_token: 't1' };
+    if (path.includes('/notifications')) {
+      return {
+        notifications: notifications.map((notification) => ({
+          room_id: notification.roomId,
+          ...(notification.event
+            ? {
+                event: {
+                  ...(notification.event.eventId !== undefined
+                    ? { event_id: notification.event.eventId }
+                    : {}),
+                  ...(notification.event.sender !== undefined
+                    ? { sender: notification.event.sender }
+                    : {}),
+                  ...(notification.event.type !== undefined
+                    ? { type: notification.event.type }
+                    : {}),
+                  ...(notification.event.content !== undefined
+                    ? { content: notification.event.content }
+                    : {}),
+                  ...(notification.event.unsigned !== undefined
+                    ? { unsigned: notification.event.unsigned }
+                    : {}),
+                  ...(notification.event.timestamp !== undefined
+                    ? { origin_server_ts: notification.event.timestamp }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(notification.timestamp !== undefined ? { ts: notification.timestamp } : {}),
+          ...(notification.read !== undefined ? { read: notification.read } : {}),
+        })),
+        next_token: 't1',
+      };
+    }
     if (path.includes('/capabilities')) return {};
     if (path.endsWith('/search')) {
       return { search_categories: { room_events: { results: [], highlights: [] } } };
@@ -664,6 +827,63 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
     });
     client.store.storeAccountDataEvents([event]);
     client.emit(ClientEvent.AccountData, event);
+  };
+
+  const rememberEvent = (event: MatrixEvent) => {
+    const eventId = event.getId();
+    if (eventId)
+      knownEvents.set(eventId, JSON.parse(JSON.stringify(event.event)) as Record<string, unknown>);
+  };
+  const registerFixtureDecryption = (message: SyncFixtureMessage) => {
+    if (!message.encrypted) return;
+    const legacyFailures: Record<
+      NonNullable<SyncFixtureMessage['failure']>,
+      DecryptionFailureCode
+    > = {
+      'missing-keys': DecryptionFailureCode.MEGOLM_UNKNOWN_INBOUND_SESSION_ID,
+      'unknown-device': DecryptionFailureCode.UNKNOWN_SENDER_DEVICE,
+      unknown: DecryptionFailureCode.UNKNOWN_ERROR,
+    };
+    const legacyFailure = message.failure ? legacyFailures[message.failure] : undefined;
+    if (message.decryptedContent !== undefined || message.decryptedType !== undefined) {
+      fakeCrypto.queueDecryption(message.eventId, {
+        type: message.decryptedType ?? 'm.room.message',
+        content: message.decryptedContent ?? {},
+      });
+    }
+    const failureCode = message.failureCode ?? legacyFailure;
+    if (failureCode !== undefined)
+      fakeCrypto.queueDecryption(message.eventId, undefined, failureCode);
+  };
+  const decryptKnownEvent = async (eventId: string): Promise<boolean> => {
+    const event = client
+      .getRooms()
+      .flatMap((room) => room.findEventById(eventId) ?? [])
+      .find(Boolean);
+    if (
+      !event?.isEncrypted() ||
+      (!event.shouldAttemptDecryption() && !event.isDecryptionFailure())
+    ) {
+      return false;
+    }
+    await event.attemptDecryption(fakeCrypto.crypto as never);
+    client.emit(MatrixEventEvent.Decrypted, event);
+    return true;
+  };
+  const redactExistingEvent = (
+    room: Room,
+    eventId: string,
+    reason?: string,
+    redactionEventId?: string
+  ) => {
+    const target = room.findEventById(eventId);
+    if (!target) return;
+    const redaction = new MatrixEvent(
+      redactionEvent(room.roomId, target.getSender() ?? TEST_USER_ID, reason, redactionEventId)
+    );
+    target.makeRedacted(redaction, room);
+    rememberEvent(target);
+    client.emit(RoomEvent.Redaction, redaction, room, target.threadRootId);
   };
 
   const applyRoom = async (item: SyncFixtureRoom) => {
@@ -786,38 +1006,106 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
       client.emit(ClientEvent.Event, event);
     });
 
-    const events = [
-      ...(item.messages ?? []).map((message) => messageEvent(item.roomId, message)),
-      ...(item.reactions ?? []).map((reaction) => reactionEvent(item.roomId, reaction)),
+    const fixtureEvents: Array<{
+      event: MatrixEvent;
+      message?: SyncFixtureMessage;
+      reaction?: SyncFixtureReaction;
+    }> = [
+      ...(item.messages ?? []).map((message) => ({
+        event: messageEvent(item.roomId, message),
+        message,
+      })),
+      ...(item.reactions ?? []).map((reaction) => ({
+        event: reactionEvent(item.roomId, reaction),
+        reaction,
+      })),
       ...(item.timelineStateEvents ?? []).map((stateItem) => {
         eventCounter += 1;
-        return new MatrixEvent({
-          type: stateItem.type,
-          state_key: stateItem.stateKey,
-          sender: stateItem.sender,
-          room_id: item.roomId,
-          event_id: stateItem.eventId,
-          origin_server_ts: stateItem.timestamp ?? 1_700_000_000_000 + eventCounter,
-          content: stateItem.content,
-          unsigned: stateItem.prevContent ? { prev_content: stateItem.prevContent } : {},
-        });
+        return {
+          event: new MatrixEvent({
+            type: stateItem.type,
+            state_key: stateItem.stateKey,
+            sender: stateItem.sender,
+            room_id: item.roomId,
+            event_id: stateItem.eventId,
+            origin_server_ts: stateItem.timestamp ?? 1_700_000_000_000 + eventCounter,
+            content: stateItem.content,
+            unsigned: stateItem.prevContent ? { prev_content: stateItem.prevContent } : {},
+          }),
+        };
       }),
     ];
-    events.forEach((event) => {
+    const newEvents: MatrixEvent[] = [];
+    await fixtureEvents.reduce(async (previous, { event, message, reaction }) => {
+      await previous;
       const eventId = event.getId();
-      if (eventId) knownEvents.set(eventId, event.event);
-    });
+      const existing = eventId ? room.findEventById(eventId) : undefined;
+      if (existing) {
+        if (message) {
+          registerFixtureDecryption(message);
+          if (
+            message.decryptedContent !== undefined ||
+            message.decryptedType !== undefined ||
+            message.failureCode !== undefined ||
+            message.failure !== undefined
+          ) {
+            await decryptKnownEvent(message.eventId);
+          }
+          if (
+            message.redacted ||
+            message.redactionReason !== undefined ||
+            message.redactionEventId !== undefined
+          ) {
+            redactExistingEvent(
+              room,
+              message.eventId,
+              message.redactionReason,
+              message.redactionEventId
+            );
+          }
+        }
+        if (
+          reaction &&
+          (reaction.redacted ||
+            reaction.redactionReason !== undefined ||
+            reaction.redactionEventId !== undefined)
+        ) {
+          redactExistingEvent(
+            room,
+            reaction.eventId,
+            reaction.redactionReason,
+            reaction.redactionEventId
+          );
+        }
+        return;
+      }
+      if (message) {
+        registerFixtureDecryption(message);
+        if (
+          message.decryptedContent !== undefined ||
+          message.decryptedType !== undefined ||
+          message.failureCode !== undefined ||
+          message.failure !== undefined
+        ) {
+          await event.attemptDecryption(fakeCrypto.crypto as never);
+          client.emit(MatrixEventEvent.Decrypted, event);
+        }
+      }
+      rememberEvent(event);
+      newEvents.push(event);
+    }, Promise.resolve());
     (item.history?.messages ?? []).forEach((message) => {
-      knownEvents.set(message.eventId, messageEvent(item.roomId, message).event);
-    });
-    (item.receipts ?? []).forEach((receipt) => {
-      room.addReceiptToStructure(
-        receipt.eventId,
-        ReceiptType.Read,
-        receipt.userId,
-        { ts: 1 },
-        false
-      );
+      const event = messageEvent(item.roomId, message);
+      registerFixtureDecryption(message);
+      rememberEvent(event);
+      if (
+        message.decryptedContent !== undefined ||
+        message.decryptedType !== undefined ||
+        message.failureCode !== undefined ||
+        message.failure !== undefined
+      ) {
+        decryptKnownEvent(message.eventId).catch(() => undefined);
+      }
     });
     if (item.typing?.length) {
       const typingEvent = new MatrixEvent({
@@ -836,15 +1124,18 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
       room.setUnreadNotificationCount(NotificationCountType.Total, item.unread.total);
       room.setUnreadNotificationCount(NotificationCountType.Highlight, item.unread.highlight);
     }
-    room.getLiveTimeline().setPaginationToken(item.backwardToken ?? null, EventTimeline.BACKWARDS);
-    if (item.receipts?.length) {
-      client.emit(
-        RoomEvent.Receipt,
-        new MatrixEvent({ type: 'm.receipt', room_id: item.roomId, content: {} }),
-        room
+    if (item.backwardToken !== undefined) {
+      room.getLiveTimeline().setPaginationToken(item.backwardToken, EventTimeline.BACKWARDS);
+    }
+    if (item.eventOrder) {
+      const order = new Map(item.eventOrder.map((eventId, index) => [eventId, index]));
+      newEvents.sort(
+        (a, b) =>
+          (order.get(a.getId() ?? '') ?? item.eventOrder!.length) -
+          (order.get(b.getId() ?? '') ?? item.eventOrder!.length)
       );
     }
-    await events.reduce(async (previous, event) => {
+    await newEvents.reduce(async (previous, event) => {
       await previous;
       await room.addLiveEvents([event], { addToState: false });
       client.emit(RoomEvent.Timeline, event, room, false, false, {
@@ -852,6 +1143,30 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
         liveEvent: true,
       });
     }, Promise.resolve());
+    (item.redactions ?? []).forEach((redaction) => {
+      redactExistingEvent(room, redaction.eventId, redaction.reason, redaction.redactionEventId);
+    });
+    (item.receipts ?? []).forEach((receipt) => {
+      const receiptEvent = new MatrixEvent({
+        type: 'm.receipt',
+        room_id: room.roomId,
+        content: {
+          [receipt.eventId]: {
+            [ReceiptType.Read]: {
+              [receipt.userId]: { ts: Date.now() },
+            },
+          },
+        },
+      });
+      room.addReceipt(receiptEvent, false);
+    });
+    if (item.receipts?.length) {
+      client.emit(
+        RoomEvent.Receipt,
+        new MatrixEvent({ type: 'm.receipt', room_id: item.roomId, content: {} }),
+        room
+      );
+    }
   };
 
   return {
@@ -883,13 +1198,20 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
     setKeyBackupTrust(trust) {
       cryptoState.keyBackupTrust = trust;
     },
+    queueDecryption(eventId, clear, failureCode) {
+      fakeCrypto.queueDecryption(eventId, clear, failureCode);
+    },
+    async decryptEvent(eventId) {
+      return decryptKnownEvent(eventId);
+    },
     getCalls() {
       return [...calls];
     },
     async applyFixture(fixture) {
       if (fixture.devices) devices = fixture.devices;
       if (fixture.threepids !== undefined) threepids = fixture.threepids;
-      await fixture.rooms.reduce(async (previous, item) => {
+      if (fixture.notifications !== undefined) notifications = fixture.notifications;
+      await (fixture.rooms ?? []).reduce(async (previous, item) => {
         await previous;
         await applyRoom(item);
       }, Promise.resolve());

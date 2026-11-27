@@ -1,4 +1,4 @@
-import type { HarrierCore, JsonObject } from '@harrier/core';
+import type { DecryptionFailureCode, HarrierCore, JsonObject } from '@harrier/core';
 
 export type SyncFixtureMessage = {
   readonly eventId: string;
@@ -15,6 +15,14 @@ export type SyncFixtureMessage = {
   readonly status?: 'sending' | 'sent' | 'failed';
   readonly encrypted?: boolean;
   readonly failure?: 'missing-keys' | 'unknown-device' | 'unknown';
+  readonly failureCode?: DecryptionFailureCode;
+  readonly decryptedContent?: JsonObject;
+  readonly decryptedType?: string;
+  readonly eventType?: string;
+  readonly content?: JsonObject;
+  readonly unsigned?: JsonObject;
+  readonly redactionReason?: string;
+  readonly redactionEventId?: string;
   readonly threadRoot?: string;
   readonly timestamp?: number;
 };
@@ -25,6 +33,15 @@ export type SyncFixtureReaction = {
   readonly sender: string;
   readonly key: string;
   readonly shortcode?: string;
+  readonly redacted?: boolean;
+  readonly redactionReason?: string;
+  readonly redactionEventId?: string;
+};
+
+export type SyncFixtureRedaction = {
+  readonly eventId: string;
+  readonly reason?: string;
+  readonly redactionEventId?: string;
 };
 
 export type SyncFixtureReceipt = {
@@ -41,7 +58,9 @@ export type SyncFixtureRoom = {
   readonly roomType?: string;
   readonly children?: readonly string[];
   readonly messages?: readonly SyncFixtureMessage[];
+  readonly eventOrder?: readonly string[];
   readonly reactions?: readonly SyncFixtureReaction[];
+  readonly redactions?: readonly SyncFixtureRedaction[];
   readonly receipts?: readonly SyncFixtureReceipt[];
   readonly backwardToken?: string;
   readonly history?: {
@@ -97,8 +116,23 @@ export type SyncFixtureDevice = {
   readonly lastSeenTs?: number;
 };
 
+export type SyncFixtureNotification = {
+  readonly roomId: string;
+  readonly event?: {
+    readonly eventId?: string;
+    readonly sender?: string;
+    readonly type?: string;
+    readonly content?: JsonObject;
+    readonly unsigned?: JsonObject;
+    readonly timestamp?: number;
+  };
+  readonly timestamp?: number;
+  readonly read?: boolean;
+};
+
 export type SyncFixture = {
   readonly rooms: readonly SyncFixtureRoom[];
+  readonly notifications?: readonly SyncFixtureNotification[];
   readonly presence?: readonly SyncFixturePresence[];
   readonly devices?: readonly SyncFixtureDevice[];
   readonly threepids?: unknown;

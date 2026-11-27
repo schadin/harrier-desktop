@@ -80,6 +80,82 @@ describe('matrix-js-sdk sync driver', () => {
     expect(onState).not.toHaveBeenCalled();
   });
 
+  it('keeps one stateful crypto backend and supports queued decryption failures', async () => {
+    const driver = createSyncDriver();
+    expect(driver.client.getCrypto()).toBe(driver.client.getCrypto());
+    await driver.applyFixture({
+      rooms: [
+        {
+          roomId: '!crypto:example.org',
+          membership: 'join',
+          messages: [
+            {
+              eventId: '$encrypted',
+              sender: '@alice:example.org',
+              body: 'cipher',
+              encrypted: true,
+            },
+          ],
+        },
+      ],
+    });
+    driver.queueDecryption('$encrypted', undefined, 'MEGOLM_KEY_WITHHELD');
+    expect(await driver.decryptEvent('$encrypted')).toBe(true);
+    const event = driver.client.getRoom('!crypto:example.org')?.findEventById('$encrypted');
+    expect(event?.isDecryptionFailure()).toBe(true);
+    expect(event?.decryptionFailureReason).toBe('MEGOLM_KEY_WITHHELD');
+    driver.queueDecryption('$encrypted', {
+      type: 'm.room.message',
+      content: { msgtype: 'm.text', body: 'clear' },
+    });
+    expect(await driver.decryptEvent('$encrypted')).toBe(true);
+    expect(event?.isDecryptionFailure()).toBe(false);
+    expect(event?.getContent()).toEqual({ msgtype: 'm.text', body: 'clear' });
+  });
+
+  it('upserts fixtures without duplicating events and preserves relation aggregation', async () => {
+    const driver = createSyncDriver();
+    const roomId = '!upsert:example.org';
+    await driver.applyFixture({
+      rooms: [
+        {
+          roomId,
+          membership: 'join',
+          messages: [{ eventId: '$message', sender: '@alice:example.org', body: 'hello' }],
+          reactions: [
+            { eventId: '$reaction', target: '$message', sender: '@bob:example.org', key: '👍' },
+          ],
+        },
+      ],
+    });
+    const room = driver.client.getRoom(roomId)!;
+    const message = room.findEventById('$message');
+    await driver.applyFixture({
+      rooms: [
+        {
+          roomId,
+          membership: 'join',
+          messages: [{ eventId: '$message', sender: '@alice:example.org', body: 'hello' }],
+          receipts: [{ eventId: '$message', userId: '@carol:example.org' }],
+        },
+      ],
+    });
+    expect(
+      room
+        .getLiveTimeline()
+        .getEvents()
+        .filter((event) => event.getId() === '$message')
+    ).toHaveLength(1);
+    expect(room.findEventById('$message')).toBe(message);
+    expect(room.getUsersReadUpTo(message!)).toContain('@carol:example.org');
+    expect(
+      room
+        .getUnfilteredTimelineSet()
+        .relations.getAllChildEventsForEvent('$message')
+        .map((event) => event.getId())
+    ).toEqual(['$reaction']);
+  });
+
   it('logs the method, path and body of profile transport calls', async () => {
     const driver = createSyncDriver();
     const path = '/profile/%40tester%3Aexample.org/displayname';

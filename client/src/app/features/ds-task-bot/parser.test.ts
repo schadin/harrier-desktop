@@ -24,6 +24,7 @@ const makeMessageItem = (
   roomId: '!room:ds-core.ru',
   sender,
   timestamp: 1_700_000_000_000,
+  eventType: 'm.room.message',
   preview: body,
   status: 'sent',
   content: { msgtype: 'm.text', body, raw: { msgtype: 'm.text', body, ...raw } },
@@ -289,6 +290,8 @@ describe('parseBotMessage', () => {
       roomId: '!room:ds-core.ru',
       sender: BOT_MXID,
       timestamp: 1_700_000_000_000,
+      eventType: 'm.room.encrypted',
+      content: { algorithm: 'm.megolm.v1.aes-sha2', ciphertext: 'fixture' },
       preview: 'm.room.encrypted',
     };
 

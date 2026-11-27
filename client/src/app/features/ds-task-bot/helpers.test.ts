@@ -25,6 +25,7 @@ const makeMessageItem = (
   roomId: '!room:ds-core.ru',
   sender,
   timestamp: 1_700_000_000_000,
+  eventType: 'm.room.message',
   preview: body,
   status: 'sent',
   content: { msgtype: 'm.text', body, raw: { msgtype: 'm.text', body, ...raw } },

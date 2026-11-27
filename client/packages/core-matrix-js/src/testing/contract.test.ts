@@ -2,6 +2,7 @@ import {
   authCases,
   errorCases,
   notificationCases,
+  notificationContractCases,
   presenceCases,
   receiptsTypingCases,
   uploadCases,
@@ -15,6 +16,7 @@ import {
   sendCases,
   runCoreContractSuite,
   timelineCases,
+  timelineObservabilityCases,
   type CoreContractHarness,
 } from '@harrier/core-contract-tests';
 import { createMatrixJsCore } from '../core';
@@ -58,6 +60,7 @@ runCoreContractSuite(matrixJsHarness, [
   ...roomsCases,
   ...moderationCases,
   ...timelineCases,
+  ...timelineObservabilityCases,
   ...sendCases,
   ...presenceCases,
   ...receiptsTypingCases,
@@ -68,6 +71,7 @@ runCoreContractSuite(matrixJsHarness, [
   ...mediaCases,
   ...callsCases,
   ...notificationCases,
+  ...notificationContractCases,
   ...authCases,
   ...errorCases,
 ]);

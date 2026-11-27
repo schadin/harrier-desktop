@@ -153,7 +153,7 @@ export const sendCases = [
             roomId: '!room:example.org',
             membership: 'join',
             name: 'Room',
-            messages: [{ eventId: '$1', sender: '@alice:example.org', body: 'before' }],
+            messages: [{ eventId: '$1', sender: '@tester:example.org', body: 'before' }],
           },
         ],
       });

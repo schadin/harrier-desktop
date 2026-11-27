@@ -304,12 +304,17 @@ export const timelineCases = [
           key: '👍',
           count: 2,
           senders: ['@bob:example.org', '@carol:example.org'],
+          events: [
+            { eventId: '$r1', sender: '@bob:example.org', key: '👍' },
+            { eventId: '$r2', sender: '@carol:example.org', key: '👍' },
+          ],
         },
         {
           key: '🎉',
           count: 1,
           senders: ['@bob:example.org'],
           shortcode: 'tada',
+          events: [{ eventId: '$r3', sender: '@bob:example.org', key: '🎉', shortcode: 'tada' }],
         },
       ]);
     } finally {
@@ -689,11 +694,15 @@ export const timelineCases = [
             },
           ],
         });
+        const displayStore = core.timeline.timeline('!room:example.org');
+        const liveStore = core.timeline.liveTimeline('!room:example.org');
+        const liveBefore = liveStore.getSnapshot();
         const result = await core.timeline.focusEvent('!room:example.org', '$older');
         expect(result.ok).toBe(true);
 
-        const display = core.timeline.timeline('!room:example.org').getSnapshot().value;
-        const live = core.timeline.liveTimeline('!room:example.org').getSnapshot().value;
+        const display = displayStore.getSnapshot().value;
+        const live = liveStore.getSnapshot().value;
+        expect(liveStore.getSnapshot()).toBe(liveBefore);
         expect(display.focusedEventId).toBe('$older');
         expect(display.items.map((item) => item.eventId)).toEqual(['$older']);
         expect(live.focusedEventId).toBeUndefined();
@@ -720,9 +729,12 @@ export const timelineCases = [
           },
         ],
       });
+      const liveStore = core.timeline.liveTimeline('!room:example.org');
+      const liveBefore = liveStore.getSnapshot();
       await core.timeline.focusEvent('!room:example.org', '$1');
       core.timeline.clearFocus('!room:example.org');
       const timeline = core.timeline.timeline('!room:example.org').getSnapshot().value;
+      expect(liveStore.getSnapshot()).toBe(liveBefore);
       expect(timeline.focusedEventId).toBeUndefined();
       expect(timeline.items.map((item) => item.eventId)).toEqual(['$1', '$2']);
     } finally {

@@ -46,6 +46,7 @@ import type {
   SyncView,
   TimelineView,
   TimelineItem,
+  TimelineSourceView,
   SendStatusView,
   UploadView,
   ThirdPartyProtocolView,
@@ -244,6 +245,8 @@ export type TimelineModule = {
   focusEvent(roomId: RoomId, eventId: EventId): Promise<CoreResult<number>>;
   clearFocus(roomId: RoomId): void;
   event(roomId: RoomId, eventId: EventId): Promise<CoreResult<TimelineItem | null>>;
+  source(roomId: RoomId, eventId: EventId): Promise<CoreResult<TimelineSourceView | null>>;
+  observeEvent(roomId: RoomId, eventId: EventId): SnapshotStore<TimelineItem | null | undefined>;
 };
 
 export type OwnProfileUpdate = {

@@ -16,7 +16,56 @@ export type Membership = 'join' | 'invite' | 'leave' | 'ban' | 'knock';
 
 export type SendStatus = 'sending' | 'sent' | 'failed';
 
+export type DecryptionFailureCode =
+  | 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID'
+  | 'MEGOLM_KEY_WITHHELD'
+  | 'MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE'
+  | 'OLM_UNKNOWN_MESSAGE_INDEX'
+  | 'HISTORICAL_MESSAGE_NO_KEY_BACKUP'
+  | 'HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED'
+  | 'HISTORICAL_MESSAGE_WORKING_BACKUP'
+  | 'HISTORICAL_MESSAGE_USER_NOT_JOINED'
+  | 'SENDER_IDENTITY_PREVIOUSLY_VERIFIED'
+  | 'UNSIGNED_SENDER_DEVICE'
+  | 'UNKNOWN_SENDER_DEVICE'
+  | 'UNKNOWN_ERROR';
+
 export type DecryptionFailureReason = 'missing-keys' | 'unknown-device' | 'unknown';
+
+export type MatrixEventView = {
+  readonly event_id: string;
+  readonly room_id?: string;
+  readonly sender: string;
+  readonly type: string;
+  readonly content: JsonObject;
+  readonly origin_server_ts?: number;
+  readonly state_key?: string;
+  readonly unsigned?: JsonObject;
+};
+
+export type TimelineEventSourceView = {
+  readonly original: MatrixEventView;
+  readonly effective: MatrixEventView;
+};
+
+export type TimelineSourceView = {
+  readonly event: TimelineEventSourceView;
+  readonly edits: readonly TimelineEventSourceView[];
+};
+
+export type TimelineRelationView = {
+  readonly relType: string;
+  readonly eventId?: EventId;
+  readonly key?: string;
+  readonly inReplyTo?: EventId;
+};
+
+export type ReactionEventView = {
+  readonly eventId: EventId;
+  readonly sender: UserId;
+  readonly key: string;
+  readonly shortcode?: string;
+};
 
 export type SessionView = {
   readonly userId: UserId;
@@ -125,6 +174,7 @@ export type ReactionCountView = {
   readonly count: number;
   readonly senders: readonly UserId[];
   readonly shortcode?: string;
+  readonly events: readonly ReactionEventView[];
 };
 
 type TimelineBase = {
@@ -132,7 +182,10 @@ type TimelineBase = {
   readonly roomId: RoomId;
   readonly sender: UserId;
   readonly timestamp: Timestamp;
+  readonly eventType: string;
   readonly preview: string;
+  readonly relation?: TimelineRelationView;
+  readonly reactions?: readonly ReactionCountView[];
 };
 
 export type TimelineItem =
@@ -142,8 +195,8 @@ export type TimelineItem =
       readonly status: SendStatus;
       readonly localId?: string;
       readonly edited?: boolean;
+      readonly editEventId?: EventId;
       readonly replyTo?: EventId;
-      readonly reactions?: readonly ReactionCountView[];
       readonly readBy?: readonly UserId[];
       readonly threadRoot?: EventId;
     })
@@ -153,17 +206,25 @@ export type TimelineItem =
     })
   | (TimelineBase & {
       readonly kind: 'state';
-      readonly eventType: string;
       readonly stateKey: string;
       readonly content: JsonObject;
       readonly prevContent?: JsonObject;
     })
   | (TimelineBase & {
       readonly kind: 'encrypted';
+      readonly content: JsonObject;
       readonly failure?: DecryptionFailureReason;
+      readonly failureCode?: DecryptionFailureCode;
     })
-  | (TimelineBase & { readonly kind: 'redacted'; readonly eventType: string })
-  | (TimelineBase & { readonly kind: 'unsupported'; readonly eventType: string });
+  | (TimelineBase & {
+      readonly kind: 'redacted';
+      readonly redactionReason?: string;
+      readonly redactionEventId?: EventId;
+    })
+  | (TimelineBase & {
+      readonly kind: 'unsupported';
+      readonly content: JsonObject;
+    });
 
 export type TimelineView = {
   readonly roomId: RoomId;
@@ -300,13 +361,10 @@ export type NotificationView = {
   readonly senderId?: string;
   readonly type: string;
   readonly content: JsonObject;
-  readonly event: {
-    readonly event_id: string;
-    readonly sender: string;
-    readonly type: string;
-    readonly content: JsonObject;
+  readonly event: MatrixEventView & {
     readonly origin_server_ts: number;
   };
+  readonly timelineItem: TimelineItem | null;
   readonly timestamp: number;
   readonly read: boolean;
 };

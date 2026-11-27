@@ -14,7 +14,15 @@ import {
   type Membership,
   type MessageAttachmentKind,
   type MessageAttachmentView,
+  type MatrixEventView,
+  type TimelineEventSourceView,
+  type TimelineRelationView,
+  type TimelineSourceView,
+  type ReactionEventView,
+  type DecryptionFailureCode,
+  type DecryptionFailureReason,
   type NotificationMode,
+  type NotificationView,
   type NotificationPreferencesView,
   type RoomNotificationModeView,
   type MediaConfigView,
@@ -34,6 +42,7 @@ import {
   type ThirdPartyInstanceView,
   type ThirdPartyProtocolView,
   type UploadView,
+  type UserId,
   type UserProfileView,
   type VerificationPhaseView,
   type VerificationRequestView,
@@ -61,6 +70,7 @@ import {
   EventTimeline,
   MatrixClient,
   MatrixEvent,
+  MatrixEventEvent,
   NotificationCountType,
   Room,
   RoomEvent,
@@ -76,6 +86,7 @@ import {
   PushRuleKind,
   type ICreateRoomStateEvent,
   type UploadResponse,
+  type EventTimelineSet,
 } from 'matrix-js-sdk';
 import {
   CryptoEvent,
@@ -162,6 +173,76 @@ const toSummary = (
   };
 };
 
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const toPlainJson = (value: unknown, seen = new WeakSet<object>()): JsonValue | undefined => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'object' || value === null || seen.has(value)) return undefined;
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => toPlainJson(item, seen) ?? null);
+    }
+    if (!isPlainRecord(value)) return undefined;
+    const result: JsonObject = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const plain = toPlainJson(item, seen);
+      if (plain === undefined) return;
+      Object.defineProperty(result, key, {
+        value: plain,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    });
+    return result;
+  } finally {
+    seen.delete(value);
+  }
+};
+
+const toPlainJsonObject = (value: unknown): JsonObject => {
+  const plain = toPlainJson(value);
+  return typeof plain === 'object' && plain !== null && !Array.isArray(plain) ? plain : {};
+};
+
+const firstLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
+  let first = timeline;
+  let previous = first.getNeighbouringTimeline(Direction.Backward);
+  while (previous) {
+    first = previous;
+    previous = first.getNeighbouringTimeline(Direction.Backward);
+  }
+  return first;
+};
+
+const lastLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
+  let last = timeline;
+  let next = last.getNeighbouringTimeline(Direction.Forward);
+  while (next) {
+    last = next;
+    next = last.getNeighbouringTimeline(Direction.Forward);
+  }
+  return last;
+};
+
+const collectLinkedEvents = (timeline: EventTimeline): MatrixEvent[] => {
+  const events: MatrixEvent[] = [];
+  for (
+    let current: EventTimeline | null = firstLinkedTimeline(timeline);
+    current;
+    current = current.getNeighbouringTimeline(Direction.Forward)
+  ) {
+    events.push(...current.getEvents());
+  }
+  return events;
+};
+
 const isEdit = (event: MatrixEvent): boolean => event.getRelation()?.rel_type === 'm.replace';
 
 const toSendStatus = (status: EventStatus | null): SendStatus => {
@@ -173,7 +254,7 @@ const toSendStatus = (status: EventStatus | null): SendStatus => {
 type RelatesTo = { 'm.in_reply_to'?: { event_id?: unknown } };
 
 const replyTargetOf = (event: MatrixEvent): string | undefined => {
-  const relates = event.getContent()['m.relates_to'] as RelatesTo | undefined;
+  const relates = event.getWireContent()['m.relates_to'] as RelatesTo | undefined;
   const target = relates?.['m.in_reply_to']?.event_id;
   return typeof target === 'string' ? target : undefined;
 };
@@ -257,13 +338,6 @@ const attachmentOf = (content: JsonObject): MessageAttachmentView | undefined =>
   };
 };
 
-type EditedMessage = {
-  readonly body: string;
-  readonly formattedBody?: string;
-  readonly format?: string;
-  readonly raw?: JsonObject;
-};
-
 const viaServersOf = (room: Room): readonly string[] => {
   const serverOf = (userId: string) => {
     const separator = userId.indexOf(':');
@@ -326,79 +400,277 @@ const dmUserIdOf = (room: Room): string => {
   );
 };
 
-const isReaction = (event: MatrixEvent): boolean => event.getType() === 'm.reaction';
+const isReaction = (event: MatrixEvent): boolean =>
+  event.getType() === 'm.reaction' || event.getWireType() === 'm.reaction';
 
-const toItem = (
-  roomId: string,
+const DECRYPTION_FAILURE_CODES: readonly DecryptionFailureCode[] = [
+  'MEGOLM_UNKNOWN_INBOUND_SESSION_ID',
+  'MEGOLM_KEY_WITHHELD',
+  'MEGOLM_KEY_WITHHELD_FOR_UNVERIFIED_DEVICE',
+  'OLM_UNKNOWN_MESSAGE_INDEX',
+  'HISTORICAL_MESSAGE_NO_KEY_BACKUP',
+  'HISTORICAL_MESSAGE_BACKUP_UNCONFIGURED',
+  'HISTORICAL_MESSAGE_WORKING_BACKUP',
+  'HISTORICAL_MESSAGE_USER_NOT_JOINED',
+  'SENDER_IDENTITY_PREVIOUSLY_VERIFIED',
+  'UNSIGNED_SENDER_DEVICE',
+  'UNKNOWN_SENDER_DEVICE',
+  'UNKNOWN_ERROR',
+];
+
+const decryptionFailureCode = (event: MatrixEvent): DecryptionFailureCode | undefined => {
+  const code = event.decryptionFailureReason;
+  return code && DECRYPTION_FAILURE_CODES.includes(code as DecryptionFailureCode)
+    ? (code as DecryptionFailureCode)
+    : undefined;
+};
+
+const decryptionFailureReason = (
   event: MatrixEvent,
-  latestEdit: ReadonlyMap<string, EditedMessage>,
-  reactions: readonly ReactionCountView[]
-): TimelineItem => {
+  content: JsonObject
+): DecryptionFailureReason | undefined => {
+  const code = decryptionFailureCode(event);
+  if (code === 'MEGOLM_UNKNOWN_INBOUND_SESSION_ID') return 'missing-keys';
+  if (code === 'UNSIGNED_SENDER_DEVICE' || code === 'UNKNOWN_SENDER_DEVICE')
+    return 'unknown-device';
+  if (code) return 'unknown';
+  return content.msgtype === 'm.bad.encrypted' ? 'missing-keys' : undefined;
+};
+
+const toMatrixEventView = (event: MatrixEvent): MatrixEventView => {
+  const raw = event.event;
+  const originServerTs = numberOrUndefined(raw.origin_server_ts);
+  return {
+    event_id: event.getId() ?? '',
+    ...(typeof raw.room_id === 'string' ? { room_id: raw.room_id } : {}),
+    sender: event.getSender() ?? '',
+    type: event.getWireType(),
+    content: toPlainJsonObject(raw.content),
+    ...(originServerTs !== undefined ? { origin_server_ts: originServerTs } : {}),
+    ...(typeof raw.state_key === 'string' ? { state_key: raw.state_key } : {}),
+    ...(raw.unsigned !== undefined ? { unsigned: toPlainJsonObject(raw.unsigned) } : {}),
+  };
+};
+
+const toEventSource = (event: MatrixEvent): TimelineEventSourceView => ({
+  original: toMatrixEventView(event),
+  effective: toMatrixEventView(new MatrixEvent(event.getEffectiveEvent())),
+});
+
+const timelineRelation = (event: MatrixEvent): TimelineRelationView | undefined => {
+  const relation = event.getRelation();
+  if (!relation) return undefined;
+  return {
+    relType: relation.rel_type ?? '',
+    ...(typeof relation.event_id === 'string' ? { eventId: relation.event_id } : {}),
+    ...(typeof relation.key === 'string' ? { key: relation.key } : {}),
+    ...(event.replyEventId !== undefined ? { inReplyTo: event.replyEventId } : {}),
+  };
+};
+
+const owningTimelineSet = (room: Room, event: MatrixEvent): EventTimelineSet =>
+  room.getTimelineForEvent(event.getId() ?? '')?.getTimelineSet() ??
+  room.getUnfilteredTimelineSet();
+
+type RelationFallback = ReadonlyMap<string, readonly MatrixEvent[]>;
+
+const relationEvents = (
+  room: Room,
+  event: MatrixEvent,
+  fallback?: RelationFallback
+): MatrixEvent[] => {
+  const eventId = event.getId();
+  if (!eventId) return [];
+  const timelineSet = owningTimelineSet(room, event);
+  const relations = timelineSet.relations.getAllChildEventsForEvent(eventId);
+  const bundled = event.replacingEvent();
+  const chainRelations =
+    fallback?.get(eventId) ??
+    (relations.length === 0 && !bundled
+      ? timelineSet
+          .getTimelines()
+          .flatMap((timeline) => collectLinkedEvents(timeline))
+          .filter((relation) => relation.getRelation()?.event_id === eventId)
+      : []);
+  const seen = new Set(relations.map((relation) => relation.getId()));
+  chainRelations.forEach((relation) => {
+    const id = relation.getId();
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      relations.push(relation);
+    }
+  });
+  if (bundled && !seen.has(bundled.getId())) relations.push(bundled);
+  return relations;
+};
+
+const validEdits = (room: Room, event: MatrixEvent, fallback?: RelationFallback): MatrixEvent[] => {
+  const sender = event.getSender();
+  return relationEvents(room, event, fallback).filter((edit) => {
+    if (
+      edit.getId() === event.getId() ||
+      edit.isRedacted() ||
+      edit.status === EventStatus.CANCELLED ||
+      edit.isDecryptionFailure() ||
+      edit.getRelation()?.rel_type !== 'm.replace' ||
+      edit.getSender() !== sender
+    ) {
+      return false;
+    }
+    const newContent = edit.getContent<{ 'm.new_content'?: unknown }>()['m.new_content'];
+    return isPlainRecord(newContent) && typeof newContent.body === 'string';
+  });
+};
+
+const newestEdit = (edits: readonly MatrixEvent[]): MatrixEvent | undefined =>
+  edits.reduce<MatrixEvent | undefined>((newest, edit) => {
+    if (!newest) return edit;
+    if (edit.getTs() > newest.getTs()) return edit;
+    if (edit.getTs() < newest.getTs()) return newest;
+    return (edit.getId() ?? '') > (newest.getId() ?? '') ? edit : newest;
+  }, undefined);
+
+const reactionCounts = (
+  room: Room,
+  event: MatrixEvent,
+  fallback?: RelationFallback
+): readonly ReactionCountView[] => {
+  const groups = new Map<
+    string,
+    { senders: UserId[]; shortcode?: string; events: ReactionEventView[] }
+  >();
+  relationEvents(room, event, fallback).forEach((reaction) => {
+    if (
+      reaction.isRedacted() ||
+      reaction.status === EventStatus.CANCELLED ||
+      reaction.isDecryptionFailure() ||
+      reaction.getType() !== 'm.reaction' ||
+      reaction.getRelation()?.rel_type !== 'm.annotation'
+    ) {
+      return;
+    }
+    const relation = reaction.getRelation();
+    const sender = reaction.getSender();
+    const key = relation?.key;
+    if (!sender || typeof key !== 'string') return;
+    const group = groups.get(key) ?? { senders: [], events: [] };
+    if (!group.senders.includes(sender)) group.senders.push(sender);
+    const shortcode = stringOrUndefined(reaction.getContent().shortcode);
+    if (group.shortcode === undefined && shortcode !== undefined) group.shortcode = shortcode;
+    group.events.push({
+      eventId: reaction.getId() ?? '',
+      sender,
+      key,
+      ...(shortcode !== undefined ? { shortcode } : {}),
+    });
+    groups.set(key, group);
+  });
+  return [...groups].map(([key, group]) => ({
+    key,
+    count: group.senders.length,
+    senders: group.senders,
+    ...(group.shortcode !== undefined ? { shortcode: group.shortcode } : {}),
+    events: group.events,
+  }));
+};
+
+const redactionMetadata = (
+  event: MatrixEvent
+): { readonly redactionReason?: string; readonly redactionEventId?: string } => {
+  const redaction: unknown = event.getRedactionEvent();
+  const unsignedRedaction: unknown = event.getUnsigned().redacted_because;
+  const source: unknown =
+    isPlainRecord(redaction) && Object.keys(redaction).length > 0 ? redaction : unsignedRedaction;
+  if (!isPlainRecord(source)) return {};
+  const { content } = source;
+  return {
+    ...(isPlainRecord(content) && typeof content.reason === 'string'
+      ? { redactionReason: content.reason }
+      : {}),
+    ...(typeof source.event_id === 'string' ? { redactionEventId: source.event_id } : {}),
+  };
+};
+
+const buildItem = (room: Room, event: MatrixEvent, fallback?: RelationFallback): TimelineItem => {
   const eventId = event.getId() ?? '';
+  const eventType = event.getWireType();
+  const relation = timelineRelation(event);
+  const reactions = reactionCounts(room, event, fallback);
   const base = {
     eventId,
-    roomId,
+    roomId: room.roomId,
     sender: event.getSender() ?? '',
     timestamp: event.getTs(),
+    eventType,
+    ...(relation ? { relation } : {}),
+    ...(reactions.length > 0 ? { reactions } : {}),
   };
   if (event.isRedacted()) {
-    return { ...base, kind: 'redacted', eventType: event.getType(), preview: 'Message deleted' };
+    return {
+      ...base,
+      kind: 'redacted',
+      preview: 'Message deleted',
+      ...redactionMetadata(event),
+    };
   }
 
-  const eventType = event.getType();
-  if (eventType === 'm.room.encrypted') {
-    const content = event.getContent<{ msgtype?: string }>();
+  const content = toPlainJsonObject(event.getContent());
+  if (event.isEncrypted() && (event.isDecryptionFailure() || event.getClearContent() === null)) {
+    const effectiveContent = event.isDecryptionFailure()
+      ? content
+      : toPlainJsonObject(event.getWireContent());
+    const failure = decryptionFailureReason(event, effectiveContent);
+    const failureCode = decryptionFailureCode(event);
     return {
       ...base,
       kind: 'encrypted',
       preview: 'Unable to decrypt message',
-      ...(content.msgtype === 'm.bad.encrypted' ? { failure: 'missing-keys' as const } : {}),
+      content: effectiveContent,
+      ...(failure !== undefined ? { failure } : {}),
+      ...(failureCode !== undefined ? { failureCode } : {}),
     };
   }
 
-  if (eventType === 'm.sticker') {
+  const effectiveType = event.getType();
+  if (effectiveType === 'm.sticker') {
     return {
       ...base,
       kind: 'sticker',
-      preview: previewText(event.getContent<{ body?: string }>().body ?? ''),
-      content: event.getContent() as JsonObject,
+      preview: previewText(stringOrUndefined(content.body) ?? ''),
+      content,
     };
   }
 
   if (typeof event.getStateKey() === 'string') {
-    const prevContent = event.getPrevContent() as JsonObject;
+    const prevContent = toPlainJsonObject(event.getPrevContent());
     return {
       ...base,
       kind: 'state',
-      eventType,
       stateKey: event.getStateKey() ?? '',
-      preview: eventType,
-      content: event.getContent() as JsonObject,
+      preview: effectiveType,
+      content,
       ...(Object.keys(prevContent).length > 0 ? { prevContent } : {}),
     };
   }
 
-  if (eventType !== 'm.room.message') {
-    return { ...base, kind: 'unsupported', eventType, preview: eventType };
+  if (effectiveType !== 'm.room.message') {
+    return { ...base, kind: 'unsupported', preview: effectiveType, content };
   }
 
-  const originalContent = event.getContent() as JsonObject;
-  const content = event.getContent<{
-    msgtype?: string;
-    body?: string;
-    formatted_body?: string;
-    format?: string;
-  }>();
-  const edit = latestEdit.get(eventId);
-  const rawContent = edit?.raw ?? originalContent;
-  const body = edit?.body ?? content.body ?? '';
-  const formattedBody = edit?.formattedBody ?? content.formatted_body;
-  const format = edit?.format ?? content.format;
+  const edit = newestEdit(validEdits(room, event, fallback));
+  const rawContent = edit
+    ? toPlainJsonObject(edit.getContent<{ 'm.new_content': JsonObject }>()['m.new_content'])
+    : content;
+  const body = stringOrUndefined(rawContent.body) ?? '';
+  const formattedBody = stringOrUndefined(rawContent.formatted_body);
+  const format = stringOrUndefined(rawContent.format);
   const attachment = attachmentOf(rawContent);
-  const replyTo = replyTargetOf(event);
-  const relation = event.getRelation();
-  const threadRoot = relation?.rel_type === 'm.thread' ? relation.event_id : undefined;
-  const localEchoPrefix = `~${roomId}:`;
+  const replyTo = event.replyEventId ?? replyTargetOf(event);
+  const threadRoot = event.threadRootId;
+  const readers = room
+    .getUsersReadUpTo(event)
+    .filter((userId) => userId !== room.myUserId && userId !== event.getSender());
+  const localEchoPrefix = `~${room.roomId}:`;
   const localId = eventId.startsWith(localEchoPrefix)
     ? eventId.slice(localEchoPrefix.length)
     : undefined;
@@ -408,19 +680,24 @@ const toItem = (
     preview: previewText(body),
     ...(localId !== undefined ? { localId } : {}),
     content: {
-      msgtype: content.msgtype ?? 'm.text',
+      msgtype: stringOrUndefined(rawContent.msgtype) ?? 'm.text',
       body,
       ...(formattedBody !== undefined && format !== undefined ? { formattedBody, format } : {}),
       ...(attachment !== undefined ? { attachment } : {}),
       raw: rawContent,
     },
     status: toSendStatus(event.status),
-    ...(edit !== undefined ? { edited: true } : {}),
+    ...(edit !== undefined ? { edited: true, editEventId: edit.getId() ?? '' } : {}),
     ...(replyTo !== undefined ? { replyTo } : {}),
     ...(threadRoot !== undefined ? { threadRoot } : {}),
-    ...(reactions.length > 0 ? { reactions } : {}),
+    ...(readers.length > 0 ? { readBy: readers } : {}),
   };
 };
+
+const buildSource = (room: Room, event: MatrixEvent): TimelineSourceView => ({
+  event: toEventSource(event),
+  edits: validEdits(room, event).map(toEventSource),
+});
 
 const isRenderableEvent = (event: MatrixEvent): boolean => !isEdit(event) && !isReaction(event);
 
@@ -434,57 +711,18 @@ const toTimelineView = (
   hasBackwardHistory: boolean,
   focusedEventId?: string
 ): TimelineView => {
-  const latestEdit = new Map<string, EditedMessage>();
+  const relationFallback = new Map<string, MatrixEvent[]>();
   events.forEach((event) => {
-    if (!isEdit(event)) return;
+    if (!isEdit(event) && !isReaction(event)) return;
     const target = event.getRelation()?.event_id;
-    const newContent = event.getContent<{
-      'm.new_content'?: { body?: unknown; formatted_body?: unknown; format?: unknown };
-    }>()['m.new_content'];
-    const body = newContent?.body;
-    if (!target || typeof body !== 'string') return;
-    latestEdit.set(target, {
-      body,
-      ...(typeof newContent?.formatted_body === 'string' && typeof newContent?.format === 'string'
-        ? { formattedBody: newContent.formatted_body, format: newContent.format }
-        : {}),
-    });
+    if (!target) return;
+    const relations = relationFallback.get(target) ?? [];
+    relations.push(event);
+    relationFallback.set(target, relations);
   });
-
-  const countsByTarget = new Map<string, Map<string, { senders: string[]; shortcode?: string }>>();
-  events.forEach((event) => {
-    if (event.getType() !== 'm.reaction') return;
-    const content = event.getContent();
-    const relates = content['m.relates_to'] as { event_id?: unknown; key?: unknown } | undefined;
-    const target = relates?.event_id;
-    const key = relates?.key;
-    const sender = event.getSender();
-    if (typeof target !== 'string' || typeof key !== 'string' || sender === null) return;
-    const counts = countsByTarget.get(target) ?? new Map();
-    const entry = counts.get(key) ?? { senders: [] };
-    if (!entry.senders.includes(sender)) entry.senders.push(sender);
-    const shortcode = stringOrUndefined(content.shortcode);
-    if (entry.shortcode === undefined && shortcode !== undefined) entry.shortcode = shortcode;
-    counts.set(key, entry);
-    countsByTarget.set(target, counts);
-  });
-
-  const items = renderableEvents(events).map((event) => {
-    const counts = countsByTarget.get(event.getId() ?? '') ?? new Map();
-    const reactions = [...counts].map(([key, { senders, shortcode }]) => ({
-      key,
-      count: senders.length,
-      senders,
-      ...(shortcode !== undefined ? { shortcode } : {}),
-    }));
-    const item = toItem(roomId, event, latestEdit, reactions);
-    const readers = room
-      ? room
-          .getUsersReadUpTo(event)
-          .filter((userId) => userId !== room.myUserId && userId !== event.getSender())
-      : [];
-    return item.kind === 'message' && readers.length > 0 ? { ...item, readBy: readers } : item;
-  });
+  const items = room
+    ? renderableEvents(events).map((event) => buildItem(room, event, relationFallback))
+    : [];
 
   const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
   const receiptIndex = ownReadUpTo
@@ -502,38 +740,6 @@ const toTimelineView = (
     ...(unreadStartIndex !== undefined ? { unreadStartIndex } : {}),
     ...(focusedEventId !== undefined ? { focusedEventId } : {}),
   };
-};
-
-const firstLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
-  let first = timeline;
-  let previous = first.getNeighbouringTimeline(Direction.Backward);
-  while (previous) {
-    first = previous;
-    previous = first.getNeighbouringTimeline(Direction.Backward);
-  }
-  return first;
-};
-
-const lastLinkedTimeline = (timeline: EventTimeline): EventTimeline => {
-  let last = timeline;
-  let next = last.getNeighbouringTimeline(Direction.Forward);
-  while (next) {
-    last = next;
-    next = last.getNeighbouringTimeline(Direction.Forward);
-  }
-  return last;
-};
-
-const collectLinkedEvents = (timeline: EventTimeline): MatrixEvent[] => {
-  const events: MatrixEvent[] = [];
-  for (
-    let current: EventTimeline | null = firstLinkedTimeline(timeline);
-    current;
-    current = current.getNeighbouringTimeline(Direction.Forward)
-  ) {
-    events.push(...current.getEvents());
-  }
-  return events;
 };
 
 const spaceChildrenOf = (room: Room | null | undefined): readonly string[] =>
@@ -629,44 +835,6 @@ const toPublicRoomView = (room: Record<string, unknown>): PublicRoomView => ({
   worldReadable: room.world_readable === true,
   guestCanJoin: room.guest_can_join === true,
 });
-
-const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-};
-
-const toPlainJson = (value: unknown, seen = new WeakSet<object>()): JsonValue | undefined => {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value !== 'object' || value === null || seen.has(value)) return undefined;
-  seen.add(value);
-  try {
-    if (Array.isArray(value)) {
-      return value.map((item) => toPlainJson(item, seen) ?? null);
-    }
-    if (!isPlainRecord(value)) return undefined;
-    const result: JsonObject = {};
-    Object.entries(value).forEach(([key, item]) => {
-      const plain = toPlainJson(item, seen);
-      if (plain === undefined) return;
-      Object.defineProperty(result, key, {
-        value: plain,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    });
-    return result;
-  } finally {
-    seen.delete(value);
-  }
-};
-
-const toPlainJsonObject = (value: unknown): JsonObject => {
-  const plain = toPlainJson(value);
-  return typeof plain === 'object' && plain !== null && !Array.isArray(plain) ? plain : {};
-};
 
 const toFederatedRoomSummaryView = (response: unknown): FederatedRoomSummaryView => {
   if (!isPlainRecord(response) || typeof response.room_id !== 'string') {
@@ -1024,10 +1192,15 @@ export function createMatrixJsCore(
   const stateListeners = new Set<(entry: StateListenerEntry) => void>();
   const pendingStateByRoom = new Map<string, PendingStateEntry[]>();
   let stateGeneration = 0;
+  let lifecycleEpoch = 0;
   let stateLifecycleActive = true;
   let acceptPendingState = true;
   let stateRefreshSuppressionDepth = 0;
+  let cleanupEventLayer = () => {};
+  let activateEventLayer = () => {};
   const deferredTimelineRooms = new Set<string>();
+  const isTimelineLifecycleCurrent = (epoch: number) =>
+    stateLifecycleActive && epoch === lifecycleEpoch;
   const canPublishRoomState = () =>
     stateLifecycleActive && acceptPendingState && stateRefreshSuppressionDepth === 0;
   const notifyStateListeners = (entries: readonly StateListenerEntry[]) => {
@@ -1039,15 +1212,18 @@ export function createMatrixJsCore(
   const activatePendingState = () => {
     stateLifecycleActive = true;
     acceptPendingState = true;
+    activateEventLayer();
   };
   const invalidatePendingState = () => {
     stateGeneration += 1;
     pendingStateByRoom.clear();
   };
   const deactivatePendingState = () => {
+    lifecycleEpoch += 1;
     stateLifecycleActive = false;
     acceptPendingState = false;
     deferredTimelineRooms.clear();
+    cleanupEventLayer();
     invalidatePendingState();
   };
 
@@ -1496,40 +1672,173 @@ export function createMatrixJsCore(
       : false;
     return toTimelineView(roomId, events, room, hasBackwardHistory, focus?.eventId);
   };
-  const publishTimeline = (roomId: string) => {
-    if (!stateLifecycleActive || stateRefreshSuppressionDepth > 0) return;
-    timelines.get(roomId)?.publish(buildTimeline(roomId));
-    liveTimelines.get(roomId)?.publish(buildLiveTimeline(roomId));
+  type ObservedEvent = {
+    readonly roomId: string;
+    readonly eventId: string;
+    readonly store: WritableSnapshotStore<TimelineItem | null | undefined>;
+  };
+  const eventStores = new Map<string, ObservedEvent>();
+  const eventStoreKey = (roomId: string, eventId: string) => `${roomId}\u0000${eventId}`;
+  const resolveLocalEvent = (roomId: string, eventId: string): MatrixEvent | undefined =>
+    client.getRoom(roomId)?.findEventById(eventId);
+  const resolveEvent = async (
+    roomId: string,
+    eventId: string,
+    epoch: number
+  ): Promise<MatrixEvent | undefined> => {
+    if (!isTimelineLifecycleCurrent(epoch)) return undefined;
+    const room = client.getRoom(roomId);
+    if (!room) return undefined;
+    const local = resolveLocalEvent(roomId, eventId);
+    if (local) return local;
+    try {
+      const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
+      if (!isTimelineLifecycleCurrent(epoch) || client.getRoom(roomId) !== room) return undefined;
+      if (!timeline) return undefined;
+      return collectLinkedEvents(timeline).find((event) => event.getId() === eventId);
+    } catch {
+      return undefined;
+    }
+  };
+  const publishObservedEvent = (roomId: string, eventId: string, epoch: number): void => {
+    if (!isTimelineLifecycleCurrent(epoch)) return;
+    const observed = eventStores.get(eventStoreKey(roomId, eventId));
+    if (!observed) return;
+    const room = client.getRoom(roomId);
+    const event = room?.findEventById(eventId);
+    observed.store.publish(event && room ? buildItem(room, event) : null);
+  };
+  const publishObservedRoom = (roomId: string, epoch: number): void => {
+    if (!isTimelineLifecycleCurrent(epoch)) return;
+    [...eventStores.values()].forEach(({ roomId: observedRoomId, eventId }) => {
+      if (observedRoomId === roomId) publishObservedEvent(observedRoomId, eventId, epoch);
+    });
+  };
+  const resolveAndPublishEvent = async (
+    roomId: string,
+    eventId: string,
+    epoch: number,
+    store: WritableSnapshotStore<TimelineItem | null | undefined>
+  ): Promise<void> => {
+    const event = await resolveEvent(roomId, eventId, epoch);
+    if (
+      !isTimelineLifecycleCurrent(epoch) ||
+      eventStores.get(eventStoreKey(roomId, eventId))?.store !== store
+    ) {
+      return;
+    }
+    const room = client.getRoom(roomId);
+    store.publish(event && room ? buildItem(room, event) : null);
+  };
+  const publishTimeline = (roomId: string, epoch: number): void => {
+    if (!isTimelineLifecycleCurrent(epoch)) return;
+    if (stateRefreshSuppressionDepth > 0) {
+      deferredTimelineRooms.add(roomId);
+      return;
+    }
+    const displayStore = timelines.get(roomId);
+    if (displayStore) {
+      const next = buildTimeline(roomId);
+      if (!isTimelineLifecycleCurrent(epoch)) return;
+      displayStore.publish(next);
+    }
+    if (!isTimelineLifecycleCurrent(epoch)) return;
+    const liveStore = liveTimelines.get(roomId);
+    if (liveStore) {
+      const next = buildLiveTimeline(roomId);
+      if (!isTimelineLifecycleCurrent(epoch)) return;
+      liveStore.publish(next);
+    }
+    if (!isTimelineLifecycleCurrent(epoch)) return;
+    publishObservedRoom(roomId, epoch);
   };
   function flushDeferredTimelines() {
-    if (!stateLifecycleActive) {
+    const epoch = lifecycleEpoch;
+    if (!isTimelineLifecycleCurrent(epoch)) {
       deferredTimelineRooms.clear();
       return;
     }
     if (stateRefreshSuppressionDepth > 0) return;
     const roomIds = [...deferredTimelineRooms];
     deferredTimelineRooms.clear();
-    roomIds.forEach((roomId) => publishTimeline(roomId));
+    roomIds.forEach((roomId) => publishTimeline(roomId, epoch));
   }
   const republish = (_event: MatrixEvent, room: Room | undefined) => {
-    if (!stateLifecycleActive) return;
+    const epoch = lifecycleEpoch;
+    if (!isTimelineLifecycleCurrent(epoch)) return;
     if (canPublishRoomState()) {
       refresh();
-      if (room) publishRoomProjections(room.roomId);
+      if (room && isTimelineLifecycleCurrent(epoch)) publishRoomProjections(room.roomId);
     }
-    if (!room) return;
-    if (stateRefreshSuppressionDepth > 0) {
-      deferredTimelineRooms.add(room.roomId);
-      return;
-    }
-    publishTimeline(room.roomId);
+    if (room && isTimelineLifecycleCurrent(epoch)) publishTimeline(room.roomId, epoch);
   };
-  client.on(RoomEvent.Timeline, republish);
-  client.on(RoomEvent.Receipt, republish);
-  client.on(RoomEvent.LocalEchoUpdated, (_event, room) => {
+  const pendingLifecycleEvents = new Map<string, MatrixEvent>();
+  let lifecycleEventScheduled = false;
+  const scheduleLifecyclePublish = (event: MatrixEvent) => {
+    if (!stateLifecycleActive) return;
+    const roomId = event.getRoomId();
+    if (!roomId) return;
+    pendingLifecycleEvents.set(roomId, event);
+    if (lifecycleEventScheduled) return;
+    lifecycleEventScheduled = true;
+    queueMicrotask(() => {
+      lifecycleEventScheduled = false;
+      const epoch = lifecycleEpoch;
+      const events = [...pendingLifecycleEvents.values()];
+      pendingLifecycleEvents.clear();
+      if (!isTimelineLifecycleCurrent(epoch)) return;
+      events.forEach((pendingEvent) => {
+        const room = client.getRoom(pendingEvent.getRoomId() ?? '');
+        if (room && isTimelineLifecycleCurrent(epoch)) republish(pendingEvent, room);
+      });
+    });
+  };
+  const timelineListener = (_event: MatrixEvent, room: Room | undefined) => republish(_event, room);
+  const localEchoListener = (_event: MatrixEvent, room: Room | undefined) => {
     republish(_event, room);
     refreshSendStatuses();
-  });
+  };
+  const lifecycleEventListener = (event: MatrixEvent) => scheduleLifecyclePublish(event);
+  const redactionListener = (event: MatrixEvent) => scheduleLifecyclePublish(event);
+  const deletedRoomListener = (roomId: string) => {
+    const epoch = lifecycleEpoch;
+    eventStores.forEach(({ roomId: observedRoomId, store }) => {
+      if (observedRoomId === roomId && isTimelineLifecycleCurrent(epoch)) store.publish(null);
+    });
+  };
+  let eventListenersAttached = false;
+  activateEventLayer = () => {
+    if (eventListenersAttached) return;
+    eventListenersAttached = true;
+    client.on(RoomEvent.Timeline, timelineListener);
+    client.on(RoomEvent.Receipt, timelineListener);
+    client.on(RoomEvent.LocalEchoUpdated, localEchoListener);
+    client.on(RoomEvent.Redaction, redactionListener);
+    client.on(RoomEvent.RedactionCancelled, redactionListener);
+    client.on(MatrixEventEvent.Decrypted, lifecycleEventListener);
+    client.on(MatrixEventEvent.Replaced, lifecycleEventListener);
+    client.on(ClientEvent.DeleteRoom, deletedRoomListener);
+    eventStores.forEach(({ roomId, eventId, store }) => {
+      if (store.getSnapshot().value === undefined) {
+        resolveAndPublishEvent(roomId, eventId, lifecycleEpoch, store).catch(() => undefined);
+      }
+    });
+  };
+  cleanupEventLayer = () => {
+    if (!eventListenersAttached) return;
+    eventListenersAttached = false;
+    client.removeListener(RoomEvent.Timeline, timelineListener);
+    client.removeListener(RoomEvent.Receipt, timelineListener);
+    client.removeListener(RoomEvent.LocalEchoUpdated, localEchoListener);
+    client.removeListener(RoomEvent.Redaction, redactionListener);
+    client.removeListener(RoomEvent.RedactionCancelled, redactionListener);
+    client.removeListener(MatrixEventEvent.Decrypted, lifecycleEventListener);
+    client.removeListener(MatrixEventEvent.Replaced, lifecycleEventListener);
+    client.removeListener(ClientEvent.DeleteRoom, deletedRoomListener);
+    eventStores.clear();
+    pendingLifecycleEvents.clear();
+  };
+  activateEventLayer();
 
   const profileStores = new Map<string, WritableSnapshotStore<UserProfileView>>();
   const buildProfile = (userId: string): UserProfileView => {
@@ -2782,12 +3091,13 @@ export function createMatrixJsCore(
         if (!room)
           return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
+          const epoch = lifecycleEpoch;
           const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
           await client.paginateEventTimeline(firstLinkedTimeline(anchor), {
             backwards: true,
             limit,
           });
-          publishTimeline(roomId);
+          publishTimeline(roomId, epoch);
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: normalizeMatrixError(error) };
@@ -2798,12 +3108,13 @@ export function createMatrixJsCore(
         if (!room)
           return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
+          const epoch = lifecycleEpoch;
           const anchor = focusedTimelines.get(roomId)?.timeline ?? room.getLiveTimeline();
           const last = lastLinkedTimeline(anchor);
           if (last.getPaginationToken(EventTimeline.FORWARDS) != null) {
             await client.paginateEventTimeline(last, { backwards: false, limit });
-            publishTimeline(roomId);
           }
+          publishTimeline(roomId, epoch);
           return { ok: true, value: undefined };
         } catch (error) {
           return { ok: false, error: normalizeMatrixError(error) };
@@ -2814,7 +3125,14 @@ export function createMatrixJsCore(
         if (!room)
           return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
         try {
+          const epoch = lifecycleEpoch;
           const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
+          if (!isTimelineLifecycleCurrent(epoch)) {
+            return {
+              ok: false,
+              error: new CoreError('unknown', 'Timeline lifecycle changed during focus'),
+            };
+          }
           if (!timeline) {
             return {
               ok: false,
@@ -2825,14 +3143,26 @@ export function createMatrixJsCore(
             const renderable = renderableEvents(collectLinkedEvents(timeline));
             const index = renderable.findIndex((event) => event.getId() === eventId);
             if (index >= 0) {
+              if (!isTimelineLifecycleCurrent(epoch)) {
+                return {
+                  ok: false,
+                  error: new CoreError('unknown', 'Timeline lifecycle changed during focus'),
+                };
+              }
               focusedTimelines.set(roomId, { timeline, eventId });
-              timelines.get(roomId)?.publish(buildTimeline(roomId));
+              publishTimeline(roomId, epoch);
               return { ok: true, value: index };
             }
             const first = firstLinkedTimeline(timeline);
             if (first.getPaginationToken(EventTimeline.BACKWARDS) == null) break;
             // eslint-disable-next-line no-await-in-loop -- sequential pagination until the event is loaded
             await client.paginateEventTimeline(first, { backwards: true, limit: 30 });
+            if (!isTimelineLifecycleCurrent(epoch)) {
+              return {
+                ok: false,
+                error: new CoreError('unknown', 'Timeline lifecycle changed during focus'),
+              };
+            }
           }
           return {
             ok: false,
@@ -2843,24 +3173,60 @@ export function createMatrixJsCore(
         }
       },
       clearFocus(roomId) {
-        if (focusedTimelines.delete(roomId)) timelines.get(roomId)?.publish(buildTimeline(roomId));
+        const epoch = lifecycleEpoch;
+        if (focusedTimelines.delete(roomId)) publishTimeline(roomId, epoch);
       },
       async event(roomId, eventId): Promise<CoreResult<TimelineItem | null>> {
         const room = client.getRoom(roomId);
         if (!room)
           return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
-        const local = room.findEventById(eventId);
-        if (local) return { ok: true, value: toItem(roomId, local, new Map(), []) };
-        try {
-          const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
-          const fetched = timeline
-            ? collectLinkedEvents(timeline).find((entry) => entry.getId() === eventId)
-            : undefined;
-          if (!fetched) return { ok: true, value: null };
-          return { ok: true, value: toItem(roomId, fetched, new Map(), []) };
-        } catch {
-          return { ok: true, value: null };
+        const epoch = lifecycleEpoch;
+        const event = await resolveEvent(roomId, eventId, epoch);
+        const resolvedRoom = client.getRoom(roomId);
+        return {
+          ok: true,
+          value:
+            event && resolvedRoom && isTimelineLifecycleCurrent(epoch)
+              ? buildItem(resolvedRoom, event)
+              : null,
+        };
+      },
+      async source(roomId, eventId): Promise<CoreResult<TimelineSourceView | null>> {
+        const room = client.getRoom(roomId);
+        if (!room)
+          return { ok: false, error: new CoreError('not-found', `Unknown room ${roomId}`) };
+        const epoch = lifecycleEpoch;
+        const event = await resolveEvent(roomId, eventId, epoch);
+        const resolvedRoom = client.getRoom(roomId);
+        return {
+          ok: true,
+          value:
+            event && resolvedRoom && isTimelineLifecycleCurrent(epoch)
+              ? buildSource(resolvedRoom, event)
+              : null,
+        };
+      },
+      observeEvent(roomId, eventId) {
+        const key = eventStoreKey(roomId, eventId);
+        const existing = eventStores.get(key);
+        if (existing) {
+          if (
+            stateLifecycleActive &&
+            existing.store.getSnapshot().value === undefined &&
+            isTimelineLifecycleCurrent(lifecycleEpoch)
+          ) {
+            resolveAndPublishEvent(roomId, eventId, lifecycleEpoch, existing.store).catch(
+              () => undefined
+            );
+          }
+          return existing.store;
         }
+        const store = createSnapshotStore<TimelineItem | null | undefined>(undefined);
+        eventStores.set(key, { roomId, eventId, store });
+        if (stateLifecycleActive && isTimelineLifecycleCurrent(lifecycleEpoch)) {
+          resolveAndPublishEvent(roomId, eventId, lifecycleEpoch, store).catch(() => undefined);
+        }
+        return store;
       },
     },
     presence: {
@@ -3180,9 +3546,12 @@ export function createMatrixJsCore(
               room_id: string;
               event?: {
                 event_id?: string;
+                room_id?: string;
                 sender?: string;
                 type?: string;
                 origin_server_ts?: number;
+                state_key?: string;
+                unsigned?: Record<string, unknown>;
                 content?: Record<string, unknown>;
               };
               ts?: number;
@@ -3194,23 +3563,43 @@ export function createMatrixJsCore(
             limit,
             only: onlyHighlight ? 'highlight' : undefined,
           });
-          const items = (response.notifications ?? []).map((item) => {
-            const event = item.event ?? {};
-            const eventId = event.event_id ?? '';
+          const items: NotificationView[] = (response.notifications ?? []).map((item) => {
+            const serverEvent = item.event ?? {};
+            const eventId = serverEvent.event_id ?? '';
+            const room = client.getRoom(item.room_id);
+            const local = eventId ? resolveLocalEvent(item.room_id, eventId) : undefined;
+            const originServerTs = serverEvent.origin_server_ts ?? item.ts ?? 0;
+            const localEvent = local ? toMatrixEventView(local) : undefined;
+            const event: MatrixEventView & { origin_server_ts: number } =
+              local && localEvent
+                ? {
+                    ...localEvent,
+                    room_id: item.room_id,
+                    origin_server_ts: localEvent.origin_server_ts ?? originServerTs,
+                  }
+                : {
+                    event_id: eventId,
+                    room_id: item.room_id,
+                    sender: serverEvent.sender ?? '',
+                    type: serverEvent.type ?? '',
+                    content: toPlainJsonObject(serverEvent.content),
+                    origin_server_ts: originServerTs,
+                    ...(typeof serverEvent.state_key === 'string'
+                      ? { state_key: serverEvent.state_key }
+                      : {}),
+                    ...(serverEvent.unsigned !== undefined
+                      ? { unsigned: toPlainJsonObject(serverEvent.unsigned) }
+                      : {}),
+                  };
             return {
               id: eventId,
               roomId: item.room_id,
               ...(eventId ? { eventId } : {}),
               ...(event.sender ? { senderId: event.sender } : {}),
-              type: event.type ?? '',
-              content: (event.content ?? {}) as JsonObject,
-              event: {
-                event_id: eventId,
-                sender: event.sender ?? '',
-                type: event.type ?? '',
-                content: (event.content ?? {}) as JsonObject,
-                origin_server_ts: event.origin_server_ts ?? item.ts ?? 0,
-              },
+              type: event.type,
+              content: event.content,
+              event,
+              timelineItem: local && room ? buildItem(room, local) : null,
               timestamp: item.ts ?? event.origin_server_ts ?? 0,
               read: item.read ?? false,
             };
