@@ -188,6 +188,16 @@ export type RoomsModule = {
   join(roomIdOrAlias: string, viaServers?: readonly string[]): Promise<CoreResult<RoomId>>;
   leave(roomId: RoomId): Promise<CoreResult<void>>;
   invite(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
+  kick(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
+  ban(roomId: RoomId, userId: UserId, reason?: string): Promise<CoreResult<void>>;
+  unban(roomId: RoomId, userId: UserId): Promise<CoreResult<void>>;
+  reportEvent(
+    roomId: RoomId,
+    eventId: EventId,
+    score: number,
+    reason: string
+  ): Promise<CoreResult<void>>;
+  reportRoom(roomId: RoomId, reason: string): Promise<CoreResult<void>>;
   createRoom(params: CreateRoomParams): Promise<CoreResult<RoomId>>;
   upgrade(roomId: RoomId, params: RoomUpgradeParams): Promise<CoreResult<RoomId>>;
   searchDirectory(params: DirectorySearchParams): Promise<CoreResult<PublicRoomsResult>>;

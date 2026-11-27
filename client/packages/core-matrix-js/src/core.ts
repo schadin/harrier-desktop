@@ -2367,6 +2367,46 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           return { ok: false, error: normalizeMatrixError(error) };
         }
       },
+      async kick(roomId, userId, reason): Promise<CoreResult<void>> {
+        try {
+          await client.kick(roomId, userId, reason);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async ban(roomId, userId, reason): Promise<CoreResult<void>> {
+        try {
+          await client.ban(roomId, userId, reason);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async unban(roomId, userId): Promise<CoreResult<void>> {
+        try {
+          await client.unban(roomId, userId);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async reportEvent(roomId, eventId, score, reason): Promise<CoreResult<void>> {
+        try {
+          await client.reportEvent(roomId, eventId, score, reason);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async reportRoom(roomId, reason): Promise<CoreResult<void>> {
+        try {
+          await client.reportRoom(roomId, reason);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
       async createRoom(params): Promise<CoreResult<string>> {
         const initialState: ICreateRoomStateEvent[] = [];
 

@@ -29,7 +29,6 @@ import {
   PageHeroEmpty,
   PageHeroSection,
 } from '../../../components/page';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
 import { allInvitesAtom } from '../../../state/room-list/inviteList';
 import { SequenceCard } from '../../../components/sequence-card';
@@ -54,6 +53,7 @@ import {
   joinRoom,
   leaveRoom,
   setIgnoredUsers,
+  unwrapCoreResult,
 } from '../../../utils/coreRoomActions';
 import { toMediaRef, useMediaSource } from '../../../utils/coreMedia';
 import { classifyInvites, makeInviteData, type InviteData } from './inviteUtils';
@@ -469,7 +469,6 @@ function SpamInvites({
   dateFormatString,
 }: SpamInvitesProps) {
   const core = useCore();
-  const mx = useMatrixClient();
   const [showInvites, setShowInvites] = useState(false);
 
   const reportRoomSupported = useReportRoomSupported();
@@ -486,8 +485,10 @@ function SpamInvites({
     useCallback(async () => {
       const roomIds = invites.map((invite) => invite.roomId);
 
-      await rateLimitedActions(roomIds, (roomId) => mx.reportRoom(roomId, 'Spam Invite'));
-    }, [mx, invites])
+      await rateLimitedActions(roomIds, (roomId) =>
+        unwrapCoreResult(core.rooms.reportRoom(roomId, 'Spam Invite'))
+      );
+    }, [core, invites])
   );
 
   const ignoredUsers = useIgnoredUsers();

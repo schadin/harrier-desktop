@@ -1,6 +1,7 @@
 export * from './harness';
 export * from './suite';
 export * from './cases/rooms';
+export * from './cases/moderation';
 export * from './cases/timeline';
 export * from './cases/send';
 export * from './cases/receipts-typing';

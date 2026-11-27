@@ -111,6 +111,13 @@ export type ContractOperationFailure = {
   readonly data?: JsonObject;
 };
 
+export type ContractTransportCall = {
+  readonly method: string;
+  readonly path: string;
+  readonly query?: Readonly<Record<string, unknown>>;
+  readonly body?: unknown;
+};
+
 export type CoreContractHarness = {
   readonly name: string;
   create(): Promise<HarrierCore>;
@@ -118,5 +125,6 @@ export type CoreContractHarness = {
   failNextOperation(operation: string, failure: ContractOperationFailure): void;
   setRoomSummaryResponse(roomIdOrAlias: string, response: unknown): void;
   setThirdPartyProtocolsResponse(response: unknown): void;
+  getCalls(): readonly ContractTransportCall[];
   dispose(core: HarrierCore): Promise<void>;
 };

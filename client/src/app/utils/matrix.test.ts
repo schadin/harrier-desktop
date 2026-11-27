@@ -1,6 +1,7 @@
-import { CoreError } from '@harrier/core';
+import { CoreError, type CoreResult, type HarrierCore } from '@harrier/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { rateLimitedActions } from './matrix';
+import { unwrapCoreResult } from './coreRoomActions';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -128,6 +129,40 @@ describe('rateLimitedActions', () => {
       ['second', 1],
       ['second', 1],
     ]);
+  });
+
+  it('retries a normalized room report before reporting the next invite', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const results: CoreResult<void>[] = [
+      {
+        ok: false,
+        error: new CoreError('rate-limited', 'Slow down', true, 429, 'M_LIMIT_EXCEEDED', {}, 1250),
+      },
+      { ok: true, value: undefined },
+      { ok: true, value: undefined },
+    ];
+    const core = {
+      rooms: {
+        reportRoom: async (roomId: string, reason: string): Promise<CoreResult<void>> => {
+          calls.push(`${roomId}:${reason}`);
+          const result = results.shift();
+          if (!result) throw new Error('Unexpected room report');
+          return result;
+        },
+      },
+    } as unknown as HarrierCore;
+
+    await retryDelay(
+      1250,
+      () =>
+        rateLimitedActions(['first', 'second'], (roomId) =>
+          unwrapCoreResult(core.rooms.reportRoom(roomId, 'Spam Invite'))
+        ),
+      () => expect(calls).toEqual(['first:Spam Invite'])
+    );
+
+    expect(calls).toEqual(['first:Spam Invite', 'first:Spam Invite', 'second:Spam Invite']);
   });
 
   it('propagates non-rate-limit CoreError without retrying', async () => {

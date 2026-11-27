@@ -95,6 +95,42 @@ describe('core contract boundary', () => {
     expect(source).not.toContain('.threepids');
   });
 
+  it('routes user moderation through core while preserving local UI gates', () => {
+    const source = readTarget('src/app/components/user-profile/UserModeration.tsx');
+    expect(source).not.toMatch(/useMatrixClient|mx\.(?:kick|ban|unban|invite)/);
+    expect(source).toContain('useCore()');
+    expect(source).toContain('unwrapCoreResult(core.rooms.unban(room.roomId, userId))');
+    expect(source).toContain('unwrapCoreResult(core.rooms.kick(room.roomId, userId))');
+    expect(source).toContain('unwrapCoreResult(core.rooms.kick(room.roomId, userId, getReason()))');
+    expect(source).toContain('unwrapCoreResult(core.rooms.ban(room.roomId, userId, getReason()))');
+    expect(source).toContain(
+      'unwrapCoreResult(core.rooms.invite(room.roomId, userId, getReason()))'
+    );
+    expect(source).toContain('const reason = reasonInputRef.current?.value.trim() || undefined;');
+    expect(source).toContain("reasonInputRef.current.value = '';");
+    expect(source).toContain('if (!canBan && !canKick && !canInvite) return null;');
+    expect(source).toContain('const disabled =');
+    expect(source.match(/disabled=\{disabled\}/g)).toHaveLength(4);
+    expect(source.lastIndexOf('onClick={invite}')).toBeLessThan(
+      source.lastIndexOf('onClick={kick}')
+    );
+    expect(source.lastIndexOf('onClick={kick}')).toBeLessThan(source.lastIndexOf('onClick={ban}'));
+  });
+
+  it('reports all spam invites sequentially through core without adding error UI', () => {
+    const source = readTarget('src/app/pages/client/inbox/Invites.tsx');
+    expect(source).not.toMatch(/useMatrixClient|mx\.reportRoom/);
+    expect(source).toContain("unwrapCoreResult(core.rooms.reportRoom(roomId, 'Spam Invite'))");
+    expect(source).toContain('await rateLimitedActions(roomIds, (roomId) =>');
+    expect(source).toContain('useReportRoomSupported()');
+    expect(source).toContain(
+      'reportRoomSupported && reportAllStatus.status !== AsyncStatus.Success'
+    );
+    expect(source).toContain('const loading = blocking || reporting || declining;');
+    expect(source.match(/disabled=\{loading\}/g)).toHaveLength(3);
+    expect(source).not.toContain('reportAllStatus.error');
+  });
+
   it('writes own profile fields through core without changing input or avatar timing', () => {
     const source = readTarget('src/app/features/settings/account/Profile.tsx');
     expect(source).toContain('core.presence.setOwnProfile({ avatarUrl: mxc })');

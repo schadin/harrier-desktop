@@ -489,6 +489,9 @@ export function createSyncDriver(): SyncDriver {
       const txnId = path.split('/').pop() ?? '';
       return { event_id: `$sent-${txnId}` };
     }
+    if (method === 'POST' && /^\/rooms\/[^/]+\/(kick|ban|unban)$/.test(path)) return {};
+    if (method === 'POST' && /^\/rooms\/[^/]+\/report\/[^/]+$/.test(path)) return {};
+    if (method === 'POST' && /^\/rooms\/[^/]+\/report$/.test(path)) return {};
     if (path.endsWith('/invite')) return {};
     if (path.endsWith('/createRoom')) return { room_id: '!created:example.org' };
     if (path.endsWith('/upgrade')) return { replacement_room: '!upgraded:example.org' };

@@ -11,6 +11,7 @@ import {
   mediaCases,
   callsCases,
   roomsCases,
+  moderationCases,
   sendCases,
   runCoreContractSuite,
   timelineCases,
@@ -43,6 +44,10 @@ const matrixJsHarness: CoreContractHarness = {
     if (!driver) throw new Error('create() must run before setThirdPartyProtocolsResponse()');
     driver.setThirdPartyProtocolsResponse(response);
   },
+  getCalls() {
+    if (!driver) throw new Error('create() must run before getCalls()');
+    return driver.getCalls();
+  },
   async dispose() {
     driver?.client.stopClient();
     driver = undefined;
@@ -51,6 +56,7 @@ const matrixJsHarness: CoreContractHarness = {
 
 runCoreContractSuite(matrixJsHarness, [
   ...roomsCases,
+  ...moderationCases,
   ...timelineCases,
   ...sendCases,
   ...presenceCases,
