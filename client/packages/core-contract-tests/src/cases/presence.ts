@@ -24,6 +24,268 @@ export const presenceCases = [
   }),
 
   contractTest(
+    'knownUsers exposes initial profiles as plain SDK-ordered views',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [],
+          presence: [
+            {
+              userId: '@zoe:example.org',
+              status: 'online',
+              displayName: 'Zoe',
+              avatarUrl: 'mxc://example.org/zoe',
+            },
+            { userId: '@alice:example.org', status: 'offline', displayName: 'Alice' },
+          ],
+        });
+        const store = core.presence.knownUsers;
+        expect(store).toBeDefined();
+        const snapshot = store.getSnapshot();
+        const expected = [
+          {
+            userId: '@zoe:example.org',
+            avatarUrl: 'mxc://example.org/zoe',
+            displayName: 'Zoe',
+          },
+          { userId: '@alice:example.org', displayName: 'Alice' },
+        ];
+
+        expect(snapshot.value).toEqual(expected);
+        expect(snapshot.value.map(({ userId }) => userId)).toEqual([
+          '@zoe:example.org',
+          '@alice:example.org',
+        ]);
+        expect(JSON.parse(JSON.stringify(snapshot.value))).toEqual(expected);
+        snapshot.value.forEach((profile) => {
+          expect(Object.getPrototypeOf(profile)).toBe(Object.prototype);
+          expect(profile).not.toHaveProperty('events');
+          expect(profile).not.toHaveProperty('emit');
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'knownUsers preserves unchanged identities when one profile changes',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [],
+          presence: [
+            {
+              userId: '@bob:example.org',
+              status: 'online',
+              displayName: 'Bob',
+              avatarUrl: 'mxc://example.org/bob',
+            },
+            { userId: '@alice:example.org', status: 'online', displayName: 'Alice' },
+          ],
+        });
+        const store = core.presence.knownUsers;
+        expect(store).toBeDefined();
+        const before = store.getSnapshot();
+        const unchanged = before.value[0];
+        const changed = before.value[1];
+
+        await harness.applySyncFixture({
+          rooms: [],
+          presence: [
+            {
+              userId: '@alice:example.org',
+              status: 'online',
+              displayName: 'Alice Updated',
+              avatarUrl: 'mxc://example.org/alice',
+            },
+          ],
+        });
+        const after = store.getSnapshot();
+
+        expect(after.revision).toBe(before.revision + 1);
+        expect(after.value).not.toBe(before.value);
+        expect(after.value[0]).toBe(unchanged);
+        expect(after.value[1]).not.toBe(changed);
+        expect(after.value[1]).toEqual({
+          userId: '@alice:example.org',
+          avatarUrl: 'mxc://example.org/alice',
+          displayName: 'Alice Updated',
+        });
+        expect(after.value.map(({ userId }) => userId)).toEqual([
+          '@bob:example.org',
+          '@alice:example.org',
+        ]);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('knownUsers keeps the same snapshot for presence-only updates', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [],
+        presence: [
+          {
+            userId: '@bob:example.org',
+            status: 'online',
+            displayName: 'Bob',
+            avatarUrl: 'mxc://example.org/bob',
+          },
+        ],
+      });
+      const store = core.presence.knownUsers;
+      expect(store).toBeDefined();
+      const before = store.getSnapshot();
+
+      await harness.applySyncFixture({
+        rooms: [],
+        presence: [
+          {
+            userId: '@bob:example.org',
+            status: 'unavailable',
+            statusMessage: 'Away',
+            active: false,
+          },
+        ],
+      });
+
+      expect(store.getSnapshot()).toBe(before);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'knownUsers republishes member-derived profile changes without reordering',
+    async (harness) => {
+      const core = await harness.create();
+      const roomId = '!members:example.org';
+      try {
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              members: [
+                { userId: '@bob:example.org', displayName: 'Bob' },
+                {
+                  userId: '@alice:example.org',
+                  displayName: 'Alice',
+                  avatarUrl: 'mxc://example.org/alice-old',
+                },
+              ],
+            },
+          ],
+        });
+        const store = core.presence.knownUsers;
+        expect(store).toBeDefined();
+        const before = store.getSnapshot();
+        const unchanged = before.value[0];
+
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId,
+              membership: 'join',
+              members: [
+                { userId: '@bob:example.org', displayName: 'Bob' },
+                {
+                  userId: '@alice:example.org',
+                  displayName: 'Alice Updated',
+                  avatarUrl: 'mxc://example.org/alice-new',
+                },
+              ],
+            },
+          ],
+        });
+        const after = store.getSnapshot();
+
+        expect(after.revision).toBe(before.revision + 1);
+        expect(after.value[0]).toBe(unchanged);
+        expect(after.value[1]).toEqual({
+          userId: '@alice:example.org',
+          avatarUrl: 'mxc://example.org/alice-new',
+          displayName: 'Alice Updated',
+        });
+        expect(after.value.map(({ userId }) => userId)).toEqual([
+          '@bob:example.org',
+          '@alice:example.org',
+        ]);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest(
+    'knownUsers stays empty after stop and late presence or member events',
+    async (harness) => {
+      const core = await harness.create();
+      try {
+        await harness.applySyncFixture({
+          rooms: [],
+          presence: [{ userId: '@alice:example.org', status: 'online', displayName: 'Alice' }],
+        });
+        const store = core.presence.knownUsers;
+        expect(store).toBeDefined();
+        expect(store.getSnapshot().value).toHaveLength(1);
+
+        await core.auth.stop();
+        const cleared = store.getSnapshot();
+        expect(cleared.value).toEqual([]);
+
+        await harness.applySyncFixture({
+          rooms: [
+            {
+              roomId: '!late:example.org',
+              membership: 'join',
+              members: [{ userId: '@bob:example.org', displayName: 'Bob' }],
+            },
+          ],
+          presence: [{ userId: '@carol:example.org', status: 'online', displayName: 'Carol' }],
+        });
+
+        expect(store.getSnapshot()).toBe(cleared);
+        expect(store.getSnapshot().value).toEqual([]);
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('knownUsers stays empty after logout and late user events', async (harness) => {
+    const core = await harness.create();
+    try {
+      await harness.applySyncFixture({
+        rooms: [],
+        presence: [{ userId: '@alice:example.org', status: 'online', displayName: 'Alice' }],
+      });
+      const store = core.presence.knownUsers;
+      expect(store).toBeDefined();
+      expect(store.getSnapshot().value).toHaveLength(1);
+
+      await core.auth.logout();
+      const cleared = store.getSnapshot();
+      expect(cleared.value).toEqual([]);
+
+      await harness.applySyncFixture({
+        rooms: [],
+        presence: [{ userId: '@bob:example.org', status: 'online', displayName: 'Bob' }],
+      });
+
+      expect(store.getSnapshot()).toBe(cleared);
+      expect(store.getSnapshot().value).toEqual([]);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
     'presence exposes status message, activity and last active timestamp',
     async (harness) => {
       const core = await harness.create();

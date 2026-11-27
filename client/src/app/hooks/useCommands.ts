@@ -14,7 +14,6 @@ import {
 import type { IContextResponse, RoomServerAclEventContent } from '../../types/matrix/protocol';
 import {
   addRoomIdToMDirect,
-  getDMRoomFor,
   guessDmRoomUserId,
   isRoomAlias,
   isRoomId,
@@ -37,6 +36,7 @@ import {
 } from '../features/ds-task-bot/helpers';
 import { DSTASK_SLASH_COMMANDS } from '../features/ds-task-bot/botCommandSuggestions';
 import { useRoomMembers } from './useRoomMembers';
+import { getCoreDMRoomFor } from '../utils/coreRoomDirect';
 
 export const SHRUG = '¯\\_(ツ)_/¯';
 export const TABLEFLIP = '(╯°□°)╯︵ ┻━┻';
@@ -240,7 +240,7 @@ export const useCommands = (
           const userIds = rawIds.filter((id) => isUserId(id) && id !== mx.getSafeUserId());
           if (userIds.length === 0) return;
           if (userIds.length === 1) {
-            const dmRoomId = getDMRoomFor(mx, userIds[0])?.roomId;
+            const dmRoomId = getCoreDMRoomFor(core, userIds[0])?.roomId;
             if (dmRoomId) {
               navigateRoom(dmRoomId);
               return;

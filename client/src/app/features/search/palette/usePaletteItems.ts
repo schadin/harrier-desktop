@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { Icons } from 'folds';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
 import { useCore } from '../../../hooks/useCore';
+import { getSafeSessionUserId, useCoreSession } from '../../../hooks/useCoreSession';
 import { useRoomNavigate } from '../../../hooks/useRoomNavigate';
 import { useSelectedRoom } from '../../../hooks/router/useSelectedRoom';
 import { useDirects, useRooms, useSpaces } from '../../../state/hooks/roomList';
@@ -13,7 +13,7 @@ import { allRoomsAtom } from '../../../state/room-list/roomList';
 import { roomToUnreadAtom } from '../../../state/room/roomToUnread';
 import { useAllJoinedRoomsSet } from '../../../hooks/useGetRoom';
 import { useGetCoreRoom } from '../../../hooks/useGetCoreRoom';
-import { getDMRoomFor, getMxIdLocalPart } from '../../../utils/matrix';
+import { getMxIdLocalPart } from '../../../utils/matrix';
 import { getDirectCreatePath } from '../../../pages/pathUtils';
 import { useOpenSettingsPage } from '../../../state/settingsNav';
 import { SettingsPages } from '../../settings';
@@ -35,6 +35,7 @@ import {
 } from '../../../hooks/useRoomsNotificationPreferences';
 import { markAsRead } from '../../../utils/notifications';
 import { PaletteCategory, PaletteItem } from './types';
+import { buildPeoplePaletteItems } from './people';
 
 const useRoomItems = (): PaletteItem[] => {
   const { navigateRoom } = useRoomNavigate();
@@ -104,52 +105,35 @@ const useSpaceItems = (): PaletteItem[] => {
 };
 
 const usePeopleItems = (): PaletteItem[] => {
-  const mx = useMatrixClient();
+  const core = useCore();
+  const session = useCoreSession();
   const navigate = useNavigate();
   const { navigateRoom } = useRoomNavigate();
   const allRoomsSet = useAllJoinedRoomsSet();
   const getRoom = useGetCoreRoom(allRoomsSet);
   const mDirects = useAtomValue(mDirectAtom);
   const directs = useDirects(allRoomsAtom, mDirects);
-  // mx.getUsers() меняется по мере синка; пересчитываем при смене списка комнат
-  // как дешёвый индикатор обновления известных пользователей
-  const rooms = useRooms(allRoomsAtom, mDirects);
+  const knownUsersStore = core.presence.knownUsers;
+  const knownUsers = useSyncExternalStore(
+    knownUsersStore.subscribe,
+    knownUsersStore.getSnapshot,
+    knownUsersStore.getSnapshot
+  ).value;
+  const myUserId = getSafeSessionUserId(session);
 
   return useMemo(() => {
-    const myUserId = mx.getSafeUserId();
     const dmPartnerIds = new Set<string>();
     directs.forEach((roomId) => {
       const room = getRoom(roomId);
       if (room?.dmUserId) dmPartnerIds.add(room.dmUserId);
     });
-    const users = mx
-      .getUsers()
-      .filter(
-        (user) => user.userId !== myUserId && (dmPartnerIds.has(user.userId) || !!user.displayName)
-      );
 
-    return users.map((user) => {
-      const { userId } = user;
-      const localPart = getMxIdLocalPart(userId) ?? userId;
-      return {
-        id: `user:${userId}`,
-        category: PaletteCategory.People,
-        title: user.displayName ?? localPart,
-        subtitle: userId,
-        keywords: [userId, localPart],
-        dm: dmPartnerIds.has(userId),
-        run: () => {
-          const dmRoom = getDMRoomFor(mx, userId);
-          if (dmRoom) {
-            navigateRoom(dmRoom.roomId);
-          } else {
-            navigate(`${getDirectCreatePath()}?userId=${encodeURIComponent(userId)}`);
-          }
-        },
-      };
+    return buildPeoplePaletteItems(core, knownUsers, myUserId, dmPartnerIds, {
+      navigateRoom,
+      navigateDirectCreate: (userId) =>
+        navigate(`${getDirectCreatePath()}?userId=${encodeURIComponent(userId)}`),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mx, directs, rooms, getRoom, navigate, navigateRoom]);
+  }, [core, knownUsers, myUserId, directs, getRoom, navigate, navigateRoom]);
 };
 
 type SettingsPageDef = {

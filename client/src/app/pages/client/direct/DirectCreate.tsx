@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, Icon, IconButton, Icons, Scroll } from 'folds';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { getDirectCreateSearchParams } from '../../pathSearchParam';
 import { getDirectRoomPath } from '../../pathUtils';
-import { getDMRoomFor } from '../../../utils/matrix';
+import { getCoreDMRoomFor } from '../../../utils/coreRoomDirect';
 import { useDirectRooms } from './useDirectRooms';
 import { ScreenSize, useScreenSizeContext } from '../../../hooks/useScreenSize';
 import {
@@ -19,7 +19,7 @@ import { BackRouteHandler } from '../../../components/BackRouteHandler';
 import { CreateChat } from '../../../features/create-chat';
 
 export function DirectCreate() {
-  const mx = useMatrixClient();
+  const core = useCore();
   const screenSize = useScreenSizeContext();
 
   const navigate = useNavigate();
@@ -30,12 +30,12 @@ export function DirectCreate() {
 
   useEffect(() => {
     if (userId) {
-      const roomId = getDMRoomFor(mx, userId)?.roomId;
+      const roomId = getCoreDMRoomFor(core, userId)?.roomId;
       if (roomId && directs.includes(roomId)) {
         navigate(getDirectRoomPath(roomId), { replace: true });
       }
     }
-  }, [mx, navigate, directs, userId]);
+  }, [core, navigate, directs, userId]);
 
   return (
     <Page>

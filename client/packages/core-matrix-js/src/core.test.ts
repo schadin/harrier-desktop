@@ -9,6 +9,8 @@ import {
   SyncState,
   type MatrixClient,
   type Room,
+  User,
+  UserEvent,
 } from 'matrix-js-sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { createMatrixJsCore } from './core';
@@ -110,6 +112,157 @@ describe('matrix-js UIA fallback auth', () => {
       await core.auth.stop();
     }
   });
+});
+
+describe('matrix-js known users', () => {
+  it('exposes preloaded users immediately in SDK order as plain profiles', async () => {
+    const driver = createSyncDriver();
+    const zoe = User.createUser('@zoe:example.org', driver.client);
+    zoe.setDisplayName('Zoe');
+    zoe.setAvatarUrl('mxc://example.org/zoe');
+    const alice = User.createUser('@alice:example.org', driver.client);
+    alice.setDisplayName('Alice');
+    driver.client.store.storeUser(zoe);
+    driver.client.store.storeUser(alice);
+    const core = createMatrixJsCore(driver.client);
+    try {
+      expect(core.presence.knownUsers.getSnapshot().value).toEqual([
+        {
+          userId: '@zoe:example.org',
+          avatarUrl: 'mxc://example.org/zoe',
+          displayName: 'Zoe',
+        },
+        { userId: '@alice:example.org', displayName: 'Alice' },
+      ]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('continues profile updates during a transient sync error', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    try {
+      await driver.applyFixture({
+        rooms: [],
+        presence: [
+          { userId: '@bob:example.org', status: 'online', displayName: 'Bob' },
+          { userId: '@alice:example.org', status: 'online', displayName: 'Alice' },
+        ],
+      });
+      const store = core.presence.knownUsers;
+      const before = store.getSnapshot();
+
+      driver.client.emit(ClientEvent.Sync, SyncState.Error, SyncState.Syncing);
+      await driver.applyFixture({
+        rooms: [],
+        presence: [
+          {
+            userId: '@alice:example.org',
+            status: 'online',
+            displayName: 'Alice Updated',
+            avatarUrl: 'mxc://example.org/alice',
+          },
+        ],
+      });
+
+      expect(store.getSnapshot().revision).toBe(before.revision + 1);
+      expect(store.getSnapshot().value[0]).toBe(before.value[0]);
+      expect(store.getSnapshot().value[1]).toEqual({
+        userId: '@alice:example.org',
+        avatarUrl: 'mxc://example.org/alice',
+        displayName: 'Alice Updated',
+      });
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it.each(['stop', 'logout', 'clearCache', 'sessionLoggedOut', 'syncStopped'] as const)(
+    'clears known users and ignores late events after %s',
+    async (lifecycle) => {
+      const driver = createSyncDriver();
+      const core = createMatrixJsCore(driver.client);
+      try {
+        await driver.applyFixture({
+          rooms: [],
+          presence: [{ userId: '@alice:example.org', status: 'online', displayName: 'Alice' }],
+        });
+        const store = core.presence.knownUsers;
+        expect(store.getSnapshot().value).toHaveLength(1);
+
+        if (lifecycle === 'stop') await core.auth.stop();
+        if (lifecycle === 'logout') await core.auth.logout();
+        if (lifecycle === 'clearCache') await core.auth.clearCache();
+        if (lifecycle === 'sessionLoggedOut') {
+          driver.client.emit(
+            HttpApiEvent.SessionLoggedOut,
+            new MatrixError({ errcode: 'M_UNKNOWN_TOKEN', error: 'Logged out' })
+          );
+        }
+        if (lifecycle === 'syncStopped') {
+          driver.client.emit(ClientEvent.Sync, SyncState.Stopped, SyncState.Syncing);
+        }
+        const cleared = store.getSnapshot();
+        expect(cleared.value).toEqual([]);
+
+        await driver.applyFixture({
+          rooms: [
+            {
+              roomId: '!late-known-user:example.org',
+              membership: 'join',
+              members: [{ userId: '@bob:example.org', displayName: 'Bob' }],
+            },
+          ],
+          presence: [{ userId: '@carol:example.org', status: 'online', displayName: 'Carol' }],
+        });
+        const bob = driver.client.store.getUser('@bob:example.org')!;
+        bob.setDisplayName('Late Bob');
+        bob.emit(UserEvent.DisplayName, undefined, bob);
+
+        expect(store.getSnapshot()).toBe(cleared);
+        expect(store.getSnapshot().value).toEqual([]);
+      } finally {
+        await core.auth.stop();
+      }
+    }
+  );
+
+  it.each(['start', 'retrySync'] as const)(
+    'repopulates known users from the SDK store after %s',
+    async (method) => {
+      const driver = createSyncDriver();
+      const core = createMatrixJsCore(driver.client);
+      const startClient = vi.spyOn(driver.client, 'startClient').mockResolvedValue(undefined);
+      try {
+        await driver.applyFixture({
+          rooms: [],
+          presence: [{ userId: '@alice:example.org', status: 'online', displayName: 'Alice' }],
+        });
+        const store = core.presence.knownUsers;
+        await core.auth.stop();
+        expect(store.getSnapshot().value).toEqual([]);
+
+        await driver.applyFixture({
+          rooms: [],
+          presence: [{ userId: '@bob:example.org', status: 'online', displayName: 'Bob' }],
+        });
+        expect(store.getSnapshot().value).toEqual([]);
+
+        const result = method === 'start' ? await core.auth.start() : await core.auth.retrySync();
+
+        expect(result.ok).toBe(true);
+        expect(startClient).toHaveBeenCalledOnce();
+        expect(store.getSnapshot().value.map(({ userId }) => userId)).toEqual([
+          '@alice:example.org',
+          '@bob:example.org',
+        ]);
+      } finally {
+        startClient.mockRestore();
+        await core.auth.stop();
+      }
+    }
+  );
 });
 
 describe('matrix-js core state listener flushing', () => {

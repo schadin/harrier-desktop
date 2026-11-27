@@ -105,6 +105,12 @@ const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'k
 const toMembership = (value: string | null | undefined): Membership | null =>
   MEMBERSHIPS.find((membership) => membership === value) ?? null;
 
+const toUserProfileView = (user: User): UserProfileView => ({
+  userId: user.userId,
+  ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+  ...(user.displayName ? { displayName: user.displayName } : {}),
+});
+
 const directRoomIds = (client: MatrixClient): Set<string> => {
   const content = client.getAccountData(EventType.Direct)?.getContent<Record<string, unknown>>();
   const ids = new Set<string>();
@@ -949,6 +955,15 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     invalidatePendingState();
   };
 
+  const buildKnownUsers = (): readonly UserProfileView[] =>
+    client.getUsers().map(toUserProfileView);
+  const knownUsersStore = createSnapshotStore<readonly UserProfileView[]>(buildKnownUsers());
+  const publishKnownUsers = () => {
+    if (!stateLifecycleActive) return;
+    knownUsersStore.publish(buildKnownUsers());
+  };
+  const clearKnownUsers = () => knownUsersStore.publish([]);
+
   const stateStores = new Map<string, WritableSnapshotStore<JsonObject | null>>();
   const stateKeyOf = (roomId: string, eventType: string, key: string) =>
     `${roomId}|${eventType}|${key}`;
@@ -1273,6 +1288,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       if (entries.some(({ event: pendingEvent }) => pendingEvent === event)) readyRooms.add(roomId);
     });
     flushRoomsState(readyRooms, generation);
+    if (event.getType() === 'm.presence' || event.getType() === 'm.room.member') {
+      publishKnownUsers();
+    }
   });
   client.on(ClientEvent.Sync, (state: SyncState) => {
     if (state === SyncState.Error) {
@@ -1282,6 +1300,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     }
     if (state === SyncState.Stopped) {
       deactivatePendingState();
+      clearKnownUsers();
       return;
     }
     if (state !== SyncState.Prepared && state !== SyncState.Syncing) return;
@@ -1419,21 +1438,17 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const profileStores = new Map<string, WritableSnapshotStore<UserProfileView>>();
   const buildProfile = (userId: string): UserProfileView => {
     const user = client.getUser(userId);
-    return {
-      userId,
-      ...(user?.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
-      ...(user?.displayName ? { displayName: user.displayName } : {}),
-    };
+    return user ? toUserProfileView(user) : { userId };
   };
   const publishProfile = (userId: string) => {
     profileStores.get(userId)?.publish(buildProfile(userId));
   };
-  client.on(UserEvent.AvatarUrl, (_event: MatrixEvent | undefined, user: User) =>
-    publishProfile(user.userId)
-  );
-  client.on(UserEvent.DisplayName, (_event: MatrixEvent | undefined, user: User) =>
-    publishProfile(user.userId)
-  );
+  const publishUserProfile = (_event: MatrixEvent | undefined, user: User) => {
+    publishProfile(user.userId);
+    publishKnownUsers();
+  };
+  client.on(UserEvent.AvatarUrl, publishUserProfile);
+  client.on(UserEvent.DisplayName, publishUserProfile);
 
   const presenceStores = new Map<string, WritableSnapshotStore<PresenceView | null>>();
   const buildPresence = (userId: string): PresenceView | null => {
@@ -1452,7 +1467,11 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const publishPresence = (_event: MatrixEvent | undefined, user: User) => {
     presenceStores.get(user.userId)?.publish(buildPresence(user.userId));
   };
-  client.on(UserEvent.Presence, publishPresence);
+  const publishPresenceAndKnownUsers = (event: MatrixEvent | undefined, user: User) => {
+    publishPresence(event, user);
+    publishKnownUsers();
+  };
+  client.on(UserEvent.Presence, publishPresenceAndKnownUsers);
   client.on(UserEvent.CurrentlyActive, publishPresence);
   client.on(UserEvent.LastPresenceTs, publishPresence);
 
@@ -1906,6 +1925,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   const loggedOutListeners = new Set<() => void>();
   client.on(HttpApiEvent.SessionLoggedOut, () => {
     deactivatePendingState();
+    clearKnownUsers();
     client.stopClient();
     clearSecretStorageKeys();
     client.clearStores().catch(() => undefined);
@@ -1982,6 +2002,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           syncStore.publish({ phase: 'syncing' });
           client.setSyncPresence(SetPresence.Online);
           await client.startClient({ lazyLoadMembers: true });
+          publishKnownUsers();
           return { ok: true, value: undefined };
         } catch (error) {
           deactivatePendingState();
@@ -1995,6 +2016,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           activatePendingState();
           if (client.clientRunning) client.retryImmediately();
           else await client.startClient({ lazyLoadMembers: true });
+          publishKnownUsers();
           syncStore.publish({ phase: 'syncing' });
           return { ok: true, value: undefined };
         } catch (error) {
@@ -2010,11 +2032,13 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async stop() {
         deactivatePendingState();
+        clearKnownUsers();
         client.stopClient();
         syncStore.publish({ phase: 'stopped' });
       },
       async logout(): Promise<CoreResult<void>> {
         deactivatePendingState();
+        clearKnownUsers();
         client.stopClient();
         try {
           await client.logout();
@@ -2030,6 +2054,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
       async clearCache() {
         deactivatePendingState();
+        clearKnownUsers();
         client.stopClient();
         try {
           await client.store.deleteAllData();
@@ -2721,6 +2746,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       },
     },
     presence: {
+      knownUsers: knownUsersStore,
       profile(userId) {
         const existing = profileStores.get(userId);
         if (existing) return existing;

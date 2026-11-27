@@ -14,7 +14,6 @@ import {
   RoomLike,
   RoomMemberLike,
 } from '../../types/matrix/legacyStructural';
-import { Membership } from '../../types/matrix/room';
 
 const DOMAIN_REGEX = /\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\b/;
 
@@ -117,24 +116,6 @@ export const factoryEventSentBy = (senderId: string) => (ev: MatrixEventLike) =>
 
 export const eventWithShortcode = (ev: MatrixEventLike) =>
   typeof ev.getContent().shortcode === 'string';
-
-type ClientRoom<M extends MatrixClientLike> = ReturnType<M['getRooms']>[number];
-
-export const getDMRoomFor = <M extends MatrixClientLike>(
-  mx: M,
-  userId: string
-): ClientRoom<M> | undefined => {
-  const dmLikeRooms = mx
-    .getRooms()
-    .filter(
-      (room) =>
-        room.getMyMembership() === Membership.Join &&
-        room.hasEncryptionStateEvent() &&
-        room.getMembers().length <= 2
-    );
-
-  return dmLikeRooms.find((room) => room.getMember(userId)) as ClientRoom<M> | undefined;
-};
 
 export const guessDmRoomUserId = (room: RoomLike, myUserId: string): string => {
   const getOldestMember = (members: RoomMemberLike[]): RoomMemberLike | undefined => {

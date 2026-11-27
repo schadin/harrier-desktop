@@ -16,7 +16,6 @@ import {
   RoomMemberEvent,
   RoomStateEvent,
   User,
-  UserEvent,
 } from 'matrix-js-sdk';
 import {
   ImportRoomKeyStage,
@@ -119,6 +118,8 @@ export type SyncFixtureRoom = {
 export type SyncFixturePresence = {
   readonly userId: string;
   readonly status: 'online' | 'offline' | 'unavailable';
+  readonly displayName?: string;
+  readonly avatarUrl?: string;
   readonly statusMessage?: string;
   readonly active?: boolean;
   readonly lastActiveTs?: number;
@@ -814,11 +815,13 @@ export function createSyncDriver(): SyncDriver {
         client.emit(ClientEvent.AccountData, event);
       }
       (fixture.presence ?? []).forEach((item) => {
-        const user = new User(item.userId);
+        const user = client.store.getUser(item.userId) ?? User.createUser(item.userId, client);
         const event = new MatrixEvent({
           type: 'm.presence',
           content: {
             presence: item.status,
+            ...(item.displayName !== undefined ? { displayname: item.displayName } : {}),
+            ...(item.avatarUrl !== undefined ? { avatar_url: item.avatarUrl } : {}),
             ...(item.statusMessage !== undefined ? { status_msg: item.statusMessage } : {}),
             ...(item.active !== undefined ? { currently_active: item.active } : {}),
             ...(item.lastActiveTs !== undefined
@@ -826,9 +829,10 @@ export function createSyncDriver(): SyncDriver {
               : {}),
           },
         });
+        // The SDK can emit user events before the new user reaches its store.
         user.setPresenceEvent(event);
         client.store.storeUser(user);
-        client.emit(UserEvent.Presence, event, user);
+        client.emit(ClientEvent.Event, event);
       });
     },
   };

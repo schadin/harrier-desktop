@@ -251,6 +251,7 @@ export type OwnProfileUpdate = {
 };
 
 export type PresenceModule = {
+  readonly knownUsers: SnapshotStore<readonly UserProfileView[]>;
   presence(userId: string): SnapshotStore<PresenceView | null>;
   profile(userId: string): SnapshotStore<UserProfileView>;
   refreshProfile(userId: string): Promise<CoreResult<void>>;
