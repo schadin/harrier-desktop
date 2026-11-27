@@ -579,6 +579,10 @@ export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
   };
   const fakeCrypto = createFakeCrypto(cryptoState, cryptoCalls, failNamedOperation);
   const crypto = options.crypto === false ? undefined : fakeCrypto.crypto;
+  // The SDK applies threadSupport in startClient; fixtures need the same mode before sync starts.
+  (client as unknown as { clientOpts: { threadSupport: boolean } }).clientOpts = {
+    threadSupport: true,
+  };
   let devices: readonly {
     deviceId: string;
     displayName?: string;

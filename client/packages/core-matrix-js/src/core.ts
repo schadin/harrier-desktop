@@ -452,9 +452,21 @@ const toMatrixEventView = (event: MatrixEvent): MatrixEventView => {
   };
 };
 
-const toEventSource = (event: MatrixEvent): TimelineEventSourceView => ({
+const originalContentOf = (event: MatrixEvent): JsonObject =>
+  toPlainJsonObject(event.getOriginalContent());
+
+const editContentOf = (edit: MatrixEvent): JsonObject =>
+  toPlainJsonObject(edit.getOriginalContent<{ 'm.new_content'?: unknown }>()['m.new_content']);
+
+const toEventSource = (event: MatrixEvent, edit?: MatrixEvent): TimelineEventSourceView => ({
   original: toMatrixEventView(event),
-  effective: toMatrixEventView(new MatrixEvent(event.getEffectiveEvent())),
+  effective: toMatrixEventView(
+    new MatrixEvent({
+      ...event.getEffectiveEvent(),
+      type: event.getType(),
+      content: edit ? editContentOf(edit) : originalContentOf(event),
+    })
+  ),
 });
 
 const timelineRelation = (event: MatrixEvent): TimelineRelationView | undefined => {
@@ -472,41 +484,108 @@ const owningTimelineSet = (room: Room, event: MatrixEvent): EventTimelineSet =>
   room.getTimelineForEvent(event.getId() ?? '')?.getTimelineSet() ??
   room.getUnfilteredTimelineSet();
 
-type RelationFallback = ReadonlyMap<string, readonly MatrixEvent[]>;
+type RelationMap = ReadonlyMap<string, readonly MatrixEvent[]>;
 
-const relationEvents = (
-  room: Room,
-  event: MatrixEvent,
-  fallback?: RelationFallback
-): MatrixEvent[] => {
-  const eventId = event.getId();
-  if (!eventId) return [];
-  const timelineSet = owningTimelineSet(room, event);
-  const relations = timelineSet.relations.getAllChildEventsForEvent(eventId);
-  const bundled = event.replacingEvent();
-  const chainRelations =
-    fallback?.get(eventId) ??
-    (relations.length === 0 && !bundled
-      ? timelineSet
-          .getTimelines()
-          .flatMap((timeline) => collectLinkedEvents(timeline))
-          .filter((relation) => relation.getRelation()?.event_id === eventId)
-      : []);
-  const seen = new Set(relations.map((relation) => relation.getId()));
-  chainRelations.forEach((relation) => {
-    const id = relation.getId();
-    if (id && !seen.has(id)) {
-      seen.add(id);
-      relations.push(relation);
-    }
+const EMPTY_RELATIONS: readonly MatrixEvent[] = [];
+
+const mergeRelationEvents = (...groups: readonly (readonly MatrixEvent[])[]): MatrixEvent[] => {
+  const merged: MatrixEvent[] = [];
+  const seen = new Set<string>();
+  groups.forEach((events) => {
+    events.forEach((event) => {
+      const eventId = event.getId();
+      if (!eventId || seen.has(eventId)) return;
+      seen.add(eventId);
+      merged.push(event);
+    });
   });
-  if (bundled && !seen.has(bundled.getId())) relations.push(bundled);
-  return relations;
+  return merged;
 };
 
-const validEdits = (room: Room, event: MatrixEvent, fallback?: RelationFallback): MatrixEvent[] => {
+const buildRelationMap = (
+  room: Room,
+  events: readonly MatrixEvent[],
+  timelineSet?: EventTimelineSet
+): RelationMap => {
+  const eventById = new Map<string, MatrixEvent>();
+  const setByEventId = new Map<string, EventTimelineSet>();
+  const fallbackSetByTarget = new Map<string, EventTimelineSet>();
+  const projectedBySet = new Map<EventTimelineSet, Map<string, MatrixEvent[]>>();
+  const targetIds = new Set<string>();
+
+  const addEvent = (event: MatrixEvent, set: EventTimelineSet) => {
+    const eventId = event.getId();
+    if (!eventId) return;
+    if (!eventById.has(eventId)) eventById.set(eventId, event);
+    if (!setByEventId.has(eventId)) setByEventId.set(eventId, set);
+    if (!isEdit(event) && !isReaction(event)) return;
+    const targetId = event.getRelation()?.event_id;
+    if (!targetId) return;
+    targetIds.add(targetId);
+    if (!fallbackSetByTarget.has(targetId)) fallbackSetByTarget.set(targetId, set);
+    const projected = projectedBySet.get(set) ?? new Map<string, MatrixEvent[]>();
+    const relations = projected.get(targetId) ?? [];
+    relations.push(event);
+    projected.set(targetId, relations);
+    projectedBySet.set(set, projected);
+  };
+
+  const knownSets = [
+    ...room.getTimelineSets(),
+    ...room.getThreads().map((thread) => thread.timelineSet),
+  ];
+  if (timelineSet) {
+    events.forEach((event) => addEvent(event, timelineSet));
+  } else {
+    const seenSets = new Set<EventTimelineSet>();
+    knownSets.forEach((set) => {
+      if (seenSets.has(set)) return;
+      seenSets.add(set);
+      set.getTimelines().forEach((timeline) => {
+        timeline.getEvents().forEach((event) => addEvent(event, set));
+      });
+    });
+    events.forEach((event) => {
+      if (eventById.has(event.getId() ?? '')) return;
+      addEvent(event, owningTimelineSet(room, event));
+    });
+  }
+
+  eventById.forEach((_event, eventId) => targetIds.add(eventId));
+  const relationsByTarget = new Map<string, readonly MatrixEvent[]>();
+  targetIds.forEach((targetId) => {
+    const target = eventById.get(targetId);
+    const set =
+      timelineSet ??
+      setByEventId.get(targetId) ??
+      fallbackSetByTarget.get(targetId) ??
+      (target ? owningTimelineSet(room, target) : undefined);
+    const owning = set?.relations.getAllChildEventsForEvent(targetId) ?? [];
+    const projected = (set ? projectedBySet.get(set)?.get(targetId) : undefined) ?? [];
+    const primary = mergeRelationEvents(owning, projected);
+    const bundled = target?.replacingEvent();
+    const bundledId = bundled?.getId();
+    const foreignBundled =
+      bundled &&
+      bundledId &&
+      knownSets.some(
+        (candidate) =>
+          candidate !== set &&
+          candidate.relations
+            .getAllChildEventsForEvent(targetId)
+            .some((event) => event.getId() === bundledId)
+      );
+    relationsByTarget.set(
+      targetId,
+      mergeRelationEvents(primary, bundled && !foreignBundled ? [bundled] : EMPTY_RELATIONS)
+    );
+  });
+  return relationsByTarget;
+};
+
+const validEdits = (event: MatrixEvent, relations: readonly MatrixEvent[]): MatrixEvent[] => {
   const sender = event.getSender();
-  return relationEvents(room, event, fallback).filter((edit) => {
+  return relations.filter((edit) => {
     if (
       edit.getId() === event.getId() ||
       edit.isRedacted() ||
@@ -517,7 +596,7 @@ const validEdits = (room: Room, event: MatrixEvent, fallback?: RelationFallback)
     ) {
       return false;
     }
-    const newContent = edit.getContent<{ 'm.new_content'?: unknown }>()['m.new_content'];
+    const newContent = edit.getOriginalContent<{ 'm.new_content'?: unknown }>()['m.new_content'];
     return isPlainRecord(newContent) && typeof newContent.body === 'string';
   });
 };
@@ -531,15 +610,14 @@ const newestEdit = (edits: readonly MatrixEvent[]): MatrixEvent | undefined =>
   }, undefined);
 
 const reactionCounts = (
-  room: Room,
   event: MatrixEvent,
-  fallback?: RelationFallback
+  relations: readonly MatrixEvent[]
 ): readonly ReactionCountView[] => {
   const groups = new Map<
     string,
     { senders: UserId[]; shortcode?: string; events: ReactionEventView[] }
   >();
-  relationEvents(room, event, fallback).forEach((reaction) => {
+  relations.forEach((reaction) => {
     if (
       reaction.isRedacted() ||
       reaction.status === EventStatus.CANCELLED ||
@@ -555,7 +633,7 @@ const reactionCounts = (
     if (!sender || typeof key !== 'string') return;
     const group = groups.get(key) ?? { senders: [], events: [] };
     if (!group.senders.includes(sender)) group.senders.push(sender);
-    const shortcode = stringOrUndefined(reaction.getContent().shortcode);
+    const shortcode = stringOrUndefined(reaction.getOriginalContent().shortcode);
     if (group.shortcode === undefined && shortcode !== undefined) group.shortcode = shortcode;
     group.events.push({
       eventId: reaction.getId() ?? '',
@@ -591,11 +669,17 @@ const redactionMetadata = (
   };
 };
 
-const buildItem = (room: Room, event: MatrixEvent, fallback?: RelationFallback): TimelineItem => {
+const buildItem = (
+  room: Room,
+  event: MatrixEvent,
+  relationMap: RelationMap = buildRelationMap(room, [event])
+): TimelineItem => {
   const eventId = event.getId() ?? '';
   const eventType = event.getWireType();
   const relation = timelineRelation(event);
-  const reactions = reactionCounts(room, event, fallback);
+  const relations = relationMap.get(eventId) ?? EMPTY_RELATIONS;
+  const edit = newestEdit(validEdits(event, relations));
+  const reactions = reactionCounts(event, relations);
   const base = {
     eventId,
     roomId: room.roomId,
@@ -614,7 +698,7 @@ const buildItem = (room: Room, event: MatrixEvent, fallback?: RelationFallback):
     };
   }
 
-  const content = toPlainJsonObject(event.getContent());
+  const content = originalContentOf(event);
   if (event.isEncrypted() && (event.isDecryptionFailure() || event.getClearContent() === null)) {
     const effectiveContent = event.isDecryptionFailure()
       ? content
@@ -657,10 +741,7 @@ const buildItem = (room: Room, event: MatrixEvent, fallback?: RelationFallback):
     return { ...base, kind: 'unsupported', preview: effectiveType, content };
   }
 
-  const edit = newestEdit(validEdits(room, event, fallback));
-  const rawContent = edit
-    ? toPlainJsonObject(edit.getContent<{ 'm.new_content': JsonObject }>()['m.new_content'])
-    : content;
+  const rawContent = edit ? editContentOf(edit) : content;
   const body = stringOrUndefined(rawContent.body) ?? '';
   const formattedBody = stringOrUndefined(rawContent.formatted_body);
   const format = stringOrUndefined(rawContent.format);
@@ -694,10 +775,17 @@ const buildItem = (room: Room, event: MatrixEvent, fallback?: RelationFallback):
   };
 };
 
-const buildSource = (room: Room, event: MatrixEvent): TimelineSourceView => ({
-  event: toEventSource(event),
-  edits: validEdits(room, event).map(toEventSource),
-});
+const buildSource = (
+  room: Room,
+  event: MatrixEvent,
+  relationMap: RelationMap = buildRelationMap(room, [event])
+): TimelineSourceView => {
+  const edits = validEdits(event, relationMap.get(event.getId() ?? '') ?? EMPTY_RELATIONS);
+  return {
+    event: toEventSource(event, newestEdit(edits)),
+    edits: edits.map((edit) => toEventSource(edit)),
+  };
+};
 
 const isRenderableEvent = (event: MatrixEvent): boolean => !isEdit(event) && !isReaction(event);
 
@@ -709,19 +797,14 @@ const toTimelineView = (
   events: readonly MatrixEvent[],
   room: Room | undefined,
   hasBackwardHistory: boolean,
-  focusedEventId?: string
+  focusedEventId?: string,
+  timelineSet?: EventTimelineSet
 ): TimelineView => {
-  const relationFallback = new Map<string, MatrixEvent[]>();
-  events.forEach((event) => {
-    if (!isEdit(event) && !isReaction(event)) return;
-    const target = event.getRelation()?.event_id;
-    if (!target) return;
-    const relations = relationFallback.get(target) ?? [];
-    relations.push(event);
-    relationFallback.set(target, relations);
-  });
+  const relationMap = room
+    ? buildRelationMap(room, events, timelineSet)
+    : new Map<string, readonly MatrixEvent[]>();
   const items = room
-    ? renderableEvents(events).map((event) => buildItem(room, event, relationFallback))
+    ? renderableEvents(events).map((event) => buildItem(room, event, relationMap))
     : [];
 
   const ownReadUpTo = room?.getEventReadUpTo(room.myUserId) ?? undefined;
@@ -1660,7 +1743,14 @@ export function createMatrixJsCore(
     const hasBackwardHistory = anchor
       ? firstLinkedTimeline(anchor).getPaginationToken(EventTimeline.BACKWARDS) != null
       : false;
-    return toTimelineView(roomId, events, room, hasBackwardHistory);
+    return toTimelineView(
+      roomId,
+      events,
+      room,
+      hasBackwardHistory,
+      undefined,
+      anchor?.getTimelineSet()
+    );
   };
   const buildTimeline = (roomId: string) => {
     const room = client.getRoom(roomId) ?? undefined;
@@ -1670,7 +1760,14 @@ export function createMatrixJsCore(
     const hasBackwardHistory = anchor
       ? firstLinkedTimeline(anchor).getPaginationToken(EventTimeline.BACKWARDS) != null
       : false;
-    return toTimelineView(roomId, events, room, hasBackwardHistory, focus?.eventId);
+    return toTimelineView(
+      roomId,
+      events,
+      room,
+      hasBackwardHistory,
+      focus?.eventId,
+      anchor?.getTimelineSet()
+    );
   };
   type ObservedEvent = {
     readonly roomId: string;
@@ -1700,19 +1797,30 @@ export function createMatrixJsCore(
       return undefined;
     }
   };
-  const publishObservedEvent = (roomId: string, eventId: string, epoch: number): void => {
+  const publishObservedEvent = (
+    roomId: string,
+    eventId: string,
+    epoch: number,
+    relationMap?: RelationMap
+  ): void => {
     if (!isTimelineLifecycleCurrent(epoch)) return;
     const observed = eventStores.get(eventStoreKey(roomId, eventId));
     if (!observed) return;
     const room = client.getRoom(roomId);
     const event = room?.findEventById(eventId);
-    observed.store.publish(event && room ? buildItem(room, event) : null);
+    observed.store.publish(event && room ? buildItem(room, event, relationMap) : null);
   };
   const publishObservedRoom = (roomId: string, epoch: number): void => {
     if (!isTimelineLifecycleCurrent(epoch)) return;
-    [...eventStores.values()].forEach(({ roomId: observedRoomId, eventId }) => {
-      if (observedRoomId === roomId) publishObservedEvent(observedRoomId, eventId, epoch);
+    const room = client.getRoom(roomId);
+    const observed = [...eventStores.values()].filter((entry) => entry.roomId === roomId);
+    if (observed.length === 0) return;
+    const events = observed.flatMap(({ eventId }) => {
+      const event = room?.findEventById(eventId);
+      return event ? [event] : [];
     });
+    const relationMap = room ? buildRelationMap(room, events) : undefined;
+    observed.forEach(({ eventId }) => publishObservedEvent(roomId, eventId, epoch, relationMap));
   };
   const resolveAndPublishEvent = async (
     roomId: string,
@@ -1825,16 +1933,17 @@ export function createMatrixJsCore(
     });
   };
   cleanupEventLayer = () => {
-    if (!eventListenersAttached) return;
-    eventListenersAttached = false;
-    client.removeListener(RoomEvent.Timeline, timelineListener);
-    client.removeListener(RoomEvent.Receipt, timelineListener);
-    client.removeListener(RoomEvent.LocalEchoUpdated, localEchoListener);
-    client.removeListener(RoomEvent.Redaction, redactionListener);
-    client.removeListener(RoomEvent.RedactionCancelled, redactionListener);
-    client.removeListener(MatrixEventEvent.Decrypted, lifecycleEventListener);
-    client.removeListener(MatrixEventEvent.Replaced, lifecycleEventListener);
-    client.removeListener(ClientEvent.DeleteRoom, deletedRoomListener);
+    if (eventListenersAttached) {
+      eventListenersAttached = false;
+      client.removeListener(RoomEvent.Timeline, timelineListener);
+      client.removeListener(RoomEvent.Receipt, timelineListener);
+      client.removeListener(RoomEvent.LocalEchoUpdated, localEchoListener);
+      client.removeListener(RoomEvent.Redaction, redactionListener);
+      client.removeListener(RoomEvent.RedactionCancelled, redactionListener);
+      client.removeListener(MatrixEventEvent.Decrypted, lifecycleEventListener);
+      client.removeListener(MatrixEventEvent.Replaced, lifecycleEventListener);
+      client.removeListener(ClientEvent.DeleteRoom, deletedRoomListener);
+    }
     eventStores.clear();
     pendingLifecycleEvents.clear();
   };
@@ -2421,7 +2530,7 @@ export function createMatrixJsCore(
           activatePendingState();
           syncStore.publish({ phase: 'syncing' });
           client.setSyncPresence(SetPresence.Online);
-          await client.startClient({ lazyLoadMembers: true });
+          await client.startClient({ lazyLoadMembers: true, threadSupport: true });
           publishKnownUsers();
           return { ok: true, value: undefined };
         } catch (error) {
@@ -2435,7 +2544,7 @@ export function createMatrixJsCore(
         try {
           activatePendingState();
           if (client.clientRunning) client.retryImmediately();
-          else await client.startClient({ lazyLoadMembers: true });
+          else await client.startClient({ lazyLoadMembers: true, threadSupport: true });
           publishKnownUsers();
           syncStore.publish({ phase: 'syncing' });
           return { ok: true, value: undefined };
@@ -3563,47 +3672,64 @@ export function createMatrixJsCore(
             limit,
             only: onlyHighlight ? 'highlight' : undefined,
           });
-          const items: NotificationView[] = (response.notifications ?? []).map((item) => {
+          const resolved = (response.notifications ?? []).map((item) => {
             const serverEvent = item.event ?? {};
             const eventId = serverEvent.event_id ?? '';
             const room = client.getRoom(item.room_id);
             const local = eventId ? resolveLocalEvent(item.room_id, eventId) : undefined;
-            const originServerTs = serverEvent.origin_server_ts ?? item.ts ?? 0;
-            const localEvent = local ? toMatrixEventView(local) : undefined;
-            const event: MatrixEventView & { origin_server_ts: number } =
-              local && localEvent
-                ? {
-                    ...localEvent,
-                    room_id: item.room_id,
-                    origin_server_ts: localEvent.origin_server_ts ?? originServerTs,
-                  }
-                : {
-                    event_id: eventId,
-                    room_id: item.room_id,
-                    sender: serverEvent.sender ?? '',
-                    type: serverEvent.type ?? '',
-                    content: toPlainJsonObject(serverEvent.content),
-                    origin_server_ts: originServerTs,
-                    ...(typeof serverEvent.state_key === 'string'
-                      ? { state_key: serverEvent.state_key }
-                      : {}),
-                    ...(serverEvent.unsigned !== undefined
-                      ? { unsigned: toPlainJsonObject(serverEvent.unsigned) }
-                      : {}),
-                  };
-            return {
-              id: eventId,
-              roomId: item.room_id,
-              ...(eventId ? { eventId } : {}),
-              ...(event.sender ? { senderId: event.sender } : {}),
-              type: event.type,
-              content: event.content,
-              event,
-              timelineItem: local && room ? buildItem(room, local) : null,
-              timestamp: item.ts ?? event.origin_server_ts ?? 0,
-              read: item.read ?? false,
-            };
+            return { item, serverEvent, eventId, room, local };
           });
+          const localByRoom = new Map<string, { room: Room; events: MatrixEvent[] }>();
+          resolved.forEach(({ item, room, local }) => {
+            if (!room || !local) return;
+            const entry = localByRoom.get(item.room_id) ?? { room, events: [] };
+            entry.events.push(local);
+            localByRoom.set(item.room_id, entry);
+          });
+          const relationMaps = new Map<string, RelationMap>();
+          localByRoom.forEach(({ room, events }, roomId) => {
+            relationMaps.set(roomId, buildRelationMap(room, events));
+          });
+          const items: NotificationView[] = resolved.map(
+            ({ item, serverEvent, eventId, room, local }) => {
+              const originServerTs = serverEvent.origin_server_ts ?? item.ts ?? 0;
+              const localEvent = local ? toMatrixEventView(local) : undefined;
+              const event: MatrixEventView & { origin_server_ts: number } =
+                local && localEvent
+                  ? {
+                      ...localEvent,
+                      room_id: item.room_id,
+                      origin_server_ts: localEvent.origin_server_ts ?? originServerTs,
+                    }
+                  : {
+                      event_id: eventId,
+                      room_id: item.room_id,
+                      sender: serverEvent.sender ?? '',
+                      type: serverEvent.type ?? '',
+                      content: toPlainJsonObject(serverEvent.content),
+                      origin_server_ts: originServerTs,
+                      ...(typeof serverEvent.state_key === 'string'
+                        ? { state_key: serverEvent.state_key }
+                        : {}),
+                      ...(serverEvent.unsigned !== undefined
+                        ? { unsigned: toPlainJsonObject(serverEvent.unsigned) }
+                        : {}),
+                    };
+              return {
+                id: eventId,
+                roomId: item.room_id,
+                ...(eventId ? { eventId } : {}),
+                ...(event.sender ? { senderId: event.sender } : {}),
+                type: event.type,
+                content: event.content,
+                event,
+                timelineItem:
+                  local && room ? buildItem(room, local, relationMaps.get(item.room_id)) : null,
+                timestamp: item.ts ?? event.origin_server_ts ?? 0,
+                read: item.read ?? false,
+              };
+            }
+          );
           return {
             ok: true,
             value: { items, ...(response.next_token ? { nextToken: response.next_token } : {}) },

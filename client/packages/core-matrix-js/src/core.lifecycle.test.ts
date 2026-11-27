@@ -223,6 +223,8 @@ describe('timeline lifecycle epoch publication policy', () => {
       const { room, display, live } = await setupRoom(core, driver, roomId);
       const displayBefore = display.getSnapshot();
       const liveBefore = live.getSnapshot();
+      const displayListener = vi.fn();
+      const unsubscribe = display.subscribe(displayListener);
       const gate = deferred();
       const timelineSpy = vi
         .spyOn(driver.client, 'getEventTimeline')
@@ -242,6 +244,10 @@ describe('timeline lifecycle epoch publication policy', () => {
       if (!result.ok) expect(result.error).toBeInstanceOf(Error);
       expect(display.getSnapshot()).toBe(displayBefore);
       expect(live.getSnapshot()).toBe(liveBefore);
+      core.timeline.clearFocus(roomId);
+      expect(displayListener).not.toHaveBeenCalled();
+      expect(display.getSnapshot()).toBe(displayBefore);
+      unsubscribe();
     } finally {
       await core.auth.stop();
     }
@@ -256,6 +262,8 @@ describe('timeline lifecycle epoch publication policy', () => {
       room.getLiveTimeline().setPaginationToken('history-token', EventTimeline.BACKWARDS);
       const displayBefore = display.getSnapshot();
       const liveBefore = live.getSnapshot();
+      const displayListener = vi.fn();
+      const unsubscribe = display.subscribe(displayListener);
       const gate = deferred();
       vi.spyOn(driver.client, 'getEventTimeline').mockResolvedValue(room.getLiveTimeline());
       const paginateSpy = vi
@@ -275,6 +283,10 @@ describe('timeline lifecycle epoch publication policy', () => {
       expect(paginateSpy).toHaveBeenCalledTimes(1);
       expect(display.getSnapshot()).toBe(displayBefore);
       expect(live.getSnapshot()).toBe(liveBefore);
+      core.timeline.clearFocus(roomId);
+      expect(displayListener).not.toHaveBeenCalled();
+      expect(display.getSnapshot()).toBe(displayBefore);
+      unsubscribe();
     } finally {
       await core.auth.stop();
     }
@@ -499,6 +511,28 @@ describe('timeline lifecycle epoch publication policy', () => {
       await core.auth.stop();
     }
   });
+
+  it.each(['stop', 'logout'] as const)(
+    'clears stores created while inactive on a repeated %s',
+    async (lifecycle) => {
+      const driver = createSyncDriver();
+      const core = createMatrixJsCore(driver.client);
+      const roomId = `!inactive-store-${lifecycle}:example.org`;
+      try {
+        await setupRoom(core, driver, roomId);
+        const deactivate = () => (lifecycle === 'stop' ? core.auth.stop() : core.auth.logout());
+        await deactivate();
+        const inactiveStore = core.timeline.observeEvent(roomId, '$initial');
+        expect(inactiveStore.getSnapshot().value).toBeUndefined();
+        await deactivate();
+        driver.client.startClient = async () => undefined;
+        expect((await core.auth.start()).ok).toBe(true);
+        expect(core.timeline.observeEvent(roomId, '$initial')).not.toBe(inactiveStore);
+      } finally {
+        await core.auth.stop();
+      }
+    }
+  );
 
   it('cleans event stores and lifecycle listeners on logout', async () => {
     const driver = createSyncDriver();

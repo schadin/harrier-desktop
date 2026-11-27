@@ -60,9 +60,17 @@ const shareValue = <T>(previous: T, next: T, seen = new WeakMap<object, object>(
   let changed = previousKeys.length !== nextKeys.length;
   const shared: Record<string, unknown> = {};
   nextKeys.forEach((key) => {
-    const value = shareValue(previousRecord[key], nextRecord[key], seen);
-    shared[key] = value;
-    if (!changed && value !== previousRecord[key]) changed = true;
+    const previousValue = Object.prototype.hasOwnProperty.call(previousRecord, key)
+      ? previousRecord[key]
+      : undefined;
+    const value = shareValue(previousValue, nextRecord[key], seen);
+    Object.defineProperty(shared, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    if (!changed && value !== previousValue) changed = true;
   });
   seen.set(next, shared);
   return (changed ? shared : previous) as T;

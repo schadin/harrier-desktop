@@ -156,6 +156,53 @@ describe('matrix-js-sdk sync driver', () => {
     ).toEqual(['$reaction']);
   });
 
+  it('materializes thread replies and their relations in a thread timeline set', async () => {
+    const driver = createSyncDriver();
+    const roomId = '!threads:example.org';
+    expect(driver.client.supportsThreads()).toBe(true);
+    await driver.applyFixture({
+      rooms: [
+        {
+          roomId,
+          membership: 'join',
+          messages: [
+            { eventId: '$root', sender: '@alice:example.org', body: 'root' },
+            {
+              eventId: '$reply',
+              sender: '@bob:example.org',
+              body: 'reply',
+              threadRoot: '$root',
+            },
+            {
+              eventId: '$edit',
+              sender: '@bob:example.org',
+              body: 'edited',
+              replaces: '$reply',
+            },
+          ],
+          reactions: [
+            { eventId: '$reaction', target: '$reply', sender: '@carol:example.org', key: '👍' },
+          ],
+        },
+      ],
+    });
+    const room = driver.client.getRoom(roomId)!;
+    const thread = room.getThreads().find((entry) => entry.id === '$root');
+    expect(thread).toBeDefined();
+    expect(
+      thread?.timelineSet.relations
+        .getAllChildEventsForEvent('$reply')
+        .map((event) => event.getId())
+        .sort()
+    ).toEqual(['$edit', '$reaction']);
+    expect(
+      room
+        .getLiveTimeline()
+        .getEvents()
+        .map((event) => event.getId())
+    ).toEqual(['$root']);
+  });
+
   it('logs the method, path and body of profile transport calls', async () => {
     const driver = createSyncDriver();
     const path = '/profile/%40tester%3Aexample.org/displayname';

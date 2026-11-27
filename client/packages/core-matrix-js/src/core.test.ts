@@ -1012,6 +1012,21 @@ describe('matrix-js core state listener flushing', () => {
   );
 });
 
+describe('matrix-js core thread lifecycle', () => {
+  it('starts the SDK client with thread support enabled', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const startClient = vi.fn(async () => undefined);
+    driver.client.startClient = startClient;
+    try {
+      expect((await core.auth.start()).ok).toBe(true);
+      expect(startClient).toHaveBeenCalledWith({ lazyLoadMembers: true, threadSupport: true });
+    } finally {
+      await core.auth.stop();
+    }
+  });
+});
+
 describe('matrix-js core local validation errors', () => {
   it('keeps deliberate local failures typed instead of converting them to unknown', async () => {
     const driver = createSyncDriver();

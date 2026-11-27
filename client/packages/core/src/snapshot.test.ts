@@ -68,4 +68,22 @@ describe('structural sharing', () => {
     expect(next.right).not.toBe(previous.right);
     expect(store.getSnapshot().revision).toBe(1);
   });
+
+  it('preserves an own __proto__ JSON key without changing the object prototype', () => {
+    const previous = JSON.parse('{"__proto__":{"polluted":"no"},"revision":1}') as Record<
+      string,
+      unknown
+    >;
+    const store = createSnapshotStore(previous);
+    store.publish(
+      JSON.parse('{"__proto__":{"polluted":"yes"},"revision":2}') as Record<string, unknown>
+    );
+    const next = store.getSnapshot().value;
+    expect(Object.prototype.hasOwnProperty.call(next, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(next)).toBe(Object.prototype);
+    const protoValue = Object.getOwnPropertyDescriptor(next, '__proto__')?.value;
+    expect(protoValue).toEqual({ polluted: 'yes' });
+    expect(Object.getPrototypeOf(protoValue)).toBe(Object.prototype);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
 });

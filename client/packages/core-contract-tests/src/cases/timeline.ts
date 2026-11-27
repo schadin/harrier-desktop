@@ -578,8 +578,16 @@ export const timelineCases = [
           },
         ],
       });
-      const [, reply] = core.timeline.timeline('!room:example.org').getSnapshot().value.items;
-      expect(reply?.kind === 'message' && reply.threadRoot).toBe('$root');
+      expect(
+        core.timeline
+          .timeline('!room:example.org')
+          .getSnapshot()
+          .value.items.map((item) => item.eventId)
+      ).toEqual(['$root']);
+      const result = await core.timeline.event('!room:example.org', '$reply');
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value).toMatchObject({ kind: 'message', threadRoot: '$root' });
     } finally {
       await harness.dispose(core);
     }
