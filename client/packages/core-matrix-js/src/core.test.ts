@@ -178,6 +178,102 @@ describe('matrix-js known users', () => {
     }
   });
 
+  it('publishes known users after lazy member loading without a client event', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!lazy-known-user:example.org';
+    const userId = '@lazy:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Lazy room' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const memberEvent = new MatrixEvent({
+        type: 'm.room.member',
+        state_key: userId,
+        sender: userId,
+        room_id: roomId,
+        event_id: '$lazy-member',
+        origin_server_ts: 1,
+        content: {
+          membership: 'join',
+          displayname: 'Lazy User',
+          avatar_url: 'mxc://example.org/lazy',
+        },
+      });
+      const loadMembers = vi.spyOn(room, 'loadMembersIfNeeded').mockImplementation(async () => {
+        room.currentState.setStateEvents([memberEvent]);
+        return true;
+      });
+      try {
+        const store = core.presence.knownUsers;
+        expect(store.getSnapshot().value.some((user) => user.userId === userId)).toBe(false);
+
+        core.rooms.members(roomId);
+        await loadMembers.mock.results[0].value;
+        await Promise.resolve();
+
+        expect(store.getSnapshot().value).toContainEqual({
+          userId,
+          avatarUrl: 'mxc://example.org/lazy',
+          displayName: 'Lazy User',
+        });
+      } finally {
+        loadMembers.mockRestore();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('ignores lazy member loading that finishes after deactivation', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!late-lazy-known-user:example.org';
+    const userId = '@late-lazy:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [{ roomId, membership: 'join', name: 'Late lazy room' }],
+      });
+      const room = driver.client.getRoom(roomId)!;
+      const memberEvent = new MatrixEvent({
+        type: 'm.room.member',
+        state_key: userId,
+        sender: userId,
+        room_id: roomId,
+        event_id: '$late-lazy-member',
+        origin_server_ts: 1,
+        content: { membership: 'join', displayname: 'Late Lazy User' },
+      });
+      let completeLoad: () => void = () => undefined;
+      const loading = new Promise<boolean>((resolve) => {
+        completeLoad = () => {
+          room.currentState.setStateEvents([memberEvent]);
+          resolve(true);
+        };
+      });
+      const loadMembers = vi.spyOn(room, 'loadMembersIfNeeded').mockReturnValue(loading);
+      try {
+        const store = core.presence.knownUsers;
+        core.rooms.members(roomId);
+        await core.auth.stop();
+        const cleared = store.getSnapshot();
+        expect(cleared.value).toEqual([]);
+
+        completeLoad();
+        await loading;
+        await Promise.resolve();
+
+        expect(store.getSnapshot()).toBe(cleared);
+        expect(store.getSnapshot().value).toEqual([]);
+      } finally {
+        loadMembers.mockRestore();
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
   it.each(['stop', 'logout', 'clearCache', 'sessionLoggedOut', 'syncStopped'] as const)(
     'clears known users and ignores late events after %s',
     async (lifecycle) => {

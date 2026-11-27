@@ -2085,7 +2085,10 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
         client
           .getRoom(roomId)
           ?.loadMembersIfNeeded()
-          .then(() => publishMembers(roomId))
+          .then(() => {
+            publishMembers(roomId);
+            publishKnownUsers();
+          })
           .catch(() => undefined);
         return store;
       },
