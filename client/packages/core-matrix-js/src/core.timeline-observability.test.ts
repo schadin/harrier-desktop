@@ -99,6 +99,166 @@ describe('matrix-js timeline source and event stores', () => {
     }
   });
 
+  it('ignores a bundled replacement whose relation targets another event', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!wrong-bundled-target:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            messages: [
+              { eventId: '$target', sender: '@alice:example.org', body: 'target original' },
+              { eventId: '$other', sender: '@alice:example.org', body: 'other original' },
+            ],
+          },
+        ],
+      });
+      const target = driver.client.getRoom(roomId)!.findEventById('$target')!;
+      target.makeReplaced(
+        new MatrixEvent({
+          event_id: '$wrong-target',
+          room_id: roomId,
+          sender: '@alice:example.org',
+          origin_server_ts: 300,
+          type: 'm.room.message',
+          content: {
+            'm.relates_to': { rel_type: 'm.replace', event_id: '$other' },
+            'm.new_content': { msgtype: 'm.text', body: 'wrong target edit' },
+          },
+        })
+      );
+      const timelineItem = core.timeline.timeline(roomId).getSnapshot().value.items[0];
+      const event = await core.timeline.event(roomId, '$target');
+      const source = await core.timeline.source(roomId, '$target');
+      expect(timelineItem).toMatchObject({ content: { body: 'target original' } });
+      expect(timelineItem).not.toHaveProperty('edited');
+      expect(event).toEqual({ ok: true, value: timelineItem });
+      expect(source.ok && source.value?.event.effective.content).toMatchObject({
+        body: 'target original',
+      });
+      expect(source.ok && source.value?.edits).toEqual([]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('ignores a bundled replacement with a non-message protocol type', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!wrong-bundled-type:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            messages: [{ eventId: '$target', sender: '@alice:example.org', body: 'original' }],
+          },
+        ],
+      });
+      const target = driver.client.getRoom(roomId)!.findEventById('$target')!;
+      target.makeReplaced(
+        new MatrixEvent({
+          event_id: '$wrong-type',
+          room_id: roomId,
+          sender: '@alice:example.org',
+          origin_server_ts: 300,
+          type: 'org.example.edit',
+          content: {
+            'm.relates_to': { rel_type: 'm.replace', event_id: '$target' },
+            'm.new_content': { msgtype: 'm.text', body: 'wrong type edit' },
+          },
+        })
+      );
+      const timelineItem = core.timeline.timeline(roomId).getSnapshot().value.items[0];
+      const event = await core.timeline.event(roomId, '$target');
+      const source = await core.timeline.source(roomId, '$target');
+      expect(timelineItem).toMatchObject({ content: { body: 'original' } });
+      expect(timelineItem).not.toHaveProperty('edited');
+      expect(event).toEqual({ ok: true, value: timelineItem });
+      expect(source.ok && source.value?.edits).toEqual([]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('preserves SDK wire-to-clear content merge with deterministic encrypted edit selection', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const roomId = '!encrypted-source-merge:example.org';
+    try {
+      await driver.applyFixture({
+        rooms: [
+          {
+            roomId,
+            membership: 'join',
+            messages: [
+              { eventId: '$root', sender: '@alice:example.org', body: 'root' },
+              {
+                eventId: '$encrypted',
+                sender: '@alice:example.org',
+                body: 'ciphertext',
+                encrypted: true,
+                replyTo: '$root',
+                content: { 'org.example.wire': 'wire-value' },
+                decryptedContent: { msgtype: 'm.text', body: 'clear original' },
+              },
+              {
+                eventId: '$edit-z',
+                sender: '@alice:example.org',
+                body: 'z edit',
+                replaces: '$encrypted',
+                timestamp: 200,
+              },
+              {
+                eventId: '$edit-a',
+                sender: '@alice:example.org',
+                body: 'a edit',
+                replaces: '$encrypted',
+                timestamp: 200,
+              },
+            ],
+          },
+        ],
+      });
+      const target = driver.client.getRoom(roomId)!.findEventById('$encrypted')!;
+      const sdkContent = target.getEffectiveEvent().content;
+      expect(sdkContent).toMatchObject({
+        body: 'a edit',
+        'm.relates_to': { 'm.in_reply_to': { event_id: '$root' } },
+        'org.example.wire': 'wire-value',
+      });
+      const timelineItem = core.timeline.timeline(roomId).getSnapshot().value.items[1];
+      const event = await core.timeline.event(roomId, '$encrypted');
+      const source = await core.timeline.source(roomId, '$encrypted');
+      const expectedContent = {
+        msgtype: 'm.text',
+        body: 'z edit',
+        'm.relates_to': { 'm.in_reply_to': { event_id: '$root' } },
+        'org.example.wire': 'wire-value',
+      };
+      expect(timelineItem).toMatchObject({
+        kind: 'message',
+        eventType: 'm.room.encrypted',
+        content: { body: 'z edit', raw: expectedContent },
+        editEventId: '$edit-z',
+      });
+      expect(event).toEqual({ ok: true, value: timelineItem });
+      expect(source.ok && source.value?.event.effective.content).toEqual(expectedContent);
+      expect(source.ok && source.value?.event.effective.content).not.toHaveProperty('algorithm');
+      expect(source.ok && source.value?.event.effective.content).not.toHaveProperty('ciphertext');
+      expect(source.ok && source.value?.edits.map((edit) => edit.original.event_id)).toEqual([
+        '$edit-z',
+        '$edit-a',
+      ]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
   it('uses the same deterministic edit for timeline, event and source on equal timestamps', async () => {
     const driver = createSyncDriver();
     const core = createMatrixJsCore(driver.client);

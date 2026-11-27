@@ -458,13 +458,39 @@ const originalContentOf = (event: MatrixEvent): JsonObject =>
 const editContentOf = (edit: MatrixEvent): JsonObject =>
   toPlainJsonObject(edit.getOriginalContent<{ 'm.new_content'?: unknown }>()['m.new_content']);
 
+const ENCRYPTED_CONTENT_FIELDS = new Set([
+  'algorithm',
+  'ciphertext',
+  'device_id',
+  'sender_key',
+  'session_id',
+]);
+
+const effectiveContentOf = (event: MatrixEvent, edit?: MatrixEvent): JsonObject => {
+  const content = edit ? editContentOf(edit) : originalContentOf(event);
+  if (event.getWireType() !== 'm.room.encrypted') return content;
+  const wireContent = toPlainJsonObject(event.getWireContent());
+  Object.entries(wireContent).forEach(([key, value]) => {
+    if (ENCRYPTED_CONTENT_FIELDS.has(key) || Object.prototype.hasOwnProperty.call(content, key)) {
+      return;
+    }
+    Object.defineProperty(content, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  });
+  return content;
+};
+
 const toEventSource = (event: MatrixEvent, edit?: MatrixEvent): TimelineEventSourceView => ({
   original: toMatrixEventView(event),
   effective: toMatrixEventView(
     new MatrixEvent({
       ...event.getEffectiveEvent(),
       type: event.getType(),
-      content: edit ? editContentOf(edit) : originalContentOf(event),
+      content: effectiveContentOf(event, edit),
     })
   ),
 });
@@ -585,13 +611,17 @@ const buildRelationMap = (
 
 const validEdits = (event: MatrixEvent, relations: readonly MatrixEvent[]): MatrixEvent[] => {
   const sender = event.getSender();
+  const targetId = event.getId();
   return relations.filter((edit) => {
+    const relation = edit.getRelation();
     if (
-      edit.getId() === event.getId() ||
+      edit.getId() === targetId ||
       edit.isRedacted() ||
       edit.status === EventStatus.CANCELLED ||
       edit.isDecryptionFailure() ||
-      edit.getRelation()?.rel_type !== 'm.replace' ||
+      relation?.rel_type !== 'm.replace' ||
+      relation.event_id !== targetId ||
+      edit.getType() !== 'm.room.message' ||
       edit.getSender() !== sender
     ) {
       return false;
@@ -698,7 +728,7 @@ const buildItem = (
     };
   }
 
-  const content = originalContentOf(event);
+  const content = effectiveContentOf(event);
   if (event.isEncrypted() && (event.isDecryptionFailure() || event.getClearContent() === null)) {
     const effectiveContent = event.isDecryptionFailure()
       ? content
@@ -741,7 +771,7 @@ const buildItem = (
     return { ...base, kind: 'unsupported', preview: effectiveType, content };
   }
 
-  const rawContent = edit ? editContentOf(edit) : content;
+  const rawContent = effectiveContentOf(event, edit);
   const body = stringOrUndefined(rawContent.body) ?? '';
   const formattedBody = stringOrUndefined(rawContent.formatted_body);
   const format = stringOrUndefined(rawContent.format);

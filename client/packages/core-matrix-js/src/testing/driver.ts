@@ -16,7 +16,6 @@ import {
   RoomMemberEvent,
   RoomStateEvent,
   User,
-  UserEvent,
   MatrixEventEvent,
 } from 'matrix-js-sdk';
 import {
