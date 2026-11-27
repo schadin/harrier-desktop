@@ -1,7 +1,6 @@
 import type { HarrierCore } from '@harrier/core';
 import { createMatrixJsClient, createMatrixJsCore } from '@harrier/core-matrix-js';
 
-import { cryptoCallbacks, loadSecretStorageKeys } from './secretStorageKeys';
 import { clearNavToActivePathStore } from '../app/state/navToActivePath';
 import { pushSessionToSW } from '../sw-session';
 
@@ -13,8 +12,7 @@ type Session = {
 };
 
 export const initClient = async (session: Session) => {
-  await loadSecretStorageKeys();
-  const client = await createMatrixJsClient(session, { cryptoCallbacks });
+  const client = await createMatrixJsClient(session);
   return createMatrixJsCore(client);
 };
 

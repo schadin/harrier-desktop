@@ -6,6 +6,7 @@ import { SequenceCardStyle } from '../styles.css';
 import { SettingTile } from '../../../components/setting-tile';
 import { useDeviceIds, useDeviceList, useSplitCurrentDevice } from '../../../hooks/useDeviceList';
 import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { LocalBackup } from './LocalBackup';
 import { DeviceLogoutBtn, DeviceTile, DeviceTilePlaceholder } from './DeviceTile';
 import { OtherDevices } from './OtherDevices';
@@ -41,7 +42,7 @@ type DevicesProps = {
 };
 export function Devices({ requestClose }: DevicesProps) {
   const mx = useMatrixClient();
-  const crypto = mx.getCrypto();
+  const core = useCore();
   const crossSigningActive = useCrossSigningActive();
   const [devices, refreshDeviceList] = useDeviceList();
 
@@ -130,9 +131,8 @@ export function Devices({ requestClose }: DevicesProps) {
                           secretStorageKeyContent={defaultSecretStorageKeyContent}
                         />
                       )}
-                    {crypto && verificationStatus === VerificationStatus.Verified && (
-                      <BackupRestoreTile />
-                    )}
+                    {core.capabilities.crypto &&
+                      verificationStatus === VerificationStatus.Verified && <BackupRestoreTile />}
                   </SequenceCard>
                 ) : (
                   <DeviceTilePlaceholder />

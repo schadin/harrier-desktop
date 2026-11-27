@@ -152,12 +152,22 @@ export type FakeTransportCall = {
   readonly body?: unknown;
 };
 
+export type SyncDriverOptions = {
+  readonly crypto?: boolean;
+};
+
 export type SyncDriver = {
   readonly client: MatrixClient;
+  readonly cryptoCalls: readonly string[];
+  readonly importedKeysJson: string | undefined;
   applyFixture(fixture: SyncFixture): Promise<void>;
   failNextOperation(operation: string, failure: SyncOperationFailure): void;
   setRoomSummaryResponse(roomIdOrAlias: string, response: unknown): void;
   setThirdPartyProtocolsResponse(response: unknown): void;
+  setExportedRoomKeysJson(keysJson: string): void;
+  setKeyBackupInfo(info: Record<string, unknown> | null): void;
+  setActiveSessionBackupVersion(version: string | undefined): void;
+  setKeyBackupTrust(trust: { trusted: boolean; matchesDecryptionKey: boolean }): void;
   getCalls(): readonly FakeTransportCall[];
 };
 
@@ -324,15 +334,60 @@ class FakeVerificationRequest extends FakeEmitter {
   }
 }
 
-const createFakeCrypto = (): CryptoApi =>
+const DEFAULT_EXPORTED_ROOM_KEYS =
+  '{\n  "algorithm": "m.megolm.v1.aes-sha2",\n  "note": "ключ 🔐",\n  "rooms": {}\n}\n';
+
+type FakeCryptoState = {
+  exportedRoomKeysJson: string;
+  importedKeysJson: string | undefined;
+  activeSessionBackupVersion: string | undefined;
+  keyBackupInfo: Record<string, unknown> | null;
+  keyBackupTrust: { trusted: boolean; matchesDecryptionKey: boolean };
+};
+
+const createFakeCrypto = (
+  state: FakeCryptoState,
+  cryptoCalls: string[],
+  failOperation: (operation: string) => void
+): CryptoApi =>
   ({
     getDeviceVerificationStatus: async () => ({ crossSigningVerified: false }),
     getOwnDeviceKeys: async () => ({ ed25519: 'ed25519-test-key' }),
     requestDeviceVerification: async () =>
       new FakeVerificationRequest() as unknown as VerificationRequest,
-    getActiveSessionBackupVersion: async () => undefined,
-    getKeyBackupInfo: async () => null,
-    isKeyBackupTrusted: async () => ({ trusted: false, matchesDecryptionKey: false }),
+    exportRoomKeysAsJson: async () => {
+      cryptoCalls.push('crypto.exportRoomKeys');
+      failOperation('crypto.exportRoomKeys');
+      return state.exportedRoomKeysJson;
+    },
+    importRoomKeysAsJson: async (keysJson: string) => {
+      cryptoCalls.push('crypto.importRoomKeys');
+      failOperation('crypto.importRoomKeys');
+      Object.assign(state, { importedKeysJson: keysJson });
+    },
+    getActiveSessionBackupVersion: async () => {
+      cryptoCalls.push('crypto.backup.getActiveSessionBackupVersion');
+      failOperation('crypto.backup.refreshStatus');
+      return state.activeSessionBackupVersion;
+    },
+    getKeyBackupInfo: async () => {
+      cryptoCalls.push('crypto.backup.getKeyBackupInfo');
+      failOperation('crypto.backup.refreshStatus');
+      return state.keyBackupInfo;
+    },
+    isKeyBackupTrusted: async () => {
+      cryptoCalls.push('crypto.backup.isKeyBackupTrusted');
+      failOperation('crypto.backup.refreshStatus');
+      return state.keyBackupTrust;
+    },
+    resetKeyBackup: async () => {
+      cryptoCalls.push('crypto.backup.reset');
+      failOperation('crypto.backup.reset');
+      Object.assign(state, {
+        activeSessionBackupVersion: '2',
+        keyBackupInfo: { version: '2', count: 0 },
+      });
+    },
     restoreKeyBackup: async (options?: { progressCallback?: (progress: unknown) => void }) => {
       options?.progressCallback?.({ stage: ImportRoomKeyStage.Fetch });
       options?.progressCallback?.({
@@ -348,13 +403,53 @@ const createFakeCrypto = (): CryptoApi =>
     bootstrapCrossSigning: async () => undefined,
   } as unknown as CryptoApi);
 
-export function createSyncDriver(): SyncDriver {
+export function createSyncDriver(options: SyncDriverOptions = {}): SyncDriver {
   const client = createClient({
     baseUrl: 'https://matrix.example.org',
     userId: TEST_USER_ID,
     accessToken: 'test-token',
     timelineSupport: true,
   });
+  const operationFailures: Array<{ operation: string; failure: SyncOperationFailure }> = [];
+  const takeOperationFailure = (
+    matches: (operation: string) => boolean
+  ): SyncOperationFailure | undefined => {
+    const index = operationFailures.findIndex(({ operation }) => matches(operation));
+    if (index < 0) return undefined;
+    const [{ failure }] = operationFailures.splice(index, 1);
+    return failure;
+  };
+  const throwOperationFailure = (failure: SyncOperationFailure | undefined) => {
+    if (!failure) return;
+    const data = {
+      ...failure.data,
+      ...(failure.errcode !== undefined ? { errcode: failure.errcode } : {}),
+      ...(failure.error !== undefined ? { error: failure.error } : {}),
+    };
+    const error = new MatrixError(data, failure.httpStatus);
+    if (failure.retryAfterMs !== undefined) {
+      Object.assign(error, { retryAfterMs: failure.retryAfterMs });
+    }
+    throw error;
+  };
+  const failMatchingOperation = (path: string) => {
+    throwOperationFailure(takeOperationFailure((operation) => path.includes(operation)));
+  };
+  const failNamedOperation = (operation: string) => {
+    throwOperationFailure(takeOperationFailure((queued) => queued === operation));
+  };
+  const cryptoCalls: string[] = [];
+  const cryptoState: FakeCryptoState = {
+    exportedRoomKeysJson: DEFAULT_EXPORTED_ROOM_KEYS,
+    importedKeysJson: undefined,
+    activeSessionBackupVersion: undefined,
+    keyBackupInfo: null,
+    keyBackupTrust: { trusted: false, matchesDecryptionKey: false },
+  };
+  const crypto =
+    options.crypto === false
+      ? undefined
+      : createFakeCrypto(cryptoState, cryptoCalls, failNamedOperation);
   let devices: readonly {
     deviceId: string;
     displayName?: string;
@@ -369,7 +464,7 @@ export function createSyncDriver(): SyncDriver {
       ...(device.lastSeenTs !== undefined ? { last_seen_ts: device.lastSeenTs } : {}),
     })),
   })) as typeof client.getDevices;
-  client.getCrypto = () => createFakeCrypto();
+  client.getCrypto = (() => crypto) as typeof client.getCrypto;
   const directRooms = new Set<string>();
   const sendFailRooms = new Set<string>();
   const sendAttempts = new Map<string, number>();
@@ -408,23 +503,6 @@ export function createSyncDriver(): SyncDriver {
       ],
     },
   };
-  const operationFailures: Array<{ operation: string; failure: SyncOperationFailure }> = [];
-  const failMatchingOperation = (path: string) => {
-    const index = operationFailures.findIndex(({ operation }) => path.includes(operation));
-    if (index < 0) return;
-    const [{ failure }] = operationFailures.splice(index, 1);
-    const data = {
-      ...failure.data,
-      ...(failure.errcode !== undefined ? { errcode: failure.errcode } : {}),
-      ...(failure.error !== undefined ? { error: failure.error } : {}),
-    };
-    const error = new MatrixError(data, failure.httpStatus);
-    if (failure.retryAfterMs !== undefined) {
-      Object.assign(error, { retryAfterMs: failure.retryAfterMs });
-    }
-    throw error;
-  };
-
   client.getAuthMetadata = (async () => undefined) as unknown as typeof client.getAuthMetadata;
   client.getVersions = (async () => ({
     versions: ['v1.11'],
@@ -778,6 +856,12 @@ export function createSyncDriver(): SyncDriver {
 
   return {
     client,
+    get cryptoCalls() {
+      return [...cryptoCalls];
+    },
+    get importedKeysJson() {
+      return cryptoState.importedKeysJson;
+    },
     failNextOperation(operation, failure) {
       operationFailures.push({ operation, failure });
     },
@@ -786,6 +870,18 @@ export function createSyncDriver(): SyncDriver {
     },
     setThirdPartyProtocolsResponse(response) {
       thirdPartyProtocolsResponse = response;
+    },
+    setExportedRoomKeysJson(keysJson) {
+      cryptoState.exportedRoomKeysJson = keysJson;
+    },
+    setKeyBackupInfo(info) {
+      cryptoState.keyBackupInfo = info;
+    },
+    setActiveSessionBackupVersion(version) {
+      cryptoState.activeSessionBackupVersion = version;
+    },
+    setKeyBackupTrust(trust) {
+      cryptoState.keyBackupTrust = trust;
     },
     getCalls() {
       return [...calls];

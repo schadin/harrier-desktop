@@ -24,6 +24,7 @@ import { AsyncStatus, useAsyncCallback } from '../hooks/useAsyncCallback';
 import { clearSecretStorageKeys } from '../../client/secretStorageKeys';
 import { ActionUIA, ActionUIAFlowsLoader } from './ActionUIA';
 import { useMatrixClient } from '../hooks/useMatrixClient';
+import { useCore } from '../hooks/useCore';
 import { useAlive } from '../hooks/useAlive';
 import { UseStateProvider } from './UseStateProvider';
 
@@ -76,6 +77,7 @@ type SetupVerificationProps = {
 };
 function SetupVerification({ onComplete }: SetupVerificationProps) {
   const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const [uiaAction, setUIAAction] = useState<UIAAction<void>>();
@@ -147,7 +149,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
         if (!recoveryKeyData.encodedPrivateKey) {
           throw new Error('Unexpected Error! Failed to create recovery key.');
         }
-        clearSecretStorageKeys();
+        await clearSecretStorageKeys(core);
 
         await crypto.bootstrapSecretStorage({
           createSecretStorageKey: async () => recoveryKeyData,
@@ -163,7 +165,7 @@ function SetupVerification({ onComplete }: SetupVerificationProps) {
 
         onComplete(recoveryKeyData.encodedPrivateKey);
       },
-      [mx, onComplete, authUploadDeviceSigningKeys]
+      [mx, core, onComplete, authUploadDeviceSigningKeys]
     )
   );
 

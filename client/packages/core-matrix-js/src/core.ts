@@ -87,6 +87,7 @@ import {
   decodeRecoveryKey,
   deriveRecoveryKeyFromPassphrase,
   type ShowSasCallbacks,
+  type CryptoApi,
   type VerificationRequest,
   type Verifier,
 } from 'matrix-js-sdk/lib/crypto-api';
@@ -98,7 +99,12 @@ import {
 import { decryptAttachment } from 'browser-encrypt-attachment';
 import { registerMatrixClient } from './legacy';
 import { normalizeMatrixError } from './error';
-import { clearSecretStorageKeys, storeSecretStorageKey } from './secretStorageKeys';
+import {
+  associateMatrixJsCoreSecretStorage,
+  resolveMatrixJsSecretStorage,
+  revokeMatrixJsSecretStorageCallbacks,
+  type SecretStorageKeyStore,
+} from './secretStorageKeys';
 
 const MEMBERSHIPS: readonly Membership[] = ['join', 'invite', 'leave', 'ban', 'knock'];
 
@@ -767,7 +773,77 @@ const isUnreadRoom = (room: Room): boolean => {
   return true;
 };
 
-export function createMatrixJsCore(client: MatrixClient): HarrierCore {
+export type MatrixJsCoreOptions = {
+  readonly secretStorageKeys?: SecretStorageKeyStore;
+};
+
+const redactSecretText = (value: string, secrets: readonly string[]): string =>
+  secrets
+    .filter((secret) => secret.length > 0)
+    .reduce((redacted, secret) => redacted.split(secret).join('[REDACTED]'), value);
+
+const redactSecretData = (value: unknown, secrets: readonly string[]): unknown => {
+  if (typeof value === 'string') return redactSecretText(value, secrets);
+  if (Array.isArray(value)) return value.map((item) => redactSecretData(item, secrets));
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, redactSecretData(item, secrets)])
+  );
+};
+
+const secretStringsToRedact = (inputs: readonly string[]): string[] => {
+  const secrets = new Set<string>();
+  const collect = (value: unknown) => {
+    if (typeof value === 'string') {
+      if (value.length > 0) secrets.add(value);
+      try {
+        collect(JSON.parse(value));
+      } catch {
+        // Non-JSON secrets are still redacted by their exact value.
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+    if (typeof value === 'object' && value !== null) Object.values(value).forEach(collect);
+  };
+  inputs.forEach(collect);
+  return [...secrets];
+};
+
+const normalizeSecretError = (error: unknown, secrets: readonly string[]): CoreError => {
+  const normalized = normalizeMatrixError(error);
+  const presentSecrets = secretStringsToRedact(secrets);
+  if (presentSecrets.length === 0) return normalized;
+  return new CoreError(
+    normalized.code,
+    redactSecretText(normalized.message, presentSecrets),
+    normalized.retryable,
+    normalized.httpStatus,
+    normalized.errcode,
+    redactSecretData(normalized.data, presentSecrets),
+    normalized.retryAfterMs
+  );
+};
+
+export function createMatrixJsCore(
+  client: MatrixClient,
+  coreOptions: MatrixJsCoreOptions = {}
+): HarrierCore {
+  const secretStorageKeys = resolveMatrixJsSecretStorage(client, coreOptions.secretStorageKeys);
+  let secretStorageLifecycle = 0;
+  const invalidateSecretStorage = () => {
+    secretStorageLifecycle += 1;
+    revokeMatrixJsSecretStorageCallbacks(client);
+  };
+  const requireCrypto = (): CoreResult<CryptoApi> => {
+    const crypto = client.getCrypto();
+    return crypto
+      ? { ok: true, value: crypto }
+      : { ok: false, error: new CoreError('unsupported', 'Crypto is not available', false) };
+  };
   const joined = () => {
     const direct = directRoomIds(client);
     return client
@@ -1926,8 +2002,9 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   client.on(HttpApiEvent.SessionLoggedOut, () => {
     deactivatePendingState();
     clearKnownUsers();
+    invalidateSecretStorage();
     client.stopClient();
-    clearSecretStorageKeys();
+    secretStorageKeys.clear().catch(() => undefined);
     client.clearStores().catch(() => undefined);
     sessionStore.publish(null);
     syncStore.publish({ phase: 'stopped' });
@@ -1946,7 +2023,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
   });
 
   const core: HarrierCore = {
-    capabilities: { calls: true, threads: true },
+    capabilities: { calls: true, threads: true, crypto: client.getCrypto() != null },
     auth: {
       session: sessionStore,
       accessToken: () => client.getAccessToken() ?? null,
@@ -2039,17 +2116,21 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
       async logout(): Promise<CoreResult<void>> {
         deactivatePendingState();
         clearKnownUsers();
+        invalidateSecretStorage();
         client.stopClient();
         try {
           await client.logout();
         } catch {
           // Local cleanup continues even if the server logout fails.
         }
-        await client.clearStores();
-        deactivatePendingState();
-        clearSecretStorageKeys();
-        sessionStore.publish(null);
-        syncStore.publish({ phase: 'stopped' });
+        try {
+          await client.clearStores();
+        } finally {
+          deactivatePendingState();
+          await secretStorageKeys.clear().catch(() => undefined);
+          sessionStore.publish(null);
+          syncStore.publish({ phase: 'stopped' });
+        }
         return { ok: true, value: undefined };
       },
       async clearCache() {
@@ -3137,10 +3218,40 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     crypto: {
       devices: devicesStore,
       refreshDevices,
+      async exportRoomKeys() {
+        const found = requireCrypto();
+        if (!found.ok) return found;
+        try {
+          return { ok: true, value: await found.value.exportRoomKeysAsJson() };
+        } catch (error) {
+          return { ok: false, error: normalizeMatrixError(error) };
+        }
+      },
+      async importRoomKeys(keysJson) {
+        const found = requireCrypto();
+        if (!found.ok) return found;
+        try {
+          await found.value.importRoomKeysAsJson(keysJson);
+          return { ok: true, value: undefined };
+        } catch (error) {
+          return { ok: false, error: normalizeSecretError(error, [keysJson]) };
+        }
+      },
       backup: {
         status: backupStatusStore,
         progress: backupProgressStore,
         refreshStatus: refreshBackupStatus,
+        async reset() {
+          const found = requireCrypto();
+          if (!found.ok) return found;
+          try {
+            await found.value.resetKeyBackup();
+            backupTrust = undefined;
+            return await refreshBackupStatus();
+          } catch (error) {
+            return { ok: false, error: normalizeMatrixError(error) };
+          }
+        },
         async restore() {
           const crypto = client.getCrypto();
           if (!crypto)
@@ -3178,6 +3289,7 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
           }
         },
         async decodeRecoveryKey(keyId, input) {
+          const decodeLifecycle = secretStorageLifecycle;
           const crypto = client.getCrypto();
           if (!crypto)
             return { ok: false, error: new CoreError('unsupported', 'Crypto is not available') };
@@ -3217,10 +3329,23 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
             if (!matches) {
               return { ok: false, error: new CoreError('unauthorized', 'Invalid recovery key.') };
             }
-            storeSecretStorageKey(keyId, decoded);
+            if (decodeLifecycle !== secretStorageLifecycle) {
+              return {
+                ok: false,
+                error: new CoreError(
+                  'cancelled',
+                  'Session changed before the key was cached',
+                  false
+                ),
+              };
+            }
+            await secretStorageKeys.set(keyId, decoded);
             return { ok: true, value: undefined };
           } catch (error) {
-            return { ok: false, error: normalizeMatrixError(error) };
+            return {
+              ok: false,
+              error: normalizeSecretError(error, [input.recoveryKey ?? '', input.passphrase ?? '']),
+            };
           }
         },
         async requestKey(roomId, eventId) {
@@ -3592,5 +3717,6 @@ export function createMatrixJsCore(client: MatrixClient): HarrierCore {
     },
   };
   registerMatrixClient(core, client);
+  associateMatrixJsCoreSecretStorage(core, secretStorageKeys);
   return core;
 }

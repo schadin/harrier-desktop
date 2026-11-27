@@ -1,36 +1,26 @@
 import React, { FormEventHandler, useCallback, useEffect, useState } from 'react';
 import { Box, Button, color, Icon, Icons, Spinner, Text, toRem } from 'folds';
-import FileSaver from 'file-saver';
 import { SequenceCard } from '../../../components/sequence-card';
 import { SettingTile } from '../../../components/setting-tile';
 import { SequenceCardStyle } from '../styles.css';
 import { PasswordInput } from '../../../components/password-input';
 import { ConfirmPasswordMatch } from '../../../components/ConfirmPasswordMatch';
-import { useMatrixClient } from '../../../hooks/useMatrixClient';
+import { useCore } from '../../../hooks/useCore';
 import { AsyncStatus, useAsyncCallback } from '../../../hooks/useAsyncCallback';
-import { decryptMegolmKeyFile, encryptMegolmKeyFile } from '../../../../util/cryptE2ERoomKeys';
 import { useAlive } from '../../../hooks/useAlive';
 import { useFilePicker } from '../../../hooks/useFilePicker';
+import { exportLocalRoomKeys, importLocalRoomKeys } from './localBackup';
 
 function ExportKeys() {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const [exportState, exportKeys] = useAsyncCallback<void, Error, [string]>(
     useCallback(
       async (password) => {
-        const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
-        const keysJSON = await crypto.exportRoomKeysAsJson();
-
-        const encKeys = await encryptMegolmKeyFile(keysJSON, password);
-
-        const blob = new Blob([encKeys], {
-          type: 'text/plain;charset=us-ascii',
-        });
-        FileSaver.saveAs(blob, 'harrier-keys.txt');
+        await exportLocalRoomKeys(core, password);
       },
-      [mx]
+      [core]
     )
   );
 
@@ -160,21 +150,15 @@ type ImportKeysProps = {
   onDone?: () => void;
 };
 function ImportKeys({ file, onDone }: ImportKeysProps) {
-  const mx = useMatrixClient();
+  const core = useCore();
   const alive = useAlive();
 
   const [decryptState, decryptFile] = useAsyncCallback<void, Error, [string]>(
     useCallback(
       async (password) => {
-        const crypto = mx.getCrypto();
-        if (!crypto) throw new Error('Unexpected Error! Crypto module not found!');
-
-        const arrayBuffer = await file.arrayBuffer();
-        const keys = await decryptMegolmKeyFile(arrayBuffer, password);
-
-        await crypto.importRoomKeysAsJson(keys);
+        await importLocalRoomKeys(core, file, password);
       },
-      [file, mx]
+      [file, core]
     )
   );
 

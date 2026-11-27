@@ -120,9 +120,13 @@ export type ContractTransportCall = {
   readonly body?: unknown;
 };
 
+export type CoreContractHarnessOptions = {
+  readonly crypto?: boolean;
+};
+
 export type CoreContractHarness = {
   readonly name: string;
-  create(): Promise<HarrierCore>;
+  create(options?: CoreContractHarnessOptions): Promise<HarrierCore>;
   applySyncFixture(fixture: SyncFixture): Promise<void>;
   failNextOperation(operation: string, failure: ContractOperationFailure): void;
   setRoomSummaryResponse(roomIdOrAlias: string, response: unknown): void;

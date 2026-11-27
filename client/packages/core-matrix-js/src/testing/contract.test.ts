@@ -24,8 +24,8 @@ let driver: SyncDriver | undefined;
 
 const matrixJsHarness: CoreContractHarness = {
   name: 'matrix-js',
-  async create() {
-    driver = createSyncDriver();
+  async create(options) {
+    driver = createSyncDriver(options);
     return createMatrixJsCore(driver.client);
   },
   async applySyncFixture(fixture) {

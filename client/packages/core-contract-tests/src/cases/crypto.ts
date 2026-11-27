@@ -2,6 +2,91 @@ import { expect } from 'vitest';
 import { contractTest } from '../suite';
 
 export const cryptoCases = [
+  contractTest('crypto capability matches the driver', async (harness) => {
+    const core = await harness.create();
+    try {
+      expect(core.capabilities.crypto).toBe(true);
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'crypto commands return non-retryable unsupported without crypto',
+    async (harness) => {
+      const core = await harness.create({ crypto: false });
+      try {
+        expect(core.capabilities.crypto).toBe(false);
+        const results = [
+          await core.crypto.exportRoomKeys(),
+          await core.crypto.importRoomKeys('{"rooms":{}}'),
+          await core.crypto.backup.reset(),
+        ];
+        results.forEach((result) => {
+          expect(result.ok).toBe(false);
+          if (!result.ok) {
+            expect(result.error).toMatchObject({
+              code: 'unsupported',
+              message: 'Crypto is not available',
+              retryable: false,
+            });
+            expect(result.error.httpStatus).toBeUndefined();
+            expect(result.error.errcode).toBeUndefined();
+            expect(result.error.data).toBeUndefined();
+          }
+        });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
+  contractTest('room key export preserves the JSON string exactly', async (harness) => {
+    const core = await harness.create();
+    try {
+      const result = await core.crypto.exportRoomKeys();
+      expect(result).toEqual({
+        ok: true,
+        value:
+          '{\n  "algorithm": "m.megolm.v1.aes-sha2",\n  "note": "ключ 🔐",\n  "rooms": {}\n}\n',
+      });
+    } finally {
+      await harness.dispose(core);
+    }
+  }),
+
+  contractTest(
+    'room key import forwards JSON and consumes one normalized failure',
+    async (harness) => {
+      const core = await harness.create();
+      const keysJson = ' {\n  "rooms": { "!room:example.org": {} },\n  "note": "ключ 🔐"\n} ';
+      try {
+        harness.failNextOperation('crypto.importRoomKeys', {
+          operation: 'crypto.importRoomKeys',
+          httpStatus: 400,
+          errcode: 'M_INVALID_PARAM',
+          error: 'Invalid room keys',
+          data: { detail: 'bad-json' },
+        });
+        const failed = await core.crypto.importRoomKeys(keysJson);
+        expect(failed.ok).toBe(false);
+        if (!failed.ok) {
+          expect(failed.error).toMatchObject({
+            code: 'invalid-request',
+            httpStatus: 400,
+            errcode: 'M_INVALID_PARAM',
+            retryable: false,
+            data: { detail: 'bad-json', errcode: 'M_INVALID_PARAM', error: 'Invalid room keys' },
+          });
+          expect(failed.error).not.toHaveProperty('cause');
+        }
+        expect(await core.crypto.importRoomKeys(keysJson)).toEqual({ ok: true, value: undefined });
+      } finally {
+        await harness.dispose(core);
+      }
+    }
+  ),
+
   contractTest('message search is exposed as plain views', async (harness) => {
     const core = await harness.create();
     try {

@@ -15,6 +15,10 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 import { createMatrixJsCore } from './core';
 import { createSyncDriver } from './testing/driver';
+import {
+  createMemorySecretStorageKeyStore,
+  createSecretStorageCryptoCallbacks,
+} from './secretStorageKeys';
 
 const stateEvent = (
   roomId: string,
@@ -1024,6 +1028,263 @@ describe('matrix-js core local validation errors', () => {
       const invalidFilename = await core.media.download({ mxcUrl: 'mxc://example.org/media' }, '');
       expect(invalidFilename.ok).toBe(false);
       if (!invalidFilename.ok) expect(invalidFilename.error.code).toBe('invalid-request');
+    } finally {
+      await core.auth.stop();
+    }
+  });
+});
+
+describe('matrix-js crypto commands and secret-storage lifecycle', () => {
+  it('reports undefined crypto as unsupported without invoking crypto methods', async () => {
+    const driver = createSyncDriver({ crypto: false });
+    const core = createMatrixJsCore(driver.client);
+    try {
+      expect(core.capabilities.crypto).toBe(false);
+      expect((await core.crypto.exportRoomKeys()).ok).toBe(false);
+      expect((await core.crypto.importRoomKeys('{}')).ok).toBe(false);
+      expect((await core.crypto.backup.reset()).ok).toBe(false);
+      expect(driver.cryptoCalls).toEqual([]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('forwards export and import JSON exactly through the stateful fake crypto', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const exported = ' {\n  "note": "ключ 🔐",\n  "rooms": {}\n}\n';
+    const imported = '{\n  "rooms": { "!room:example.org": {} }\n}';
+    driver.setExportedRoomKeysJson(exported);
+    try {
+      const callStart = driver.cryptoCalls.length;
+      expect(await core.crypto.exportRoomKeys()).toEqual({ ok: true, value: exported });
+      expect(await core.crypto.importRoomKeys(imported)).toEqual({ ok: true, value: undefined });
+      expect(driver.importedKeysJson).toBe(imported);
+      expect(
+        driver.cryptoCalls
+          .slice(callStart)
+          .filter((call) => call === 'crypto.exportRoomKeys' || call === 'crypto.importRoomKeys')
+      ).toEqual(['crypto.exportRoomKeys', 'crypto.importRoomKeys']);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('resets backup trust before refreshing status in SDK order', async () => {
+    const driver = createSyncDriver();
+    driver.setActiveSessionBackupVersion('1');
+    driver.setKeyBackupInfo({ version: '1', count: 4 });
+    driver.setKeyBackupTrust({ trusted: true, matchesDecryptionKey: true });
+    const core = createMatrixJsCore(driver.client);
+    try {
+      expect((await core.crypto.backup.refreshStatus()).ok).toBe(true);
+      expect(core.crypto.backup.status.getSnapshot().value.trust).toEqual({
+        trusted: true,
+        matchesDecryptionKey: true,
+      });
+      driver.setKeyBackupTrust({ trusted: false, matchesDecryptionKey: false });
+      const callStart = driver.cryptoCalls.length;
+
+      expect((await core.crypto.backup.reset()).ok).toBe(true);
+      expect(driver.cryptoCalls.slice(callStart)).toEqual([
+        'crypto.backup.reset',
+        'crypto.backup.getActiveSessionBackupVersion',
+        'crypto.backup.getKeyBackupInfo',
+        'crypto.backup.isKeyBackupTrusted',
+      ]);
+      expect(core.crypto.backup.status.getSnapshot().value).toMatchObject({
+        version: '2',
+        count: 0,
+        trust: { trusted: false, matchesDecryptionKey: false },
+      });
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('caches a decoded recovery key in the same store read by SDK callbacks', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    driver.client.store.storeAccountDataEvents([
+      new MatrixEvent({
+        type: 'm.secret_storage.key.secret-key',
+        content: { passphrase: { salt: btoa('salt'), iterations: 1, bits: 256 } },
+      }),
+    ]);
+    driver.client.secretStorage.checkKey = async () => true;
+    try {
+      const result = await core.crypto.backup.decodeRecoveryKey('secret-key', {
+        passphrase: 'private passphrase',
+      });
+      expect(result.ok).toBe(true);
+      const privateKey = store.get('secret-key');
+      expect(privateKey).toBeInstanceOf(Uint8Array);
+      const callbacks = createSecretStorageCryptoCallbacks(store);
+      expect(
+        await callbacks.getSecretStorageKey(
+          { keys: { 'secret-key': {} } as never },
+          'm.cross_signing.master'
+        )
+      ).toEqual(['secret-key', privateKey]);
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('clears secrets after explicit logout even when server logout fails', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const clearSpy = vi.spyOn(store, 'clear');
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    await store.set('session-key', new Uint8Array([1, 2, 3]));
+    driver.client.logout = async () => {
+      throw new Error('server logout failed');
+    };
+    try {
+      expect(await core.auth.logout()).toEqual({ ok: true, value: undefined });
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(store.get('session-key')).toBeUndefined();
+      expect(core.auth.session.getSnapshot().value).toBeNull();
+    } finally {
+      clearSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it('runs secret cleanup in finally when SDK store cleanup rejects', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const clearSpy = vi.spyOn(store, 'clear');
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    await store.set('session-key', new Uint8Array([1, 2, 3]));
+    driver.client.clearStores = async () => {
+      throw new Error('clear stores failed');
+    };
+    try {
+      await expect(core.auth.logout()).rejects.toThrow('clear stores failed');
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(store.get('session-key')).toBeUndefined();
+    } finally {
+      clearSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it('clears secret memory synchronously on server logout', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const clearSpy = vi.spyOn(store, 'clear');
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    await store.set('session-key', new Uint8Array([1, 2, 3]));
+    try {
+      driver.client.emit(
+        HttpApiEvent.SessionLoggedOut,
+        new MatrixError({ errcode: 'M_UNKNOWN_TOKEN', error: 'Logged out' })
+      );
+      expect(clearSpy).toHaveBeenCalledTimes(1);
+      expect(store.get('session-key')).toBeUndefined();
+      expect(core.auth.session.getSnapshot().value).toBeNull();
+    } finally {
+      clearSpy.mockRestore();
+      await core.auth.stop();
+    }
+  });
+
+  it.each(['stop', 'clearCache'] as const)(
+    'does not clear secret keys on %s',
+    async (lifecycle) => {
+      const driver = createSyncDriver();
+      const store = createMemorySecretStorageKeyStore();
+      const clearSpy = vi.spyOn(store, 'clear');
+      const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+      await store.set('session-key', new Uint8Array([1, 2, 3]));
+      try {
+        if (lifecycle === 'stop') await core.auth.stop();
+        else expect((await core.auth.clearCache()).ok).toBe(true);
+        expect(clearSpy).not.toHaveBeenCalled();
+        expect(store.get('session-key')).toEqual(new Uint8Array([1, 2, 3]));
+      } finally {
+        clearSpy.mockRestore();
+        await core.auth.stop();
+      }
+    }
+  );
+
+  it('does not cache a recovery key decode that completes after logout', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    driver.client.store.storeAccountDataEvents([
+      new MatrixEvent({
+        type: 'm.secret_storage.key.secret-key',
+        content: { passphrase: { salt: btoa('salt'), iterations: 1, bits: 256 } },
+      }),
+    ]);
+    let finishCheck: ((matches: boolean) => void) | undefined;
+    driver.client.secretStorage.checkKey = () =>
+      new Promise<boolean>((resolve) => {
+        finishCheck = resolve;
+      });
+    try {
+      const decoding = core.crypto.backup.decodeRecoveryKey('secret-key', {
+        passphrase: 'private passphrase',
+      });
+      await vi.waitFor(() => expect(finishCheck).toBeTypeOf('function'));
+      await core.auth.logout();
+      finishCheck?.(true);
+      expect((await decoding).ok).toBe(false);
+      expect(store.get('secret-key')).toBeUndefined();
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('does not copy recovery passphrases into normalized errors or snapshots', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    const passphrase = 'private recovery passphrase';
+    driver.client.store.storeAccountDataEvents([
+      new MatrixEvent({
+        type: 'm.secret_storage.key.secret-key',
+        content: { passphrase: { salt: btoa('salt'), iterations: 1, bits: 256 } },
+      }),
+    ]);
+    driver.client.secretStorage.checkKey = async () => {
+      throw new Error(`Unable to validate ${passphrase}`);
+    };
+    try {
+      const result = await core.crypto.backup.decodeRecoveryKey('secret-key', { passphrase });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(JSON.stringify(result.error)).not.toContain(passphrase);
+      expect(
+        JSON.stringify([
+          core.auth.session.getSnapshot(),
+          core.crypto.backup.status.getSnapshot(),
+          core.crypto.devices.getSnapshot(),
+        ])
+      ).not.toContain(passphrase);
+      expect(store.get('secret-key')).toBeUndefined();
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('does not copy imported room-key JSON into normalized errors', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const keysJson = '{"rooms":{"!room:example.org":{"session_key":"raw-secret"}}}';
+    driver.failNextOperation('crypto.importRoomKeys', {
+      httpStatus: 400,
+      errcode: 'M_INVALID_PARAM',
+      error: 'Invalid room keys',
+      data: { echoed: 'raw-secret' },
+    });
+    try {
+      const result = await core.crypto.importRoomKeys(keysJson);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(JSON.stringify(result.error)).not.toContain('raw-secret');
     } finally {
       await core.auth.stop();
     }

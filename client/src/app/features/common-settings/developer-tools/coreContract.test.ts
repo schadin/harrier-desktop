@@ -12,6 +12,11 @@ const TARGET_FILES = [
   'src/app/features/room/MembersDrawer.tsx',
   'src/app/components/emoji-board/components/Item.tsx',
   'src/app/hooks/useMemberPowerTag.ts',
+  'src/app/features/settings/devices/Devices.tsx',
+  'src/app/features/settings/devices/LocalBackup.tsx',
+  'src/app/components/DeviceVerificationSetup.tsx',
+  'src/client/initMatrix.ts',
+  'src/client/secretStorageKeys.js',
 ];
 
 const readTarget = (path: string): string =>
@@ -24,6 +29,42 @@ const expectNoSdkImport = (source: string) => {
 describe('core contract boundary', () => {
   it.each(TARGET_FILES)('%s does not import matrix-js-sdk', (path) => {
     expectNoSdkImport(readTarget(path));
+  });
+
+  it('uses the core crypto capability for device backup visibility', () => {
+    const source = readTarget('src/app/features/settings/devices/Devices.tsx');
+    expect(source).toContain('useCore()');
+    expect(source).toContain('core.capabilities.crypto');
+    expect(source).not.toContain('mx.getCrypto()');
+  });
+
+  it('routes local backup import and export through core commands', () => {
+    const source = readTarget('src/app/features/settings/devices/LocalBackup.tsx');
+    expect(source).toContain('exportLocalRoomKeys(');
+    expect(source).toContain('importLocalRoomKeys(');
+    expect(source).not.toContain('useMatrixClient');
+    expect(source).not.toContain('getCrypto()');
+    expect(source).not.toContain('exportRoomKeysAsJson');
+    expect(source).not.toContain('importRoomKeysAsJson');
+  });
+
+  it('keeps the setup secret-storage shim delegated and awaited', () => {
+    const setup = readTarget('src/app/components/DeviceVerificationSetup.tsx');
+    expect(setup).toContain('useCore()');
+    expect(setup).toContain('await clearSecretStorageKeys(core)');
+    const shim = readTarget('src/client/secretStorageKeys.js');
+    expect(shim).toContain('clearSecretStorageKeysForCore as clearSecretStorageKeys');
+    expect(shim).not.toMatch(
+      /new Map|indexedDB|localStorage|cryptoCallbacks|loadSecretStorageKeys/
+    );
+  });
+
+  it('lets the adapter own client crypto callbacks and persisted key loading', () => {
+    const source = readTarget('src/client/initMatrix.ts');
+    expect(source).toContain('createMatrixJsClient(session)');
+    expect(source).not.toContain('cryptoCallbacks');
+    expect(source).not.toContain('loadSecretStorageKeys');
+    expect(source).not.toContain('./secretStorageKeys');
   });
 
   it('sends developer message events through the core and surfaces CoreError', () => {

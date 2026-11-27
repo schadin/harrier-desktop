@@ -56,6 +56,7 @@ import type {
 export type CoreCapabilities = {
   readonly calls: boolean;
   readonly threads: boolean;
+  readonly crypto: boolean;
 };
 
 export type CoreResult<T> = { ok: true; value: T } | { ok: false; error: CoreError };
@@ -281,6 +282,7 @@ export type BackupModule = {
   readonly status: SnapshotStore<BackupStatusView>;
   readonly progress: SnapshotStore<BackupProgressView>;
   refreshStatus(): Promise<CoreResult<void>>;
+  reset(): Promise<CoreResult<void>>;
   restore(): Promise<CoreResult<void>>;
   prepareAndRestore(): Promise<CoreResult<void>>;
   onDecryptionKeyCached(listener: () => void): () => void;
@@ -351,6 +353,8 @@ export type CryptoModule = {
   readonly devices: SnapshotStore<readonly DeviceView[] | null>;
   readonly verification: VerificationModule;
   readonly backup: BackupModule;
+  exportRoomKeys(): Promise<CoreResult<string>>;
+  importRoomKeys(keysJson: string): Promise<CoreResult<void>>;
   refreshDevices(): Promise<CoreResult<void>>;
   trust(userId: string, deviceId: string): SnapshotStore<DeviceTrust>;
   unverifiedCount(userId: string, deviceIds: readonly string[]): SnapshotStore<number | undefined>;

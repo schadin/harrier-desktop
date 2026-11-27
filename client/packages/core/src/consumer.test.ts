@@ -1,5 +1,9 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import type {
+  BackupModule,
+  CoreCapabilities,
+  CoreResult,
+  CryptoModule,
   HarrierCore,
   OwnProfileUpdate,
   RoomSummaryView,
@@ -20,6 +24,29 @@ describe('public contract consumer', () => {
     expectTypeOf<HarrierCore['capabilities']>().toMatchTypeOf<{ calls: boolean }>();
     expectTypeOf<TimelineItem['kind']>().toEqualTypeOf<
       'message' | 'sticker' | 'state' | 'encrypted' | 'redacted' | 'unsupported'
+    >();
+  });
+
+  it('exposes crypto capability and key-management commands without SDK handles', () => {
+    expectTypeOf<CoreCapabilities['crypto']>().toEqualTypeOf<boolean>();
+    expectTypeOf<CryptoModule['exportRoomKeys']>().returns.toEqualTypeOf<
+      Promise<CoreResult<string>>
+    >();
+    expectTypeOf<CryptoModule['importRoomKeys']>().returns.toEqualTypeOf<
+      Promise<CoreResult<void>>
+    >();
+    expectTypeOf<BackupModule['reset']>().returns.toEqualTypeOf<Promise<CoreResult<void>>>();
+    expectTypeOf<keyof CryptoModule>().toEqualTypeOf<
+      | 'devices'
+      | 'verification'
+      | 'backup'
+      | 'exportRoomKeys'
+      | 'importRoomKeys'
+      | 'refreshDevices'
+      | 'trust'
+      | 'unverifiedCount'
+      | 'renameDevice'
+      | 'deleteDevices'
     >();
   });
 
