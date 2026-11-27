@@ -68,13 +68,27 @@ const globalLocalStorage = (): Storage | undefined => {
 const openDb = (factory: IDBFactory): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
     const request = factory.open(DB_NAME);
+    let settled = false;
+    const rejectOnce = (error: DOMException | null) => {
+      if (settled) return;
+      settled = true;
+      reject(error ?? new Error('Secret storage database blocked'));
+    };
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(request.error ?? new Error('Secret storage database blocked'));
+    request.onsuccess = () => {
+      const db = request.result;
+      if (settled) {
+        db?.close();
+        return;
+      }
+      settled = true;
+      resolve(db);
+    };
+    request.onerror = () => rejectOnce(request.error);
+    request.onblocked = () => rejectOnce(request.error);
   });
 
 const createIndexedDBPersistence = (factory?: IDBFactory): SecretStorageKeyPersistence => {
@@ -164,6 +178,7 @@ export function createSecretStorageKeyStore(
   let generation = 0;
   let persistenceQueue: Promise<void> = Promise.resolve();
   let allowLocalStorageFallback = true;
+  let pendingLoads = 0;
 
   const enqueue = (operation: () => Promise<void>): Promise<void> => {
     const result = persistenceQueue.then(operation).catch(() => undefined);
@@ -172,7 +187,7 @@ export function createSecretStorageKeyStore(
   };
 
   const readLocalStorageKey = (keyId: string): Uint8Array | undefined => {
-    if (!allowLocalStorageFallback || !localStorage) return undefined;
+    if (!allowLocalStorageFallback || pendingLoads > 0 || !localStorage) return undefined;
     try {
       const stored = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}${keyId}`);
       return stored === null ? undefined : fromBase64(stored);
@@ -185,7 +200,7 @@ export function createSecretStorageKeyStore(
     keys.set(keyId, privateKey);
   };
 
-  const loadLocalStorageKeys = () => {
+  const loadLocalStorageKeys = (persistedKeyIds: ReadonlySet<string>) => {
     const storage = localStorage;
     if (!allowLocalStorageFallback || !storage) return;
     try {
@@ -195,6 +210,7 @@ export function createSecretStorageKeyStore(
         )
         .forEach((storageKey) => {
           const keyId = storageKey.slice(LOCAL_STORAGE_PREFIX.length);
+          if (persistedKeyIds.has(keyId) || keys.has(keyId)) return;
           const stored = storage.getItem(storageKey);
           if (stored === null) return;
           const privateKey = fromBase64(stored);
@@ -238,17 +254,25 @@ export function createSecretStorageKeyStore(
     },
     async load() {
       const loadGeneration = generation;
-      loadLocalStorageKeys();
-      await enqueue(async () => {
-        if (loadGeneration !== generation) return;
-        const entries = await persistence.load();
-        if (loadGeneration !== generation) return;
-        entries.forEach(([keyId, encodedPrivateKey]) => {
-          if (keys.has(keyId) || typeof keyId !== 'string') return;
-          const privateKey = fromBase64(encodedPrivateKey);
-          if (privateKey) cache(keyId, privateKey);
+      pendingLoads += 1;
+      try {
+        await enqueue(async () => {
+          if (loadGeneration !== generation) return;
+          const entries = await persistence.load().catch(() => []);
+          if (loadGeneration !== generation) return;
+          const persistedKeyIds = new Set<string>();
+          entries.forEach(([keyId, encodedPrivateKey]) => {
+            if (typeof keyId !== 'string') return;
+            persistedKeyIds.add(keyId);
+            if (keys.has(keyId)) return;
+            const privateKey = fromBase64(encodedPrivateKey);
+            if (privateKey) cache(keyId, privateKey);
+          });
+          loadLocalStorageKeys(persistedKeyIds);
         });
-      });
+      } finally {
+        pendingLoads -= 1;
+      }
     },
     clear() {
       generation += 1;
@@ -317,8 +341,13 @@ type ClientSecretStorageAssociation = {
   readonly revokeCallbacks: () => void;
 };
 
+type CoreSecretStorageAssociation = {
+  readonly store: SecretStorageKeyStore;
+  readonly reset: () => void;
+};
+
 const clientSecretStorage = new WeakMap<MatrixClient, ClientSecretStorageAssociation>();
-const coreSecretStorage = new WeakMap<HarrierCore, SecretStorageKeyStore>();
+const coreSecretStorage = new WeakMap<HarrierCore, CoreSecretStorageAssociation>();
 
 export function associateMatrixJsClientSecretStorage(
   client: MatrixClient,
@@ -345,13 +374,15 @@ export function revokeMatrixJsSecretStorageCallbacks(client: MatrixClient): void
 
 export function associateMatrixJsCoreSecretStorage(
   core: HarrierCore,
-  store: SecretStorageKeyStore
+  store: SecretStorageKeyStore,
+  reset: () => void
 ): void {
-  coreSecretStorage.set(core, store);
+  coreSecretStorage.set(core, { store, reset });
 }
 
 export function clearSecretStorageKeysForCore(core: HarrierCore): Promise<void> {
-  const store = coreSecretStorage.get(core);
-  if (!store) throw new Error('Matrix core has no adapter-owned secret storage key store.');
-  return store.clear();
+  const association = coreSecretStorage.get(core);
+  if (!association) throw new Error('Matrix core has no adapter-owned secret storage key store.');
+  association.reset();
+  return association.store.clear();
 }

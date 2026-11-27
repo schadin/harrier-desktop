@@ -187,6 +187,8 @@ describe('Matrix client secret-storage association', () => {
     const core = createMatrixJsCore(client);
     await clearSecretStorageKeysForCore(core);
     expect(store.get('generated')).toBeUndefined();
+    callbacks.cacheSecretStorageKey?.('after-reset', {} as never, new Uint8Array([7]));
+    expect(store.get('after-reset')).toEqual(new Uint8Array([7]));
     await core.auth.stop();
   });
 

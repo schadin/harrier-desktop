@@ -795,7 +795,11 @@ const secretStringsToRedact = (inputs: readonly string[]): string[] => {
   const secrets = new Set<string>();
   const collect = (value: unknown) => {
     if (typeof value === 'string') {
-      if (value.length > 0) secrets.add(value);
+      if (value.length > 0) {
+        secrets.add(value);
+        const escaped = JSON.stringify(value).slice(1, -1);
+        if (escaped.length > 0 && escaped !== value) secrets.add(escaped);
+      }
       try {
         collect(JSON.parse(value));
       } catch {
@@ -828,14 +832,30 @@ const normalizeSecretError = (error: unknown, secrets: readonly string[]): CoreE
   );
 };
 
+const normalizeRoomKeyExportError = (error: unknown): CoreError => {
+  const normalized = normalizeMatrixError(error);
+  return new CoreError(
+    normalized.code,
+    'Unable to export room keys',
+    normalized.retryable,
+    normalized.httpStatus,
+    normalized.errcode,
+    undefined,
+    normalized.retryAfterMs
+  );
+};
+
 export function createMatrixJsCore(
   client: MatrixClient,
   coreOptions: MatrixJsCoreOptions = {}
 ): HarrierCore {
   const secretStorageKeys = resolveMatrixJsSecretStorage(client, coreOptions.secretStorageKeys);
   let secretStorageLifecycle = 0;
-  const invalidateSecretStorage = () => {
+  const resetSecretStorageLifecycle = () => {
     secretStorageLifecycle += 1;
+  };
+  const invalidateSecretStorage = () => {
+    resetSecretStorageLifecycle();
     revokeMatrixJsSecretStorageCallbacks(client);
   };
   const requireCrypto = (): CoreResult<CryptoApi> => {
@@ -1875,6 +1895,12 @@ export function createMatrixJsCore(
   let backupVersion: string | undefined;
   let backupCount: number | undefined;
   let backupTrust: BackupStatusView['trust'];
+  let backupRefreshGeneration = 0;
+
+  const cancelledBackupRefresh = (): CoreResult<void> => ({
+    ok: false,
+    error: new CoreError('cancelled', 'Backup status refresh superseded', false),
+  });
 
   const publishBackupStatus = () => {
     backupStatusStore.publish({
@@ -1891,22 +1917,30 @@ export function createMatrixJsCore(
   const refreshBackupStatus = async (): Promise<CoreResult<void>> => {
     const crypto = client.getCrypto();
     if (!crypto) return { ok: true, value: undefined };
+    backupRefreshGeneration += 1;
+    const requestGeneration = backupRefreshGeneration;
     try {
       const version = await crypto.getActiveSessionBackupVersion();
+      if (requestGeneration !== backupRefreshGeneration) return cancelledBackupRefresh();
       const info = await crypto.getKeyBackupInfo();
-      backupVersion = info?.version ?? version ?? undefined;
-      backupCount = info?.count ?? undefined;
-      backupInfoAbsent = info === null;
-      if (info && backupTrust === undefined) {
+      if (requestGeneration !== backupRefreshGeneration) return cancelledBackupRefresh();
+      let nextTrust = backupTrust;
+      if (info && nextTrust === undefined) {
         const trust = await crypto.isKeyBackupTrusted(info);
-        backupTrust = {
+        if (requestGeneration !== backupRefreshGeneration) return cancelledBackupRefresh();
+        nextTrust = {
           trusted: trust.trusted,
           matchesDecryptionKey: trust.matchesDecryptionKey,
         };
       }
+      backupVersion = info?.version ?? version ?? undefined;
+      backupCount = info?.count ?? undefined;
+      backupInfoAbsent = info === null;
+      backupTrust = nextTrust;
       publishBackupStatus();
       return { ok: true, value: undefined };
     } catch (error) {
+      if (requestGeneration !== backupRefreshGeneration) return cancelledBackupRefresh();
       return { ok: false, error: normalizeMatrixError(error) };
     }
   };
@@ -3224,7 +3258,7 @@ export function createMatrixJsCore(
         try {
           return { ok: true, value: await found.value.exportRoomKeysAsJson() };
         } catch (error) {
-          return { ok: false, error: normalizeMatrixError(error) };
+          return { ok: false, error: normalizeRoomKeyExportError(error) };
         }
       },
       async importRoomKeys(keysJson) {
@@ -3244,6 +3278,7 @@ export function createMatrixJsCore(
         async reset() {
           const found = requireCrypto();
           if (!found.ok) return found;
+          backupRefreshGeneration += 1;
           try {
             await found.value.resetKeyBackup();
             backupTrust = undefined;
@@ -3717,6 +3752,6 @@ export function createMatrixJsCore(
     },
   };
   registerMatrixClient(core, client);
-  associateMatrixJsCoreSecretStorage(core, secretStorageKeys);
+  associateMatrixJsCoreSecretStorage(core, secretStorageKeys, resetSecretStorageLifecycle);
   return core;
 }

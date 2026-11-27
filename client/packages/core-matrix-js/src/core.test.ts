@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMatrixJsCore } from './core';
 import { createSyncDriver } from './testing/driver';
 import {
+  clearSecretStorageKeysForCore,
   createMemorySecretStorageKeyStore,
   createSecretStorageCryptoCallbacks,
 } from './secretStorageKeys';
@@ -1102,6 +1103,56 @@ describe('matrix-js crypto commands and secret-storage lifecycle', () => {
     }
   });
 
+  it('does not let a superseded backup trust completion overwrite reset status', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const crypto = driver.client.getCrypto();
+    if (!crypto) throw new Error('Expected fake crypto');
+    const originalTrust = crypto.isKeyBackupTrusted.bind(crypto);
+    let releaseTrust: (() => void) | undefined;
+    const trustGate = new Promise<void>((resolve) => {
+      releaseTrust = resolve;
+    });
+    let trustStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      trustStarted = resolve;
+    });
+    let trustCalls = 0;
+    crypto.isKeyBackupTrusted = async (info) => {
+      trustCalls += 1;
+      if (trustCalls === 1) {
+        trustStarted?.();
+        await trustGate;
+        return { trusted: true, matchesDecryptionKey: true };
+      }
+      return originalTrust(info);
+    };
+    try {
+      expect((await core.crypto.backup.refreshStatus()).ok).toBe(true);
+      driver.setActiveSessionBackupVersion('1');
+      driver.setKeyBackupInfo({ version: '1', count: 4 });
+      driver.setKeyBackupTrust({ trusted: false, matchesDecryptionKey: false });
+
+      const staleRefresh = core.crypto.backup.refreshStatus();
+      await started;
+      expect((await core.crypto.backup.reset()).ok).toBe(true);
+      const afterReset = core.crypto.backup.status.getSnapshot();
+      expect(afterReset.value).toMatchObject({
+        version: '2',
+        count: 0,
+        trust: { trusted: false, matchesDecryptionKey: false },
+      });
+
+      releaseTrust?.();
+      await staleRefresh;
+      expect(core.crypto.backup.status.getSnapshot()).toBe(afterReset);
+    } finally {
+      releaseTrust?.();
+      crypto.isKeyBackupTrusted = originalTrust;
+      await core.auth.stop();
+    }
+  });
+
   it('caches a decoded recovery key in the same store read by SDK callbacks', async () => {
     const driver = createSyncDriver();
     const store = createMemorySecretStorageKeyStore();
@@ -1240,6 +1291,39 @@ describe('matrix-js crypto commands and secret-storage lifecycle', () => {
     }
   });
 
+  it('does not cache a recovery key decode that completes after setup reset', async () => {
+    const driver = createSyncDriver();
+    const store = createMemorySecretStorageKeyStore();
+    const core = createMatrixJsCore(driver.client, { secretStorageKeys: store });
+    driver.client.store.storeAccountDataEvents([
+      new MatrixEvent({
+        type: 'm.secret_storage.key.secret-key',
+        content: { passphrase: { salt: btoa('salt'), iterations: 1, bits: 256 } },
+      }),
+    ]);
+    let finishCheck: ((matches: boolean) => void) | undefined;
+    driver.client.secretStorage.checkKey = () =>
+      new Promise<boolean>((resolve) => {
+        finishCheck = resolve;
+      });
+    try {
+      const decoding = core.crypto.backup.decodeRecoveryKey('secret-key', {
+        passphrase: 'private passphrase',
+      });
+      await vi.waitFor(() => expect(finishCheck).toBeTypeOf('function'));
+      await clearSecretStorageKeysForCore(core);
+      finishCheck?.(true);
+
+      const result = await decoding;
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe('cancelled');
+      expect(store.get('secret-key')).toBeUndefined();
+    } finally {
+      finishCheck?.(true);
+      await core.auth.stop();
+    }
+  });
+
   it('does not copy recovery passphrases into normalized errors or snapshots', async () => {
     const driver = createSyncDriver();
     const store = createMemorySecretStorageKeyStore();
@@ -1266,6 +1350,66 @@ describe('matrix-js crypto commands and secret-storage lifecycle', () => {
         ])
       ).not.toContain(passphrase);
       expect(store.get('secret-key')).toBeUndefined();
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('redacts JSON-escaped secret representations from import errors', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const secret = 'raw"secret\\path\nline';
+    const escaped = JSON.stringify(secret).slice(1, -1);
+    const keysJson = JSON.stringify({
+      rooms: { '!room:example.org': { session_key: secret } },
+    });
+    driver.failNextOperation('crypto.importRoomKeys', {
+      httpStatus: 400,
+      errcode: 'M_INVALID_PARAM',
+      error: `Invalid room key ${escaped}`,
+      data: { echoed: escaped },
+    });
+    try {
+      const result = await core.crypto.importRoomKeys(keysJson);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).not.toContain(escaped);
+        expect(result.error.data).toEqual({
+          echoed: '[REDACTED]',
+          errcode: 'M_INVALID_PARAM',
+          error: 'Invalid room key [REDACTED]',
+        });
+      }
+    } finally {
+      await core.auth.stop();
+    }
+  });
+
+  it('keeps export failure metadata without exposing exported key JSON', async () => {
+    const driver = createSyncDriver();
+    const core = createMatrixJsCore(driver.client);
+    const keysJson = JSON.stringify({
+      rooms: { '!room:example.org': { session_key: 'export-secret' } },
+    });
+    driver.failNextOperation('crypto.exportRoomKeys', {
+      httpStatus: 400,
+      errcode: 'M_INVALID_PARAM',
+      error: `Export failed ${keysJson}`,
+      data: { echoed: keysJson },
+    });
+    try {
+      const result = await core.crypto.exportRoomKeys();
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'invalid-request',
+          httpStatus: 400,
+          errcode: 'M_INVALID_PARAM',
+          retryable: false,
+        });
+        expect(JSON.stringify(result.error)).not.toContain('export-secret');
+        expect(result.error.data).toBeUndefined();
+      }
     } finally {
       await core.auth.stop();
     }

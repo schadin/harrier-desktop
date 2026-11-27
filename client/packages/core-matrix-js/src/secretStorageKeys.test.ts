@@ -150,6 +150,42 @@ describe('adapter-owned secret storage key store', () => {
     expect(store.get('key')).toBeUndefined();
   });
 
+  it('prefers IndexedDB keys over localStorage and uses localStorage only for missing ids', async () => {
+    const { persistence } = createPersistence();
+    const localStorage = createLocalStorage();
+    localStorage.setItem('secret-storage-keys.shared', encode(new Uint8Array([1])));
+    localStorage.setItem('secret-storage-keys.local-only', encode(new Uint8Array([3])));
+    persistence.load = vi.fn(async () => [['shared', encode(new Uint8Array([2]))] as const]);
+    const store = createSecretStorageKeyStore({ persistence, localStorage });
+
+    await store.load();
+
+    expect(store.get('shared')).toEqual(new Uint8Array([2]));
+    expect(store.get('local-only')).toEqual(new Uint8Array([3]));
+  });
+
+  it('does not overwrite a newer synchronous set when an older load completes', async () => {
+    let finishLoad: ((entries: readonly (readonly [string, string])[]) => void) | undefined;
+    const persistence: SecretStorageKeyPersistence = {
+      load: () =>
+        new Promise((resolve) => {
+          finishLoad = resolve;
+        }),
+      put: async () => undefined,
+      clear: async () => undefined,
+    };
+    const store = createSecretStorageKeyStore({ persistence });
+    const loading = store.load();
+    await vi.waitFor(() => expect(finishLoad).toBeTypeOf('function'));
+
+    const setting = store.set('shared', new Uint8Array([3]));
+    expect(store.get('shared')).toEqual(new Uint8Array([3]));
+    finishLoad?.([['shared', encode(new Uint8Array([2]))]]);
+    await Promise.all([loading, setting]);
+
+    expect(store.get('shared')).toEqual(new Uint8Array([3]));
+  });
+
   it('loads valid persisted keys while skipping malformed entries', async () => {
     const persistence: SecretStorageKeyPersistence = {
       load: async () => [
@@ -194,6 +230,25 @@ describe('adapter-owned secret storage key store', () => {
     await second.load();
     expect(second.get('session-key')).toBeUndefined();
     expect(entries.size).toBe(0);
+  });
+
+  it('closes a database that succeeds after the open request was already blocked', async () => {
+    const db = { close: vi.fn() };
+    const request = {} as IDBOpenDBRequest;
+    const factory = { open: vi.fn(() => request) };
+    const store = createSecretStorageKeyStore({
+      indexedDB: factory as unknown as IDBFactory,
+      localStorage: null,
+    });
+
+    const loading = store.load();
+    await vi.waitFor(() => expect(request.onblocked).toBeTypeOf('function'));
+    request.onblocked?.(new Event('blocked') as never);
+    await expect(loading).resolves.toBeUndefined();
+
+    Object.defineProperty(request, 'result', { value: db, configurable: true });
+    request.onsuccess?.(new Event('success') as never);
+    expect(db.close).toHaveBeenCalledTimes(1);
   });
 
   it('ignores cache callbacks after the client lifecycle revokes them', async () => {
